@@ -13,17 +13,17 @@
 
 ## 명령어
 
-실행 명령어는 확정. 나머지는 스캐폴드가 생기기 전까지 예정이며, 실제 스크립트와 다르면 이 파일을 먼저 고친다.
+각 폴더(`frontend/`, `backend/`)에서 실행한다. 실제 스크립트와 다르면 이 파일을 먼저 고친다.
 
 | 위치 | 용도 | 명령어 |
 | --- | --- | --- |
 | `frontend/` | 실행 | `npm run dev` |
-| `frontend/` | 설치 · 빌드 (예정) | `npm ci` · `npm run build` |
-| `frontend/` | 린트 · 테스트 (예정) | `npm run lint` · `npm run test` |
+| `frontend/` | 설치 · 빌드 | `npm ci` · `npm run build` |
+| `frontend/` | 린트 · 포맷 · 테스트 | `npm run lint` · `npm run format` · `npm run test` |
 | `backend/` | 실행 | `uv run fastapi dev` |
-| `backend/` | 설치 (예정) | `uv sync` |
-| `backend/` | 린트 · 포맷 (예정) | `uv run ruff check .` · `uv run ruff format .` |
-| `backend/` | 테스트 (예정) | `uv run pytest` |
+| `backend/` | 설치 | `uv sync` |
+| `backend/` | 린트 · 포맷 | `uv run ruff check .` · `uv run ruff format .` |
+| `backend/` | 테스트 | `uv run pytest` |
 
 - Python 도구는 uv + ruff + pytest로 통일한다. pip, poetry, black은 쓰지 않는다.
 - 프론트 도구는 npm + ESLint + Prettier + Vitest로 통일한다. yarn, pnpm은 쓰지 않는다.
@@ -34,6 +34,7 @@
 - 주석, 문서, 커밋, PR, 이슈는 한국어로 쓴다. 변수·함수·파일 이름은 영어로 쓴다.
 - Python은 ruff 설정을 따르고 타입 힌트를 단다. 포맷은 ruff format이 정한다.
 - TypeScript는 strict 모드를 유지하고, 포맷은 Prettier가 정한다. `any`로 타입 오류를 덮지 않는다.
+- 들여쓰기는 4칸이다. TypeScript는 Prettier(`.prettierrc`), Python은 ruff가 맞춘다.
 - 린트가 통과하지 않는 코드는 커밋하지 않는다.
 
 ## 브랜치
