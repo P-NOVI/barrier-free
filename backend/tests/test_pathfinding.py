@@ -1,15 +1,19 @@
+import random
 from dataclasses import replace
 from itertools import pairwise
 
-from core.cost import is_passable
+import pytest
+
+from core.cost import SLOPE_FACTORS, is_passable
 from core.graph import Graph, build_graph
 from core.pathfinding import find_path, summarize
-from core.profiles import PRESETS, CongestionTolerance
+from core.profiles import CONGESTION_WEIGHTS, PRESETS, CongestionTolerance
 
 
 def make_graph(node_count: int, edges: list[dict]) -> Graph:
+    # 노드를 약 0.1m 간격으로 둔다. A* 직선거리 추정이 구간 길이보다 커지지 않게.
     nodes = [
-        {"lon": 126.97 + i * 0.001, "lat": 37.56, "elevation": 0.0}
+        {"lon": 126.97 + i * 0.000001, "lat": 37.56, "elevation": 0.0}
         for i in range(node_count)
     ]
     return build_graph({"nodes": nodes, "edges": edges})
@@ -145,3 +149,28 @@ def test_summarize_distance_grade_ascent_steps() -> None:
     assert summary.max_grade == 0.05
     assert summary.ascent_m == 6.0
     assert summary.steps_count == 1
+
+
+def test_cost_factors_keep_heuristic_admissible() -> None:
+    # A* 가 최적 경로를 보장하려면 모든 배율이 1 이상이어야 한다.
+    assert min(SLOPE_FACTORS.values()) >= 1
+    assert min(profile.stair_factor for profile in PRESETS.values()) >= 1
+    assert min(CONGESTION_WEIGHTS.values()) >= 0
+
+
+@pytest.mark.parametrize("preset", list(PRESETS))
+def test_astar_cost_matches_dijkstra(sample_graph: Graph, preset: str) -> None:
+    rng = random.Random(preset)
+    profile = PRESETS[preset]
+    congestion = {edge_id: rng.random() for edge_id in range(0, 180, 7)}
+    for _ in range(30):
+        start, goal = rng.randrange(100), rng.randrange(100)
+        astar = find_path(sample_graph, start, goal, profile, congestion)
+        dijkstra = find_path(
+            sample_graph, start, goal, profile, congestion, use_heuristic=False
+        )
+        if dijkstra is None:
+            assert astar is None
+        else:
+            assert astar is not None
+            assert astar.cost == pytest.approx(dijkstra.cost)

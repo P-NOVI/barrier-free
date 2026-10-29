@@ -6,6 +6,11 @@ from dataclasses import dataclass
 from core.cost import arc_cost
 from core.graph import Arc, Graph
 from core.profiles import Profile
+from core.snap import distance_m
+
+# A* 추정치 = 목적지까지 직선거리 × 이 값. 구간 비용은 길이 × (1 이상 배율)이라
+# 직선거리가 남은 비용보다 클 수 없다. 좌표·길이 반올림 오차만큼 조금 줄여 둔다.
+HEURISTIC_SCALE = 0.99
 
 
 @dataclass(frozen=True)
@@ -30,17 +35,29 @@ def find_path(
     goal: int,
     profile: Profile,
     congestion: Mapping[int, float] | None = None,
+    *,
+    use_heuristic: bool = True,
 ) -> Path | None:
-    """Dijkstra 로 통행 비용 합이 가장 작은 경로를 찾는다.
+    """통행 비용 합이 가장 작은 경로를 A* 로 찾는다.
 
+    목적지 쪽 노드부터 살펴 Dijkstra 보다 적게 탐색하고, 결과 비용은 같다.
+    use_heuristic=False 이면 Dijkstra 와 같다.
     congestion 은 edge_id → 혼잡도(0~1). 갈 수 있는 길이 없으면 None.
     """
     congestion = congestion or {}
+    target = graph.nodes[goal]
+
+    def remaining(node: int) -> float:
+        if not use_heuristic:
+            return 0.0
+        here = graph.nodes[node]
+        return HEURISTIC_SCALE * distance_m(here.lon, here.lat, target.lon, target.lat)
+
     best: dict[int, float] = {start: 0.0}
     previous: dict[int, Arc] = {}
-    queue = [(0.0, start)]
+    queue = [(remaining(start), 0.0, start)]
     while queue:
-        cost, node = heapq.heappop(queue)
+        _, cost, node = heapq.heappop(queue)
         if node == goal:
             break
         if cost > best[node]:
@@ -53,7 +70,9 @@ def find_path(
             if candidate < best.get(arc.target, math.inf):
                 best[arc.target] = candidate
                 previous[arc.target] = arc
-                heapq.heappush(queue, (candidate, arc.target))
+                heapq.heappush(
+                    queue, (candidate + remaining(arc.target), candidate, arc.target)
+                )
 
     if goal not in best:
         return None

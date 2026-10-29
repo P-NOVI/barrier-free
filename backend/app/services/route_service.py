@@ -39,14 +39,14 @@ def find_route(
     max_snap_distance_m: float,
 ) -> Route:
     """좌표를 가장 가까운 노드로 옮긴 뒤 이동 조건에 맞는 추천 경로를 찾는다."""
-    start_node, start_gap = nearest_node(graph, *start)
-    if start_gap > max_snap_distance_m:
+    start_hit = nearest_node(graph, *start, max_snap_distance_m)
+    if start_hit is None:
         raise RouteNotFoundError(RouteFailure.START_OFF_NETWORK)
-    goal_node, goal_gap = nearest_node(graph, *goal)
-    if goal_gap > max_snap_distance_m:
+    goal_hit = nearest_node(graph, *goal, max_snap_distance_m)
+    if goal_hit is None:
         raise RouteNotFoundError(RouteFailure.GOAL_OFF_NETWORK)
 
-    path = find_path(graph, start_node, goal_node, profile)
+    path = find_path(graph, start_hit[0], goal_hit[0], profile)
     if path is None:
         raise RouteNotFoundError(RouteFailure.NO_PATH)
 
