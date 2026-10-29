@@ -15,6 +15,15 @@ class Path:
     cost: float
 
 
+@dataclass(frozen=True)
+class PathSummary:
+    distance_m: float
+    # 계단을 뺀 구간 중 가장 가파른 |경사|. 계단은 steps_count 로 따로 센다.
+    max_grade: float
+    ascent_m: float
+    steps_count: int
+
+
 def find_path(
     graph: Graph,
     start: int,
@@ -57,4 +66,20 @@ def find_path(
     arcs.reverse()
     return Path(
         nodes=[start, *(arc.target for arc in arcs)], arcs=arcs, cost=best[goal]
+    )
+
+
+def summarize(graph: Graph, path: Path) -> PathSummary:
+    """경로의 거리·최대 경사·누적 상승(오르막 고도 합)·계단 구간 수."""
+    rises = (
+        graph.nodes[arc.target].elevation - graph.nodes[arc.source].elevation
+        for arc in path.arcs
+    )
+    return PathSummary(
+        distance_m=sum(arc.length for arc in path.arcs),
+        max_grade=max(
+            (abs(arc.grade) for arc in path.arcs if not arc.steps), default=0.0
+        ),
+        ascent_m=sum(rise for rise in rises if rise > 0),
+        steps_count=sum(arc.steps for arc in path.arcs),
     )

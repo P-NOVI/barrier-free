@@ -3,7 +3,7 @@ from itertools import pairwise
 
 from core.cost import is_passable
 from core.graph import Graph, build_graph
-from core.pathfinding import find_path
+from core.pathfinding import find_path, summarize
 from core.profiles import PRESETS, CongestionTolerance
 
 
@@ -118,3 +118,30 @@ def test_sample_grid_paths_are_connected_and_passable(sample_graph: Graph) -> No
         for arc, (u, v) in zip(path.arcs, pairwise(path.nodes), strict=True):
             assert (arc.source, arc.target) == (u, v)
             assert is_passable(arc, profile)
+
+
+def test_summarize_distance_grade_ascent_steps() -> None:
+    # 0 →(오르막 5m)→ 1 →(계단 내리막 2m)→ 2 →(오르막 1m)→ 3
+    nodes = [
+        {"lon": 126.97 + i * 0.001, "lat": 37.56, "elevation": elevation}
+        for i, elevation in enumerate([10.0, 15.0, 13.0, 14.0])
+    ]
+    graph = build_graph(
+        {
+            "nodes": nodes,
+            "edges": [
+                edge(0, 0, 1, 100, 0.05),
+                edge(1, 1, 2, 10, -0.2, steps=True),
+                edge(2, 2, 3, 50, 0.02),
+            ],
+        }
+    )
+    path = find_path(graph, 0, 3, PRESETS["general"])
+    assert path is not None
+
+    summary = summarize(graph, path)
+
+    assert summary.distance_m == 160
+    assert summary.max_grade == 0.05
+    assert summary.ascent_m == 6.0
+    assert summary.steps_count == 1

@@ -2,14 +2,15 @@ from dataclasses import dataclass, replace
 from typing import Any
 
 
-@dataclass(frozen=True)
+# slots: 서울 전체 그래프(노드 약 17만, 구간 약 48만 방향)의 메모리를 줄인다.
+@dataclass(frozen=True, slots=True)
 class Node:
     lon: float
     lat: float
     elevation: float
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Arc:
     """도로 구간을 한 방향으로 지나가는 단위. 반대 방향은 grade 부호만 다르다."""
 
