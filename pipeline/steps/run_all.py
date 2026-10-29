@@ -1,7 +1,8 @@
 """pipeline 00~04 단계를 필요한 것만 순서대로 실행한다.
 
 실행: pipeline/ 에서 uv run python steps/run_all.py [--force] [--from 02]
-- 결과 파일이 이미 있는 단계는 건너뛴다.
+- 최종 결과(graph.json.gz)를 만드는 데 필요한 단계만 실행한다. 예를 들어
+  walk_tagged.graphml 이 있으면 앞 단계 파일이 없어도 04 단계만 실행한다.
 - 어떤 단계를 다시 만들면 그 결과를 쓰는 뒤 단계도 다시 만든다.
 - --force 는 모든 단계, --from NN 은 NN 단계와 그 뒤 단계를 다시 만든다.
 """
@@ -77,20 +78,37 @@ def plan(
     start_from: str | None = None,
     exists: Callable[[Path], bool] = Path.exists,
 ) -> list[tuple[Step, bool]]:
-    """단계마다 (단계, 실행 여부). 결과가 없거나 읽는 앞 단계가 다시 만들어지면 실행."""
-    rebuilt: set[str] = set()
-    result = []
-    for step in steps:
-        run = (
-            force
-            or step.number == start_from
-            or any(need in rebuilt for need in step.needs)
-            or not all(exists(path) for path in step.outputs(config))
-        )
-        if run:
-            rebuilt.add(step.number)
-        result.append((step, run))
-    return result
+    """단계마다 (단계, 실행 여부).
+
+    마지막 단계 결과가 없거나 다시 만들 단계가 있으면, 실행할 단계가 읽을 앞 단계
+    결과가 없을 때만 앞 단계를 실행한다. 다시 만든 단계를 읽는 뒤 단계도 실행한다.
+    """
+    by_number = {step.number: step for step in steps}
+
+    def missing(step: Step) -> bool:
+        return not all(exists(path) for path in step.outputs(config))
+
+    run = {step.number for step in steps} if force else set()
+    if start_from is not None:
+        run.add(start_from)
+    if missing(steps[-1]):
+        run.add(steps[-1].number)
+
+    changed = True
+    while changed:
+        changed = False
+        for step in steps:
+            # 뒤로: 다시 만든 단계를 읽는 단계
+            if step.number not in run and run & set(step.needs):
+                run.add(step.number)
+                changed = True
+            # 앞으로: 실행할 단계가 읽을 결과가 없는 앞 단계
+            if step.number in run:
+                for need in step.needs:
+                    if need not in run and missing(by_number[need]):
+                        run.add(need)
+                        changed = True
+    return [(step, step.number in run) for step in steps]
 
 
 def main() -> None:
@@ -109,9 +127,7 @@ def main() -> None:
     print(f"데이터 폴더: {data_dir()}", flush=True)
     steps = plan(STEPS, config, force=args.force, start_from=args.start_from)
     for step, run in steps:
-        print(
-            f"  {step.number} {step.title}: {'실행' if run else '건너뜀 (결과 있음)'}"
-        )
+        print(f"  {step.number} {step.title}: {'실행' if run else '건너뜀'}")
 
     for step, run in steps:
         if not run:

@@ -32,17 +32,32 @@ def test_run_everything_on_empty_folder() -> None:
     assert planned(set()) == ["00", "01", "02", "03", "04"]
 
 
-def test_missing_middle_output_reruns_downstream_only() -> None:
-    assert planned(all_outputs() - output_of("03")) == ["03", "04"]
-
-
-def test_new_dem_reruns_elevation_but_not_network() -> None:
-    assert planned(all_outputs() - output_of("00")) == ["00", "02", "03", "04"]
+def test_missing_middle_output_is_ignored_when_final_exists() -> None:
+    assert planned(all_outputs() - output_of("03")) == []
 
 
 def test_only_export_missing() -> None:
     # 공유 폴더에 중간 결과가 있으면 graph.json.gz 만 만든다
     assert planned(all_outputs() - output_of("04")) == ["04"]
+
+
+def test_only_tagged_graph_is_enough_for_export() -> None:
+    # walk_tagged.graphml 하나만 받아도 04 단계만 실행
+    assert planned(output_of("03")) == ["04"]
+
+
+def test_missing_inputs_walk_back_until_found() -> None:
+    existing = output_of("00") | output_of("01")
+    assert planned(existing) == ["02", "03", "04"]
+
+
+def test_rebuilt_dem_reruns_elevation_but_not_network() -> None:
+    assert planned(all_outputs(), start_from="00") == ["00", "02", "03", "04"]
+
+
+def test_from_step_also_builds_its_missing_inputs() -> None:
+    existing = all_outputs() - output_of("01")
+    assert planned(existing, start_from="02") == ["01", "02", "03", "04"]
 
 
 def test_force_and_from() -> None:

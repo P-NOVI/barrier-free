@@ -69,6 +69,7 @@ DEM·도로망 같은 큰 원본·중간 데이터는 Git 대신 팀 Google Driv
 
 - 데이터를 새로 만들거나 고치는 사람은 한 명(데이터 담당)으로 정합니다. 여러 명이 같은 파일을 바꾸면 Drive에 충돌 사본이 생깁니다.
 - DB는 이 폴더에 두지 않습니다.
+- 필요한 것만 받으면 됩니다. graph.json.gz를 다시 만들기만 하려면 `interim/walk_tagged.graphml`(약 300MB) 하나면 되고, 경사를 다시 계산하려면 `raw/dem/seoul_dem_5m.tif`와 `interim/walk.graphml`이 필요합니다.
 
 ### 데이터 가져오기 (둘 중 하나)
 
@@ -97,7 +98,7 @@ Copy-Item .env.example .env   # 처음 한 번
 uv run python steps/run_all.py
 ```
 
-- 결과 파일이 이미 있는 단계는 건너뜁니다. 공유 폴더에 `interim/`이 있으면 graph.json.gz 만들기(04)만 1분 정도 걸립니다.
+- 최종 결과(graph.json.gz)에 필요한 단계만 실행합니다. `interim/walk_tagged.graphml`이 있으면 04 단계(1분 정도)만 실행하고, 이미 graph.json.gz가 있으면 아무것도 하지 않습니다.
 - 다시 만들려면 `--from 02`(02 단계부터) 또는 `--force`(전부)를 붙입니다.
 - 필요한 파일이 없으면 어떤 파일이 어디 없는지 알려 줍니다.
 
