@@ -33,6 +33,8 @@ class RouteResponse(BaseModel):
     coordinates: list[Coordinate] = Field(description="경로 지점 [경도, 위도]")
     elevations: list[float]
     distances_m: list[float] = Field(description="출발점부터 각 지점까지 누적 거리")
+    start_gap_m: float = Field(description="요청한 출발 좌표에서 경로 시작점까지 거리")
+    goal_gap_m: float = Field(description="요청한 도착 좌표에서 경로 끝점까지 거리")
 
 
 class RouteError(BaseModel):

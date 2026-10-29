@@ -1,4 +1,4 @@
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 from core.snap import NodeIndex
@@ -32,6 +32,10 @@ class Graph:
     adjacency: list[list[Arc]]
     # 좌표 → 최근접 노드 검색용 (core/snap.py)
     node_index: NodeIndex
+    # 이동 조건별 연결 요소 번호 캐시 (core/reachability.py)
+    component_cache: dict[tuple, list[int]] = field(
+        default_factory=dict, compare=False, repr=False
+    )
 
 
 def build_graph(data: dict[str, Any]) -> Graph:

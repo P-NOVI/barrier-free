@@ -58,4 +58,6 @@ def post_route(
         coordinates=route.coordinates,
         elevations=route.elevations,
         distances_m=route.distances_m,
+        start_gap_m=route.start_gap_m,
+        goal_gap_m=route.goal_gap_m,
     )

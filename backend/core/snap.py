@@ -66,35 +66,63 @@ class NodeIndex:
                 for y in ys:
                     yield x, y
 
+    def _cell_width_m(self, lat: float) -> float:
+        """한 칸을 가로지르는 최소 거리. 경도 방향은 고위도일수록 좁아진다.
+
+        구면 근사 오차를 덮도록 조금(0.1%) 작게 잡는다.
+        """
+        widest_lat = max(self._max_abs_lat, abs(lat))
+        return (
+            self._cell * METERS_PER_DEGREE * math.cos(math.radians(widest_lat)) * 0.999
+        )
+
+    def _rings(self, lon: float, lat: float) -> Iterator[tuple[int, list[int]]]:
+        """(바퀴 번호, 그 바퀴 칸들의 노드 번호) 를 안쪽부터. 데이터를 다 덮으면 끝."""
+        cx, cy = self._key(lon, lat)
+        min_x, max_x, min_y, max_y = self._bounds
+        last_ring = max(cx - min_x, max_x - cx, cy - min_y, max_y - cy, 0)
+        for ring in range(last_ring + 1):
+            yield (
+                ring,
+                [
+                    i
+                    for cell in self._ring(cx, cy, ring)
+                    for i in self._cells.get(cell, ())
+                ],
+            )
+
     def nearest(
         self, lon: float, lat: float, max_distance_m: float = math.inf
     ) -> tuple[int, float] | None:
         """가장 가까운 노드 번호와 거리(m). max_distance_m 안에 없으면 None."""
-        if not self._points:
-            return None
-        # 한 칸을 가로지르는 최소 거리. 경도 방향은 고위도일수록 좁아진다.
-        # 구면 근사 오차를 덮도록 조금(0.1%) 작게 잡는다.
-        widest_lat = max(self._max_abs_lat, abs(lat))
-        cell_m = (
-            self._cell * METERS_PER_DEGREE * math.cos(math.radians(widest_lat)) * 0.999
-        )
-        cx, cy = self._key(lon, lat)
-        min_x, max_x, min_y, max_y = self._bounds
-        last_ring = max(cx - min_x, max_x - cx, cy - min_y, max_y - cy, 0)
+        cell_m = self._cell_width_m(lat)
         best_index, best_distance = -1, math.inf
-        for ring in range(last_ring + 1):
-            for cell in self._ring(cx, cy, ring):
-                for index in self._cells.get(cell, ()):
-                    point_lon, point_lat = self._points[index]
-                    distance = distance_m(lon, lat, point_lon, point_lat)
-                    if distance < best_distance:
-                        best_index, best_distance = index, distance
+        for ring, indexes in self._rings(lon, lat):
+            for index in indexes:
+                distance = distance_m(lon, lat, *self._points[index])
+                if distance < best_distance:
+                    best_index, best_distance = index, distance
             # 다음 바퀴의 노드는 모두 ring 칸 폭보다 멀다.
             if best_distance <= ring * cell_m or ring * cell_m > max_distance_m:
                 break
-        if best_distance > max_distance_m:
+        if best_index < 0 or best_distance > max_distance_m:
             return None
         return best_index, best_distance
+
+    def within(
+        self, lon: float, lat: float, radius_m: float
+    ) -> list[tuple[int, float]]:
+        """radius_m 안의 노드 번호와 거리(m)를 가까운 순으로."""
+        cell_m = self._cell_width_m(lat)
+        hits = []
+        for ring, indexes in self._rings(lon, lat):
+            for index in indexes:
+                distance = distance_m(lon, lat, *self._points[index])
+                if distance <= radius_m:
+                    hits.append((index, distance))
+            if ring * cell_m > radius_m:
+                break
+        return sorted(hits, key=lambda hit: hit[1])
 
 
 def nearest_node(

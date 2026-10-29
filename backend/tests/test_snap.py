@@ -69,3 +69,18 @@ def test_index_returns_none_beyond_max_distance() -> None:
 
 def test_empty_index() -> None:
     assert NodeIndex([]).nearest(126.9779, 37.5663) is None
+
+
+def test_within_matches_brute_force_sorted() -> None:
+    rng = random.Random(11)
+    points = [
+        (rng.uniform(126.95, 127.0), rng.uniform(37.55, 37.58)) for _ in range(500)
+    ]
+    index = NodeIndex(points)
+    for _ in range(50):
+        lon, lat = rng.uniform(126.94, 127.01), rng.uniform(37.54, 37.59)
+        hits = index.within(lon, lat, 300)
+        expected = sorted(
+            d for d in (distance_m(lon, lat, *p) for p in points) if d <= 300
+        )
+        assert [d for _, d in hits] == pytest.approx(expected)
