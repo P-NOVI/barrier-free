@@ -80,7 +80,7 @@ main   ← 배포용 (직접 push 금지)
 - `.env`와 키 파일의 내용은 출력하거나 커밋하지 않는다. `.gitignore`에 둔다.
 - 새 환경변수를 추가하면 같은 폴더의 `.env.example`에 키 이름만 추가한다. 값은 비운다.
 - `VITE_`로 시작하는 프론트 환경변수는 브라우저에 노출된다. 비밀 값을 넣지 않는다.
-- 네이버 Client Secret, S-DoT API 키, `DATABASE_URL`, `SECRET_KEY`는 백엔드에서만 쓴다.
+- 카카오 REST API 키, S-DoT API 키, `DATABASE_URL`, `SECRET_KEY`는 백엔드에서만 쓴다. 카카오 JavaScript 키(`VITE_KAKAO_MAP_APP_KEY`)는 등록 도메인에서만 동작하므로 프론트에 둔다.
 - 키·URL·경로·매직 넘버는 코드에 직접 쓰지 않고 설정이나 환경변수로 분리한다.
 ## 건드리지 않는 것
 
@@ -92,5 +92,5 @@ main   ← 배포용 (직접 push 금지)
 ## 외부 데이터 · API
 
 - OpenStreetMap 기반 데이터를 쓰는 화면에는 `© OpenStreetMap contributors` 출처 표기를 유지한다.
-- S-DoT, 네이버 지도·검색·Geocoding API는 백엔드를 거쳐 호출한다. 프론트에서 비밀 키로 직접 호출하지 않는다.
+- 지도는 카카오맵 JavaScript SDK로 띄운다. S-DoT, 카카오 로컬(주소·장소 검색) API는 백엔드를 거쳐 호출한다. 프론트에서 비밀 키로 직접 호출하지 않는다.
 - 테스트는 외부 API를 실제로 호출하지 않고 mock을 쓴다.
