@@ -55,7 +55,53 @@ npm run dev
 - `.env`는 커밋하지 않습니다. 값이 필요한 키는 팀 채널에서 받습니다.
 - 새 키를 추가하면 같은 폴더의 `.env.example`에 키 이름만 적습니다. 값은 비웁니다.
 
-## 6. 첫 작업 시작하기
+## 6. 데이터 (pipeline 담당만)
+
+backend·frontend 개발에는 필요 없습니다. 서버가 읽는 `data/processed/graph.json.gz`는 Git에 들어 있어 `git pull`이면 됩니다.
+
+DEM·도로망 같은 큰 원본·중간 데이터는 Git 대신 팀 Google Drive 공유 폴더(링크는 팀 채널)에 둡니다.
+
+```
+공유 폴더/
+├── raw/dem/        등고선 5000/, 표고 5000/, seoul_dem_5m.tif
+└── interim/        walk.graphml, walk_elevation.graphml, walk_tagged.graphml
+```
+
+- 데이터를 새로 만들거나 고치는 사람은 한 명(데이터 담당)으로 정합니다. 여러 명이 같은 파일을 바꾸면 Drive에 충돌 사본이 생깁니다.
+- DB는 이 폴더에 두지 않습니다.
+
+### 데이터 가져오기 (둘 중 하나)
+
+**A. 직접 내려받기** — 가끔 쓰는 경우
+
+1. 공유 폴더에서 `raw/`, `interim/`을 내려받아 저장소의 `data/` 아래에 같은 구조로 넣습니다. (`data/raw/dem/...`, `data/interim/...`)
+2. `pipeline/.env`의 `DATA_DIR`은 비워 둡니다. 비어 있으면 저장소의 `data/`를 씁니다.
+
+**B. Google Drive 데스크톱** — 자주 쓰거나 데이터를 만드는 경우
+
+1. [Google Drive 데스크톱](https://www.google.com/drive/download/)을 설치하고 로그인합니다.
+2. 웹에서 공유 폴더를 열고 **바로가기 추가 → 내 드라이브**를 누릅니다. (공유받은 폴더는 이렇게 해야 PC에 보입니다)
+3. 탐색기의 Google Drive(보통 `G:`)에서 그 폴더를 우클릭 → **오프라인 사용 가능**으로 설정합니다.
+4. `pipeline/.env`에 폴더 경로를 적습니다.
+   ```
+   DATA_DIR=G:\내 드라이브\공유폴더이름
+   ```
+   Mac은 `~/Library/CloudStorage/GoogleDrive-계정/내 드라이브/공유폴더이름` 형태입니다.
+
+### 한 번에 실행
+
+```powershell
+cd pipeline
+uv sync
+Copy-Item .env.example .env   # 처음 한 번
+uv run python steps/run_all.py
+```
+
+- 결과 파일이 이미 있는 단계는 건너뜁니다. 공유 폴더에 `interim/`이 있으면 graph.json.gz 만들기(04)만 1분 정도 걸립니다.
+- 다시 만들려면 `--from 02`(02 단계부터) 또는 `--force`(전부)를 붙입니다.
+- 필요한 파일이 없으면 어떤 파일이 어디 없는지 알려 줍니다.
+
+## 7. 첫 작업 시작하기
 
 1. GitHub에서 이슈를 만듭니다. (feat / fix / 기타 템플릿 선택, 제목 앞의 `[#번호]`는 자동으로 붙음)
 2. `dev`를 최신으로 받고 브랜치를 만듭니다.
@@ -70,12 +116,12 @@ npm run dev
 5. 리뷰어 1명이 승인하면 **Squash and merge** 합니다. 이슈는 자동으로 닫힙니다.
 6. 머지 후 브랜치를 지우고 `dev`를 최신화합니다.
 
-## 7. Claude Code로 작업할 때
+## 8. Claude Code로 작업할 때
 
 - 저장소 루트에서 실행하면 `CLAUDE.md`가 자동으로 적용됩니다.
 - 개인 설정은 `.claude/settings.local.json`에 둡니다. 커밋되지 않습니다.
 
-## 8. 자주 막히는 곳
+## 9. 자주 막히는 곳
 
 | 증상 | 원인과 해결 |
 | --- | --- |

@@ -17,20 +17,13 @@ from typing import Any
 
 import networkx as nx
 import osmnx as ox
-import yaml
 
-PIPELINE_DIR = Path(__file__).resolve().parents[1]
-REPO_ROOT = PIPELINE_DIR.parent
-CONFIG_PATH = PIPELINE_DIR / "config.yaml"
+from common import CONFIG_PATH, data_path, load_config, repo_path, require_files
 
 COORD_DIGITS = 6  # 약 0.1m
 ELEVATION_DIGITS = 1
 LENGTH_DIGITS = 1
 BOOL_TAGS = ("steps", "ramp", "wheelchair_ok", "walk_ok")
-
-
-def load_config(path: Path) -> dict[str, Any]:
-    return yaml.safe_load(path.read_text(encoding="utf-8"))
 
 
 def parse_bool(value: str) -> bool:
@@ -82,8 +75,9 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", type=Path, default=CONFIG_PATH)
     config = load_config(parser.parse_args().config)
-    source = REPO_ROOT / config["barriers"]["output"]
-    output = REPO_ROOT / config["export"]["output"]
+    source = data_path(config["barriers"]["output"])
+    output = repo_path(config["export"]["output"])
+    require_files(source)
 
     started = time.time()
     graph = ox.load_graphml(source, edge_dtypes={tag: parse_bool for tag in BOOL_TAGS})
