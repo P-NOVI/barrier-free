@@ -13,7 +13,7 @@
 
 ## 명령어
 
-각 폴더(`frontend/`, `backend/`)에서 실행한다. 실제 스크립트와 다르면 이 파일을 먼저 고친다.
+각 폴더(`frontend/`, `backend/`, `pipeline/`)에서 실행한다. 실제 스크립트와 다르면 이 파일을 먼저 고친다.
 
 | 위치 | 용도 | 명령어 |
 | --- | --- | --- |
@@ -24,6 +24,9 @@
 | `backend/` | 설치 | `uv sync` |
 | `backend/` | 린트 · 포맷 | `uv run ruff check .` · `uv run ruff format .` |
 | `backend/` | 테스트 | `uv run pytest` |
+| `pipeline/` | 설치 | `uv sync` |
+| `pipeline/` | DEM 생성 (원본은 `data/raw/dem/`) | `uv run python steps/00_build_dem.py` |
+| `pipeline/` | 린트 · 포맷 | `uv run ruff check .` · `uv run ruff format .` |
 
 - Python 도구는 uv + ruff + pytest로 통일한다. pip, poetry, black은 쓰지 않는다.
 - 프론트 도구는 npm + ESLint + Prettier + Vitest로 통일한다. yarn, pnpm은 쓰지 않는다.
