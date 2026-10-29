@@ -55,7 +55,24 @@ npm run dev
 - `.env`는 커밋하지 않습니다. 값이 필요한 키는 팀 채널에서 받습니다.
 - 새 키를 추가하면 같은 폴더의 `.env.example`에 키 이름만 적습니다. 값은 비웁니다.
 
-## 6. 첫 작업 시작하기
+## 6. 데이터 파일 받기
+
+용량이 큰 데이터는 Git에 올리지 않고 GitHub Release에 둡니다. pipeline을 실행할 때만 필요하고, backend·frontend 실행에는 필요 없습니다.
+
+| 파일 | 받는 곳 | 넣을 위치 |
+| --- | --- | --- |
+| `seoul_dem_5m.tif` (서울 5m DEM, 46MB) | [Release `data-v1`](https://github.com/P-NOVI/barrier-free/releases/tag/data-v1) | `data/raw/dem/` |
+
+저장소 루트에서 받습니다.
+
+```powershell
+gh release download data-v1 -R P-NOVI/barrier-free -p seoul_dem_5m.tif -D data/raw/dem
+```
+
+- 키 값(`.env`)은 Release에도 올리지 않습니다. 팀 채널에서 받습니다.
+- 보행 도로망(`data/interim/*.graphml`)은 100MB가 넘어 올리지 않습니다. pipeline 단계를 실행해 만듭니다.
+
+## 7. 첫 작업 시작하기
 
 1. GitHub에서 이슈를 만듭니다. (feat / fix / 기타 템플릿 선택, 제목 앞의 `[#번호]`는 자동으로 붙음)
 2. `dev`를 최신으로 받고 브랜치를 만듭니다.
@@ -70,12 +87,12 @@ npm run dev
 5. 리뷰어 1명이 승인하면 **Squash and merge** 합니다. 이슈는 자동으로 닫힙니다.
 6. 머지 후 브랜치를 지우고 `dev`를 최신화합니다.
 
-## 7. Claude Code로 작업할 때
+## 8. Claude Code로 작업할 때
 
 - 저장소 루트에서 실행하면 `CLAUDE.md`가 자동으로 적용됩니다.
 - 개인 설정은 `.claude/settings.local.json`에 둡니다. 커밋되지 않습니다.
 
-## 8. 자주 막히는 곳
+## 9. 자주 막히는 곳
 
 | 증상 | 원인과 해결 |
 | --- | --- |
