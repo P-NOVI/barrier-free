@@ -10,10 +10,18 @@ node_modules/
 dist/
 build/
 out/
+coverage/
+*.tsbuildinfo
 __pycache__/
 *.pyc
 .venv/
 venv/
+.pytest_cache/
+.ruff_cache/
+
+# 데이터 원본 / DB
+data/raw/
+*.db
 
 # 로그
 *.log
@@ -25,5 +33,5 @@ npm-debug.log*
 .DS_Store
 Thumbs.db
 
-# Claude Code
+# Claude Code (개인 설정)
 .claude/settings.local.json
