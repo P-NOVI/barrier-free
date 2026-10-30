@@ -1,3 +1,4 @@
+import math
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -200,6 +201,88 @@ def test_route_follows_road_shape() -> None:
     assert body["elevations"] == pytest.approx([30.0, 31.0, 32.0, 33.0])
     assert body["distances_m"] == pytest.approx([0.0, 100.0, 200.0, 300.0])
     assert body["distance_m"] == 300.0
+
+
+EAST_M_PER_DEGREE = 111_195.0 * math.cos(math.radians(37.5))
+
+
+def meters(x: float, y: float) -> list[float]:
+    """(127.0, 37.5) 에서 동쪽 x m, 북쪽 y m 인 좌표"""
+    return [127.0 + x / EAST_M_PER_DEGREE, 37.5 + y / 111_195.0]
+
+
+def flat_graph(points: list[list[float]], roads: list[tuple[int, int, float]]) -> Graph:
+    """평지 길 (u, v, 길이) 로 이은 그래프"""
+    return build_graph(
+        {
+            "nodes": [
+                {"lon": lon, "lat": lat, "elevation": 0.0} for lon, lat in points
+            ],
+            "edges": [
+                {
+                    "id": i,
+                    "u": u,
+                    "v": v,
+                    "length": length,
+                    "grade": 0.0,
+                    "steps": False,
+                    "wheelchair_ok": True,
+                    "walk_ok": True,
+                }
+                for i, (u, v, length) in enumerate(roads)
+            ],
+        }
+    )
+
+
+def post_route(graph: Graph, start: list[float], goal: list[float]) -> dict:
+    app.dependency_overrides[get_graph] = lambda: graph
+    try:
+        response = client.post("/api/route", json={"start": start, "goal": goal})
+    finally:
+        app.dependency_overrides.clear()
+    assert response.status_code == 200
+    return response.json()
+
+
+def test_goal_beside_long_road_is_reached_along_it() -> None:
+    # 도착은 긴 길 P-Q 가운데에서 3m 옆이고, 가장 가까운 노드는 다른 길 끝 R(19m)이다.
+    # 노드에 붙이면 P → T → R 로 돌아가고, 길에 붙이면 P-Q 를 따라 100m 간다.
+    #   T ───────── R
+    #   │
+    #   P ───────── × ───────── Q   (× = 도착)
+    p, q, t, r = meters(0, 0), meters(200, 0), meters(0, 22), meters(100, 22)
+    graph = flat_graph([p, q, t, r], [(0, 1, 200.0), (0, 2, 22.0), (2, 3, 100.0)])
+
+    body = post_route(graph, p, meters(100, 3))
+
+    assert body["distance_m"] == pytest.approx(100, abs=0.5)
+    assert body["coordinates"][0] == pytest.approx(p)
+    assert body["coordinates"][-1] == pytest.approx(meters(100, 0), abs=1e-6)
+    assert body["goal_gap_m"] == pytest.approx(3, abs=0.1)
+    assert body["turns"] == []
+
+
+def test_nearest_road_with_long_detour_is_skipped() -> None:
+    # 출발은 막다른 길 D-E 에서 5m, 큰길 P-Q 에서 20m 다.
+    # D-E 로 가면 E → U → V → Q 로 875m 돌아가므로, 큰길에서 300m 가는 쪽을 고른다.
+    #       U ─────────────── V
+    #       │                 │
+    #   D ─ E                 │
+    #     ×  (출발)            │
+    #     P ───────────────── Q (도착)
+    p, q = meters(0, 0), meters(300, 0)
+    d, e, u, v = meters(-50, 25), meters(50, 25), meters(50, 300), meters(300, 300)
+    graph = flat_graph(
+        [p, q, d, e, u, v],
+        [(0, 1, 300.0), (2, 3, 100.0), (3, 4, 275.0), (4, 5, 250.0), (5, 1, 300.0)],
+    )
+
+    body = post_route(graph, meters(0, 20), q)
+
+    assert body["distance_m"] == pytest.approx(300, abs=0.5)
+    assert body["start_gap_m"] == pytest.approx(20, abs=0.1)
+    assert body["coordinates"][0] == pytest.approx(p, abs=1e-6)
 
 
 def test_missing_graph_file(tmp_path: Path) -> None:

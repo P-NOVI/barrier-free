@@ -76,22 +76,38 @@ def test_component_labels_are_cached() -> None:
     assert component_labels(graph, WHEELCHAIR) is component_labels(graph, WHEELCHAIR)
 
 
-def test_wheelchair_start_moves_off_isolated_node() -> None:
+def test_wheelchair_start_moves_off_stairs() -> None:
+    # A 에 붙은 길은 계단뿐이라, 휠체어는 A 에서 가장 가까운 평지 길 C-B 위에 붙는다.
     graph = make_graph(POINTS, EDGES)
     picked = pick_endpoints(graph, POINTS[A], POINTS[G], WHEELCHAIR, 200)
 
     assert isinstance(picked, Endpoints)
-    assert (picked.start, picked.goal) == (B, G)
-    assert picked.start_gap_m == pytest.approx(30, abs=0.5)
-    assert picked.goal_gap_m == 0
+    assert picked.starts[0].edge.edge_id == 1
+    # A(0, 0) 에서 C(0, 60)-B(30, 0) 선까지 거리 = 60 × 30 / √(60² + 30²)
+    assert picked.starts[0].gap_m == pytest.approx(26.8, abs=0.5)
+    assert picked.goals[0].edge.edge_id == 2
+    assert picked.goals[0].gap_m == pytest.approx(0, abs=0.01)
 
 
-def test_general_uses_nearest_nodes() -> None:
+def test_general_uses_nearest_road() -> None:
     graph = make_graph(POINTS, EDGES)
     picked = pick_endpoints(graph, POINTS[A], POINTS[G], GENERAL, 200)
 
     assert isinstance(picked, Endpoints)
-    assert (picked.start, picked.goal) == (A, G)
+    assert (picked.starts[0].edge.edge_id, picked.goals[0].edge.edge_id) == (0, 2)
+
+
+def test_point_beside_long_road_snaps_onto_it() -> None:
+    graph = make_graph(POINTS, EDGES)
+    picked = pick_endpoints(graph, POINTS[A], at(100, 5), GENERAL, 200)
+
+    assert isinstance(picked, Endpoints)
+    goal = picked.goals[0]
+    assert goal.edge.edge_id == 2
+    assert goal.gap_m == pytest.approx(5, abs=0.1)
+    # B(30) 에서 G(180) 까지 150m 중 70m 온 곳
+    assert goal.share == pytest.approx(70 / 150, abs=0.01)
+    assert goal.position == pytest.approx(at(100, 0), abs=1e-6)
 
 
 def test_close_points_do_not_collapse_into_one_node() -> None:
@@ -128,3 +144,13 @@ def test_off_network() -> None:
         pick_endpoints(graph, POINTS[A], far, GENERAL, 200)
         is EndpointFailure.GOAL_OFF_NETWORK
     )
+
+
+def test_candidates_include_roads_a_little_farther() -> None:
+    # A 에서 계단 A-C(0m), C-B(26.8m), B-G(30m) 가 50m 여유 안에 든다.
+    graph = make_graph(POINTS, EDGES)
+    picked = pick_endpoints(graph, POINTS[A], POINTS[G], GENERAL, 200)
+
+    assert isinstance(picked, Endpoints)
+    assert [point.edge.edge_id for point in picked.starts] == [0, 1, 2]
+    assert [point.edge.edge_id for point in picked.goals] == [2]

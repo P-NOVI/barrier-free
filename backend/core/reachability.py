@@ -1,8 +1,8 @@
-"""이동 조건별로 서로 오갈 수 있는 노드 묶음(연결 요소)과 출발·도착 노드 고르기.
+"""이동 조건별로 서로 오갈 수 있는 노드 묶음(연결 요소)과 출발·도착 지점 고르기.
 
-찍은 위치에서 가장 가까운 노드가 계단·급경사로 둘러싸여 있으면, 근처에 갈 수
-있는 길이 있어도 경로가 없다. 그래서 반경 안의 노드 중 출발·도착이 같은 묶음에
-들어가는 노드를 고른다.
+찍은 위치에서 가장 가까운 길이 계단·급경사이거나 그런 길로 둘러싸여 있으면, 근처에
+갈 수 있는 길이 있어도 경로가 없다. 그래서 반경 안을 지나는 길 중 이동 조건으로
+지나갈 수 있고, 출발·도착이 같은 묶음에 들어가는 길 위 지점을 후보로 고른다.
 """
 
 from dataclasses import dataclass, replace
@@ -11,9 +11,13 @@ from enum import StrEnum
 from core.cost import is_passable
 from core.graph import Arc, Graph
 from core.profiles import Profile
+from core.road_point import RoadPoint, nearby_road_points
 
 # 사용자가 경사 한계를 바꾸면 조건 조합이 늘어나므로 캐시 크기를 제한한다.
 MAX_CACHED_PROFILES = 32
+# 가장 가까운 길보다 이만큼(m) 더 먼 길까지 후보로 둔다.
+# 가장 가까운 길이 멀리 돌아가야 하는 길이면 경로 탐색이 다른 후보를 고른다.
+CANDIDATE_SLACK_M = 50.0
 
 
 class EndpointFailure(StrEnum):
@@ -24,11 +28,9 @@ class EndpointFailure(StrEnum):
 
 @dataclass(frozen=True)
 class Endpoints:
-    start: int
-    goal: int
-    # 요청 좌표에서 고른 노드까지 거리(m)
-    start_gap_m: float
-    goal_gap_m: float
+    # 출발·도착 후보 지점. 가까운 순서. 어느 후보를 쓸지는 경로 탐색이 정한다.
+    starts: list[RoadPoint]
+    goals: list[RoadPoint]
 
 
 def passable_either_way(arc: Arc, profile: Profile) -> bool:
@@ -76,38 +78,35 @@ def pick_endpoints(
     profile: Profile,
     max_distance_m: float,
 ) -> Endpoints | EndpointFailure:
-    """반경 안 노드 중 같은 연결 요소에 있는 출발·도착 노드를 고른다.
+    """반경 안을 지나는 길 중 출발·도착이 같은 연결 요소에 있는 후보 지점을 고른다.
 
-    가능한 묶음이 여러 개면 출발·도착까지 거리 합이 가장 작은 묶음을 쓴다.
-    출발·도착이 가까울 때 둘 다 같은 노드로 모여 "이미 도착"이 되는 경우는 뺀다.
+    이동 조건으로 지나갈 수 없는 길(휠체어의 계단 등)에는 붙이지 않는다.
     """
-    starts = graph.node_index.within(*start, max_distance_m)
+    starts = nearby_road_points(graph, *start, max_distance_m)
     if not starts:
         return EndpointFailure.START_OFF_NETWORK
-    goals = graph.node_index.within(*goal, max_distance_m)
+    goals = nearby_road_points(graph, *goal, max_distance_m)
     if not goals:
         return EndpointFailure.GOAL_OFF_NETWORK
 
     labels = component_labels(graph, profile)
-    # 후보가 가까운 순이라 묶음마다 처음 나온 노드가 가장 가깝다.
-    nearest_start: dict[int, tuple[int, float]] = {}
-    for node, distance in starts:
-        nearest_start.setdefault(labels[node], (node, distance))
-    nearest_goal: dict[int, tuple[int, float]] = {}
-    for node, distance in goals:
-        nearest_goal.setdefault(labels[node], (node, distance))
-
-    same_place = starts[0][0] == goals[0][0]
-    shared = [
-        c
-        for c in nearest_start.keys() & nearest_goal.keys()
-        if same_place or nearest_start[c][0] != nearest_goal[c][0]
-    ]
+    # 지나갈 수 있는 길은 양 끝이 같은 묶음이라 시작 노드의 묶음을 쓴다.
+    starts = [point for point in starts if passable_either_way(point.edge, profile)]
+    goals = [point for point in goals if passable_either_way(point.edge, profile)]
+    shared = {labels[p.edge.source] for p in starts} & {
+        labels[p.edge.source] for p in goals
+    }
     if not shared:
         return EndpointFailure.NOT_CONNECTED
-    best = min(shared, key=lambda c: nearest_start[c][1] + nearest_goal[c][1])
-    (start_node, start_gap), (goal_node, goal_gap) = (
-        nearest_start[best],
-        nearest_goal[best],
+    return Endpoints(
+        candidates(starts, shared, labels), candidates(goals, shared, labels)
     )
-    return Endpoints(start_node, goal_node, start_gap, goal_gap)
+
+
+def candidates(
+    points: list[RoadPoint], shared: set[int], labels: list[int]
+) -> list[RoadPoint]:
+    """shared 묶음의 지점 중 가장 가까운 지점보다 CANDIDATE_SLACK_M 안쪽인 것."""
+    usable = [point for point in points if labels[point.edge.source] in shared]
+    limit = usable[0].gap_m + CANDIDATE_SLACK_M
+    return [point for point in usable if point.gap_m <= limit]
