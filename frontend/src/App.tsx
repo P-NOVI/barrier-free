@@ -6,7 +6,7 @@ import RoutePanel from './components/RoutePanel';
 import { useMediaQuery } from './hooks/useMediaQuery';
 import { useRoute } from './hooks/useRoute';
 import { type LngLat, SEOUL_CITY_HALL } from './lib/kakaoMap';
-import { addressLabel, findAddress } from './lib/placeApi';
+import { findAddress } from './lib/placeApi';
 import { DEFAULT_PRESET, type PresetId } from './lib/presets';
 import {
     type Endpoint,
@@ -42,11 +42,7 @@ export default function App() {
             .then((address) => {
                 if (address) {
                     setEndpoints((current) =>
-                        renameEndpoint(
-                            current,
-                            position,
-                            addressLabel(address),
-                        ),
+                        renameEndpoint(current, position, address.name),
                     );
                 }
             })

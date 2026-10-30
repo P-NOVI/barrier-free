@@ -39,6 +39,8 @@ export async function searchPlaces(
 
 /** GET /api/places/address 응답. backend/app/schemas.py 의 AddressResponse 와 같다. */
 export type Address = {
+    /** 화면에 보일 이름: 건물 이름 → 근처 랜드마크 → 동 + 지번 (백엔드가 정한다) */
+    name: string;
     /** 건물 이름. 없으면 빈 문자열 */
     building_name: string;
     /** 도로명 주소. 없으면 빈 문자열 */
@@ -61,9 +63,4 @@ export async function findAddress(
         options,
     );
     return address;
-}
-
-/** 검색창에 보일 이름: 건물 이름 → 도로명 주소 → 지번 주소 */
-export function addressLabel(address: Address): string {
-    return address.building_name || address.road_address || address.address;
 }
