@@ -7,6 +7,7 @@ from core.pathfinding import Path, PathSummary, find_path, summarize
 from core.profiles import Profile
 from core.reachability import EndpointFailure, pick_endpoints
 from core.snap import distance_m
+from core.turns import find_turns
 
 LngLat = tuple[float, float]
 
@@ -31,6 +32,14 @@ class RouteNotFoundError(Exception):
 
 
 @dataclass(frozen=True)
+class RouteTurn:
+    # coordinates 에서 꺾는 갈림길이 몇 번째인지
+    index: int
+    # 들어온 방향에서 나가는 방향으로 꺾는 각도(도). 오른쪽이 +
+    angle: float
+
+
+@dataclass(frozen=True)
 class Route:
     summary: PathSummary
     # 길 모양대로 따라가는 지점. 노드 사이 중간 지점도 들어 있다.
@@ -38,6 +47,8 @@ class Route:
     elevations: list[float]
     # 출발점부터 각 지점까지 누적 거리. 고도 단면 그래프의 x 축.
     distances_m: list[float]
+    # 갈림길에서 다른 길로 꺾어 들어가는 곳. 출발점에서 가까운 순서
+    turns: list[RouteTurn]
     # 요청 좌표에서 경로 시작·끝 지점까지 거리. 크면 화면에서 안내한다.
     start_gap_m: float
     goal_gap_m: float
@@ -60,11 +71,19 @@ def find_route(
         raise RouteNotFoundError(RouteFailure.NO_PATH)
 
     coordinates, elevations, distances = trace(graph, path)
+    # 경로 노드가 coordinates 에서 몇 번째인지. 구간마다 중간 지점과 끝 노드가 들어간다.
+    node_indices = list(
+        accumulate((len(arc.geometry) + 1 for arc in path.arcs), initial=0)
+    )
     return Route(
         summary=summarize(graph, path),
         coordinates=coordinates,
         elevations=elevations,
         distances_m=distances,
+        turns=[
+            RouteTurn(node_indices[turn.step], turn.angle)
+            for turn in find_turns(graph, path)
+        ],
         start_gap_m=endpoints.start_gap_m,
         goal_gap_m=endpoints.goal_gap_m,
     )
