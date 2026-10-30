@@ -18,6 +18,8 @@ export default function App() {
     const [endpoints, setEndpoints] = useState(NO_ENDPOINTS);
     // 검색이나 현재 위치로 마지막에 고른 곳. 지도를 그리로 옮긴다.
     const [focus, setFocus] = useState<LngLat | null>(null);
+    // 지도 화면 중심. 장소 검색은 이 근처를 앞에 둔다.
+    const [mapCenter, setMapCenter] = useState<LngLat>(SEOUL_CITY_HALL);
     const start = endpoints.start?.position ?? null;
     const goal = endpoints.goal?.position ?? null;
     const route = useRoute(start, goal, preset);
@@ -31,7 +33,9 @@ export default function App() {
     const handleSelect = useCallback(
         (role: EndpointRole, endpoint: Endpoint) => {
             setEndpoints((current) => ({ ...current, [role]: endpoint }));
-            setFocus(endpoint.position);
+            // 같은 곳을 다시 골라도 지도가 옮겨 가게 새 배열로 둔다.
+            const [lng, lat] = endpoint.position;
+            setFocus([lng, lat]);
         },
         [],
     );
@@ -46,10 +50,11 @@ export default function App() {
                     route.status === 'success' ? route.route.coordinates : null
                 }
                 onMapClick={handleMapClick}
+                onCenterChange={setMapCenter}
             />
             <PlaceSearch
                 endpoints={endpoints}
-                near={start ?? goal ?? focus ?? SEOUL_CITY_HALL}
+                near={mapCenter}
                 onSelect={handleSelect}
             />
             <RoutePanel
