@@ -11,6 +11,7 @@
     --panel-shadow: 0 2px 12px rgba(0, 0, 0, 0.18);
     --brand: #1a73e8;
     --my-location: #1a73e8;
+    --route-arrow: rgba(255, 255, 255, 0.6);
     --side-panel-width: 380px;
 
     font:
@@ -104,6 +105,17 @@ body,
 .map-pin--goal {
     background: var(--pin-goal);
     border-top-color: var(--pin-goal);
+}
+
+/* 경로 선 안 진행 방향 화살표. 오른쪽을 가리키게 그리고 --angle(MapView 가 정함)만큼 돌린다. */
+.route-arrow {
+    width: 9px;
+    height: 8px;
+    background: var(--route-arrow);
+    /* 앞 끝, 뒤 아래, 뒤쪽 홈, 뒤 위 */
+    clip-path: polygon(100% 50%, 0 100%, 28% 50%, 0 0);
+    transform: rotate(var(--angle));
+    pointer-events: none;
 }
 
 .my-location-dot {
