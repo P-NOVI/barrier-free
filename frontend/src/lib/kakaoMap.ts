@@ -5,6 +5,9 @@ const SDK_URL = 'https://dapi.kakao.com/v2/maps/sdk.js';
 
 export type LngLat = [lng: number, lat: number];
 
+// 지도 첫 화면 중심이자 검색 기준 좌표가 없을 때 쓰는 곳
+export const SEOUL_CITY_HALL: LngLat = [126.9779, 37.5663];
+
 let loading: Promise<typeof kakao.maps> | null = null;
 
 export function sdkUrl(appKey: string): string {

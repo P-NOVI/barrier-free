@@ -3,11 +3,11 @@ import { useEffect, useRef, useState } from 'react';
 import {
     type LngLat,
     loadKakaoMaps,
+    SEOUL_CITY_HALL,
     toLatLng,
     toLngLat,
 } from '../lib/kakaoMap';
 
-const SEOUL_CITY_HALL: LngLat = [126.9779, 37.5663];
 // 카카오맵 확대 수준. 숫자가 작을수록 확대 (1~14)
 const DEFAULT_LEVEL = 4;
 
@@ -24,8 +24,8 @@ const GAP_LINE: Omit<kakao.maps.PolylineOptions, 'path'> = {
     strokeOpacity: 0.8,
     strokeStyle: 'shortdash',
 };
-// 경로 전체가 보이게 맞출 때 지도 가장자리 여백(px). 아래는 경로 패널 높이만큼 더 둔다.
-const FIT_PADDING = { top: 48, side: 32, bottom: 240 };
+// 경로 전체가 보이게 맞출 때 지도 가장자리 여백(px). 위는 검색창, 아래는 경로 패널 높이만큼 더 둔다.
+const FIT_PADDING = { top: 160, side: 32, bottom: 240 };
 
 type MapViewProps = {
     center?: LngLat;
