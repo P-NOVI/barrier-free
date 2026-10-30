@@ -51,6 +51,12 @@ const ACCURACY_CIRCLE: Omit<kakao.maps.CircleOptions, 'center' | 'radius'> = {
 const ROUTE_ARROW_Z_INDEX = 0;
 const MY_LOCATION_Z_INDEX = 1;
 const PIN_Z_INDEX = 2;
+// 출발·도착 핀: 둥근 머리와 가운데 흰 원, 아래 뾰족한 끝이 지점을 가리킨다. 색은 CSS 가 정한다.
+const PIN_SVG =
+    '<svg viewBox="0 0 24 35" aria-hidden="true">' +
+    '<path d="M12 35 1.76 18.26A12 12 0 1 1 22.24 18.26Z"/>' +
+    '<circle class="map-pin__hole" cx="12" cy="12" r="5.6"/>' +
+    '</svg>';
 /** 경로 전체가 보이게 맞출 때 지도 가장자리 여백(px) */
 export type FitPadding = {
     top: number;
@@ -116,7 +122,9 @@ function usePin(
         }
         const content = document.createElement('div');
         content.className = `map-pin map-pin--${modifier}`;
-        content.textContent = label;
+        content.setAttribute('role', 'img');
+        content.setAttribute('aria-label', label);
+        content.innerHTML = PIN_SVG;
         const overlay = new kakao.maps.CustomOverlay({
             position: toLatLng(position),
             content,
