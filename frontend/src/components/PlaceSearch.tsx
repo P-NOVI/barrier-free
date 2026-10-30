@@ -146,8 +146,8 @@ function PlaceField({
     );
 }
 
-function fieldKey(endpoint: Endpoint | null): string {
-    return endpoint ? `${endpoint.label}@${endpoint.position}` : 'empty';
+function fieldKey(role: EndpointRole, endpoint: Endpoint | null): string {
+    return endpoint ? `${role}:${endpoint.label}@${endpoint.position}` : role;
 }
 
 export default function PlaceSearch({
@@ -179,7 +179,7 @@ export default function PlaceSearch({
     return (
         <section className="place-search" aria-label="출발지·도착지 검색">
             <PlaceField
-                key={fieldKey(endpoints.start)}
+                key={fieldKey('start', endpoints.start)}
                 role="start"
                 endpoint={endpoints.start}
                 near={near}
@@ -203,7 +203,7 @@ export default function PlaceSearch({
                 </p>
             )}
             <PlaceField
-                key={fieldKey(endpoints.goal)}
+                key={fieldKey('goal', endpoints.goal)}
                 role="goal"
                 endpoint={endpoints.goal}
                 near={near}
