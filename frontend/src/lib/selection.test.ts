@@ -5,6 +5,7 @@ import {
     type Endpoint,
     MAP_CLICK_LABEL,
     NO_ENDPOINTS,
+    renameEndpoint,
     selectEndpoint,
 } from './selection';
 
@@ -46,5 +47,26 @@ describe('selectEndpoint', () => {
             start: clicked(C),
             goal: null,
         });
+    });
+});
+
+describe('renameEndpoint', () => {
+    it('같은 클릭으로 고른 출발·도착만 이름을 바꾼다', () => {
+        const current = { start: clicked(A), goal: clicked(B) };
+
+        expect(
+            renameEndpoint(current, current.goal.position, '덕수궁'),
+        ).toEqual({
+            start: clicked(A),
+            goal: { position: B, label: '덕수궁' },
+        });
+    });
+
+    it('값이 같아도 다른 클릭이면 바꾸지 않는다', () => {
+        const current = { start: clicked(A), goal: null };
+
+        expect(renameEndpoint(current, [...A] as LngLat, '서울역')).toBe(
+            current,
+        );
     });
 });
