@@ -24,7 +24,7 @@ CITY_HALL = {
 }
 
 
-def respond_with(*documents: dict[str, str]) -> Handler:
+def respond_with(*documents: dict[str, object]) -> Handler:
     return lambda _: httpx.Response(200, json={"documents": list(documents)})
 
 
@@ -161,6 +161,82 @@ def test_invalid_query_is_rejected(kakao, params: dict[str, str | int]) -> None:
     received = kakao(respond_with())
 
     response = client.get("/api/places/search", params=params)
+
+    assert response.status_code == 422
+    assert received == []
+
+
+SEOUL_STATION = {
+    "road_address": {
+        "address_name": "서울특별시 중구 한강대로 405",
+        "building_name": "경부고속철도서울민자역사",
+    },
+    "address": {"address_name": "서울 중구 봉래동2가 122-11"},
+}
+
+
+def test_address_of_coordinate(kakao) -> None:
+    received = kakao(respond_with(SEOUL_STATION))
+
+    response = client.get(
+        "/api/places/address", params={"lng": 126.97068, "lat": 37.55463}
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "address": {
+            "building_name": "경부고속철도서울민자역사",
+            "road_address": "서울특별시 중구 한강대로 405",
+            "address": "서울 중구 봉래동2가 122-11",
+        }
+    }
+    request = received[0]
+    assert request.url.path == "/v2/local/geo/coord2address.json"
+    assert (request.url.params["x"], request.url.params["y"]) == (
+        "126.97068",
+        "37.55463",
+    )
+
+
+def test_address_without_road_address(kakao) -> None:
+    kakao(respond_with(SEOUL_STATION | {"road_address": None}))
+
+    address = client.get(
+        "/api/places/address", params={"lng": 126.97, "lat": 37.55}
+    ).json()["address"]
+
+    assert address["building_name"] == ""
+    assert address["road_address"] == ""
+    assert address["address"] == "서울 중구 봉래동2가 122-11"
+
+
+def test_coordinate_without_address_is_null(kakao) -> None:
+    kakao(respond_with())
+
+    response = client.get("/api/places/address", params={"lng": 126.5, "lat": 37.0})
+
+    assert response.status_code == 200
+    assert response.json() == {"address": None}
+
+
+def test_address_kakao_failure_is_bad_gateway(kakao) -> None:
+    kakao(time_out)
+
+    response = client.get("/api/places/address", params={"lng": 126.97, "lat": 37.55})
+
+    assert response.status_code == 502
+    assert response.json()["detail"]["reason"] == "search_failed"
+
+
+@pytest.mark.parametrize(
+    "params",
+    [{"lng": 126.97}, {"lng": 181, "lat": 37.55}, {"lng": 126.97, "lat": -91}],
+    ids=["no-lat", "lng-out-of-range", "lat-out-of-range"],
+)
+def test_invalid_coordinate_is_rejected(kakao, params: dict[str, float]) -> None:
+    received = kakao(respond_with())
+
+    response = client.get("/api/places/address", params=params)
 
     assert response.status_code == 422
     assert received == []

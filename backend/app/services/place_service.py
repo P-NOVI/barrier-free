@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
@@ -6,6 +7,7 @@ import httpx
 from app.config import Settings
 
 KEYWORD_SEARCH_PATH = "/v2/local/search/keyword.json"
+COORD_TO_ADDRESS_PATH = "/v2/local/geo/coord2address.json"
 # 카카오 키워드 검색이 한 번에 돌려주는 최대 개수
 MAX_PAGE_SIZE = 15
 
@@ -18,6 +20,13 @@ class Place:
     category: str
     position: tuple[float, float]
     distance_m: float | None
+
+
+@dataclass(frozen=True)
+class Address:
+    building_name: str
+    road_address: str
+    address: str
 
 
 class PlaceSearchError(Exception):
@@ -47,10 +56,34 @@ def search_places(
         # 정렬은 정확도순(카카오 기본값)으로 둔다. 거리순은 이름이 덜 맞는 가까운 곳을
         # 먼저 보여 준다. 좌표를 주면 근처 장소가 앞에 오고 distance 도 함께 온다.
         params |= {"x": near[0], "y": near[1]}
+    return request_documents(
+        client,
+        KEYWORD_SEARCH_PATH,
+        params,
+        lambda documents: [to_place(document) for document in documents],
+    )
+
+
+def find_address(client: httpx.Client, position: tuple[float, float]) -> Address | None:
+    """좌표의 주소. 바다처럼 주소가 없는 곳이면 None."""
+    return request_documents(
+        client,
+        COORD_TO_ADDRESS_PATH,
+        {"x": position[0], "y": position[1]},
+        lambda documents: to_address(documents[0]) if documents else None,
+    )
+
+
+def request_documents[T](
+    client: httpx.Client,
+    path: str,
+    params: dict[str, str | int | float],
+    parse: Callable[[list[dict[str, Any]]], T],
+) -> T:
     try:
-        response = client.get(KEYWORD_SEARCH_PATH, params=params)
+        response = client.get(path, params=params)
         response.raise_for_status()
-        return [to_place(document) for document in response.json()["documents"]]
+        return parse(response.json()["documents"])
     except (httpx.HTTPError, ValueError, KeyError, TypeError) as error:
         raise PlaceSearchError from error
 
@@ -65,4 +98,14 @@ def to_place(document: dict[str, Any]) -> Place:
         category=document.get("category_group_name") or "",
         position=(float(document["x"]), float(document["y"])),
         distance_m=float(distance) if distance else None,
+    )
+
+
+def to_address(document: dict[str, Any]) -> Address:
+    # 도로명 주소가 없는 땅이면 road_address 는 null 로 온다.
+    road = document.get("road_address") or {}
+    return Address(
+        building_name=road.get("building_name") or "",
+        road_address=road.get("address_name") or "",
+        address=document["address"]["address_name"],
     )
