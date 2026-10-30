@@ -27,7 +27,8 @@ type PlaceSearchProps = {
 type LocateState =
     | { status: 'idle' }
     | { status: 'locating' }
-    | { status: 'error'; message: string };
+    // 출발지가 다른 방법으로 바뀌면 오류 안내를 감추려고 그때의 출발지를 같이 둔다.
+    | { status: 'error'; message: string; start: Endpoint | null };
 
 function SearchResults({
     listId,
@@ -172,6 +173,7 @@ export default function PlaceSearch({
                     status: 'error',
                     message:
                         error instanceof Error ? error.message : String(error),
+                    start: endpoints.start,
                 }),
             );
     };
@@ -197,7 +199,7 @@ export default function PlaceSearch({
                     </button>
                 }
             />
-            {locate.status === 'error' && (
+            {locate.status === 'error' && locate.start === endpoints.start && (
                 <p role="alert" className="place-search__error">
                     {locate.message}
                 </p>
