@@ -24,14 +24,18 @@ const GAP_LINE: Omit<kakao.maps.PolylineOptions, 'path'> = {
     strokeOpacity: 0.8,
     strokeStyle: 'shortdash',
 };
-// 경로 전체가 보이게 맞출 때 지도 가장자리 여백(px). 위는 검색창, 아래는 경로 패널 높이만큼 더 둔다.
-const FIT_PADDING = { top: 160, side: 32, bottom: 240 };
+/** 경로 전체가 보이게 맞출 때 지도 가장자리 여백(px) */
+export type FitPadding = { top: number; side: number; bottom: number };
+
+const DEFAULT_FIT_PADDING: FitPadding = { top: 48, side: 48, bottom: 48 };
 
 type MapViewProps = {
     center?: LngLat;
     start?: LngLat | null;
     goal?: LngLat | null;
     path?: LngLat[] | null;
+    /** 지도 위에 패널이 떠 있으면 그만큼 여백을 더 준다. 바뀌면 경로에 다시 맞춘다. */
+    fitPadding?: FitPadding;
     onMapClick?: (position: LngLat) => void;
     /** 지도 이동·확대가 끝날 때마다 화면 중심을 알린다. */
     onCenterChange?: (center: LngLat) => void;
@@ -83,6 +87,7 @@ function useRouteLine(
     path: LngLat[] | null | undefined,
     start: LngLat | null | undefined,
     goal: LngLat | null | undefined,
+    padding: FitPadding,
 ) {
     useEffect(() => {
         if (!map || !path || path.length < 2) {
@@ -113,13 +118,13 @@ function useRouteLine(
         );
         map.setBounds(
             bounds,
-            FIT_PADDING.top,
-            FIT_PADDING.side,
-            FIT_PADDING.bottom,
-            FIT_PADDING.side,
+            padding.top,
+            padding.side,
+            padding.bottom,
+            padding.side,
         );
         return () => lines.forEach((line) => line.setMap(null));
-    }, [map, path, start, goal]);
+    }, [map, path, start, goal, padding]);
 }
 
 export default function MapView({
@@ -127,6 +132,7 @@ export default function MapView({
     start,
     goal,
     path,
+    fitPadding = DEFAULT_FIT_PADDING,
     onMapClick,
     onCenterChange,
 }: MapViewProps) {
@@ -186,7 +192,18 @@ export default function MapView({
 
     useMapEvent(map, 'click', handleClick);
     useMapEvent(map, 'idle', handleIdle);
-    useRouteLine(map, path, start, goal);
+    useEffect(() => {
+        const container = containerRef.current;
+        if (!map || !container) {
+            return;
+        }
+        // 화면 배치가 바뀌어 지도 크기가 달라지면 카카오맵에 알려야 지도가 빈칸 없이 그려진다.
+        const observer = new ResizeObserver(() => map.relayout());
+        observer.observe(container);
+        return () => observer.disconnect();
+    }, [map]);
+
+    useRouteLine(map, path, start, goal, fitPadding);
     usePin(map, start, '출발', 'start');
     usePin(map, goal, '도착', 'goal');
 

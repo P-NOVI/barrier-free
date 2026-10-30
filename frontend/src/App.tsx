@@ -1,19 +1,31 @@
 import { useCallback, useState } from 'react';
 
-import MapView from './components/MapView';
+import MapView, { type FitPadding } from './components/MapView';
 import PlaceSearch from './components/PlaceSearch';
 import RoutePanel from './components/RoutePanel';
+import { useMediaQuery } from './hooks/useMediaQuery';
 import { useRoute } from './hooks/useRoute';
 import { type LngLat, SEOUL_CITY_HALL } from './lib/kakaoMap';
+import { addressLabel, findAddress } from './lib/placeApi';
 import { DEFAULT_PRESET, type PresetId } from './lib/presets';
 import {
     type Endpoint,
     type EndpointRole,
     NO_ENDPOINTS,
+    renameEndpoint,
     selectEndpoint,
 } from './lib/selection';
 
+// 이보다 넓으면 왼쪽 패널 + 오른쪽 지도, 좁으면 지도 위에 패널을 띄운다. index.css 와 같은 값.
+const WIDE_LAYOUT = '(min-width: 768px)';
+const FIT_PADDING: Record<'wide' | 'narrow', FitPadding> = {
+    wide: { top: 48, side: 48, bottom: 48 },
+    // 위는 검색창, 아래는 경로 패널 높이만큼 더 둔다.
+    narrow: { top: 160, side: 32, bottom: 240 },
+};
+
 export default function App() {
+    const wide = useMediaQuery(WIDE_LAYOUT);
     const [preset, setPreset] = useState<PresetId>(DEFAULT_PRESET);
     const [endpoints, setEndpoints] = useState(NO_ENDPOINTS);
     // 검색이나 현재 위치로 마지막에 고른 곳. 지도를 그리로 옮긴다.
@@ -24,11 +36,23 @@ export default function App() {
     const goal = endpoints.goal?.position ?? null;
     const route = useRoute(start, goal, preset);
 
-    const handleMapClick = useCallback(
-        (position: LngLat) =>
-            setEndpoints((current) => selectEndpoint(current, position)),
-        [],
-    );
+    const handleMapClick = useCallback((position: LngLat) => {
+        setEndpoints((current) => selectEndpoint(current, position));
+        findAddress(position)
+            .then((address) => {
+                if (address) {
+                    setEndpoints((current) =>
+                        renameEndpoint(
+                            current,
+                            position,
+                            addressLabel(address),
+                        ),
+                    );
+                }
+            })
+            // 이름을 못 찾으면 "지도에서 고른 위치" 그대로 둔다.
+            .catch(() => undefined);
+    }, []);
 
     const handleSelect = useCallback(
         (role: EndpointRole, endpoint: Endpoint) => {
@@ -42,6 +66,23 @@ export default function App() {
 
     return (
         <div className="app">
+            <aside className="side-panel" aria-label="길찾기">
+                <header className="side-panel__header">
+                    <h1>베리어프리</h1>
+                </header>
+                <PlaceSearch
+                    endpoints={endpoints}
+                    near={mapCenter}
+                    onSelect={handleSelect}
+                />
+                <RoutePanel
+                    preset={preset}
+                    endpoints={endpoints}
+                    route={route}
+                    onPresetChange={setPreset}
+                    onReset={() => setEndpoints(NO_ENDPOINTS)}
+                />
+            </aside>
             <MapView
                 center={focus ?? undefined}
                 start={start}
@@ -49,20 +90,9 @@ export default function App() {
                 path={
                     route.status === 'success' ? route.route.coordinates : null
                 }
+                fitPadding={wide ? FIT_PADDING.wide : FIT_PADDING.narrow}
                 onMapClick={handleMapClick}
                 onCenterChange={setMapCenter}
-            />
-            <PlaceSearch
-                endpoints={endpoints}
-                near={mapCenter}
-                onSelect={handleSelect}
-            />
-            <RoutePanel
-                preset={preset}
-                endpoints={endpoints}
-                route={route}
-                onPresetChange={setPreset}
-                onReset={() => setEndpoints(NO_ENDPOINTS)}
             />
         </div>
     );

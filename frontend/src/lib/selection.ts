@@ -25,3 +25,18 @@ export function selectEndpoint(current: Endpoints, clicked: LngLat): Endpoints {
     }
     return { start: endpoint, goal: null };
 }
+
+/** 지도에서 고른 position 의 이름이 나중에 정해지면 그 출발·도착만 이름을 바꾼다. */
+export function renameEndpoint(
+    current: Endpoints,
+    position: LngLat,
+    label: string,
+): Endpoints {
+    // 이름을 찾는 사이 다른 곳을 골랐으면 그대로 둔다. 같은 클릭인지는 배열 자체로 구분한다.
+    const rename = (endpoint: Endpoint | null) =>
+        endpoint?.position === position ? { position, label } : endpoint;
+    const next = { start: rename(current.start), goal: rename(current.goal) };
+    return next.start === current.start && next.goal === current.goal
+        ? current
+        : next;
+}

@@ -1,6 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { type Place, searchPlaces } from './placeApi';
+import {
+    addressLabel,
+    findAddress,
+    type Place,
+    searchPlaces,
+} from './placeApi';
 
 const BASE_URL = 'http://api.test';
 const CITY_HALL: Place = {
@@ -75,5 +80,66 @@ describe('searchPlaces', () => {
             reason: 'search_unavailable',
             message: '장소 검색 키가 없습니다.',
         });
+    });
+});
+
+describe('findAddress', () => {
+    it('좌표를 lng·lat 으로 보내고 주소를 돌려준다', async () => {
+        const address = {
+            building_name: '서울특별시청',
+            road_address: '서울특별시 중구 세종대로 110',
+            address: '서울 중구 태평로1가 31',
+        };
+        const fetchMock = vi
+            .fn()
+            .mockResolvedValue(
+                new Response(JSON.stringify({ address }), { status: 200 }),
+            );
+        vi.stubGlobal('fetch', fetchMock);
+
+        await expect(
+            findAddress([126.9779, 37.5663], { baseUrl: BASE_URL }),
+        ).resolves.toEqual(address);
+
+        const url = new URL(String(fetchMock.mock.calls[0][0]));
+        expect(url.pathname).toBe('/api/places/address');
+        expect(url.searchParams.get('lng')).toBe('126.9779');
+        expect(url.searchParams.get('lat')).toBe('37.5663');
+    });
+
+    it('주소가 없는 곳이면 null', async () => {
+        vi.stubGlobal(
+            'fetch',
+            vi.fn().mockResolvedValue(
+                new Response(JSON.stringify({ address: null }), {
+                    status: 200,
+                }),
+            ),
+        );
+
+        await expect(
+            findAddress([126.5, 37.0], { baseUrl: BASE_URL }),
+        ).resolves.toBeNull();
+    });
+});
+
+describe('addressLabel', () => {
+    const ADDRESS = {
+        building_name: '한강대우아파트 105동',
+        road_address: '서울특별시 용산구 이촌로 181',
+        address: '서울 용산구 이촌동 415',
+    };
+
+    it('건물 이름을 먼저 쓴다', () => {
+        expect(addressLabel(ADDRESS)).toBe('한강대우아파트 105동');
+    });
+
+    it('건물 이름이 없으면 도로명, 그것도 없으면 지번 주소', () => {
+        expect(addressLabel({ ...ADDRESS, building_name: '' })).toBe(
+            '서울특별시 용산구 이촌로 181',
+        );
+        expect(
+            addressLabel({ ...ADDRESS, building_name: '', road_address: '' }),
+        ).toBe('서울 용산구 이촌동 415');
     });
 });
