@@ -4,6 +4,7 @@ from types import ModuleType
 
 import networkx as nx
 import pytest
+from shapely.geometry import LineString
 
 STEPS = Path(__file__).resolve().parents[1] / "steps"
 
@@ -90,6 +91,33 @@ def test_export_keeps_one_direction_per_segment() -> None:
         "walk_ok": True,
     }
     assert edges[1]["steps"] is True and edges[1]["wheelchair_ok"] is False
+
+
+def test_export_keeps_inner_points_from_u_to_v() -> None:
+    graph = nx.MultiDiGraph()
+    graph.add_node(1, x=126.99, y=37.534, elevation=30.0)
+    graph.add_node(2, x=126.991, y=37.535, elevation=32.0)
+    graph.add_node(3, x=126.992, y=37.535, elevation=33.0)
+    # 휘어진 길. 모양이 v 쪽부터 저장돼 있어도 u → v 순서로 바꾼다
+    curve = LineString(
+        [
+            (126.991, 37.535),
+            (126.9905, 37.53500004),
+            (126.99, 37.5345),
+            (126.99, 37.534),
+        ]
+    )
+    straight = LineString([(126.99, 37.534), (126.992, 37.535)])
+    graph.add_edge(1, 2, geometry=curve, **edge_data(1, 200.0, 0.01))
+    graph.add_edge(1, 3, geometry=straight, **edge_data(2, 200.0, 0.01))
+    graph.add_edge(2, 3, **edge_data(3, 90.0, 0.01))
+
+    edges = export_graph.export_graph(graph)["edges"]
+
+    assert edges[0]["geometry"] == [[126.99, 37.5345], [126.9905, 37.535]]
+    # 중간 지점이 없거나 모양 정보가 없는 구간에는 geometry 가 없다
+    assert "geometry" not in edges[1]
+    assert "geometry" not in edges[2]
 
 
 def test_export_matches_backend_graph_format() -> None:
