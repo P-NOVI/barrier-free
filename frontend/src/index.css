@@ -106,6 +106,18 @@ body,
     border-top-color: var(--pin-goal);
 }
 
+/* 경로 선 안 진행 방향 화살표(›). --angle 은 MapView 가 정한다. */
+.route-arrow {
+    box-sizing: border-box;
+    width: 7px;
+    height: 7px;
+    border-top: 2px solid #fff;
+    border-right: 2px solid #fff;
+    /* 꺾쇠 끝이 화살표 자리 가운데에 오게 조금 뒤로 민다. */
+    transform: rotate(var(--angle)) translateX(-1px) rotate(45deg);
+    pointer-events: none;
+}
+
 .my-location-dot {
     box-sizing: border-box;
     width: 18px;
