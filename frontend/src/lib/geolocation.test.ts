@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-import { getCurrentPosition } from './geolocation';
+import { getCurrentPosition, watchLocation } from './geolocation';
 
 type Outcome =
     { lng: number; lat: number; accuracy: number } | { code: number };
@@ -84,5 +84,78 @@ describe('getCurrentPosition', () => {
 
     it('위치 기능이 없는 브라우저를 알린다', async () => {
         await expect(getCurrentPosition(undefined)).rejects.toThrow('지원');
+    });
+});
+
+describe('watchLocation', () => {
+    /** watchPosition 을 부르면 outcomes 를 차례로 알리는 가짜 Geolocation */
+    function watchingGeolocation(...outcomes: Outcome[]) {
+        const clearWatch = vi.fn();
+        const watchPosition = vi.fn<Geolocation['watchPosition']>(
+            (success, failure) => {
+                for (const outcome of outcomes) {
+                    if ('lng' in outcome) {
+                        success({
+                            coords: {
+                                longitude: outcome.lng,
+                                latitude: outcome.lat,
+                                accuracy: outcome.accuracy,
+                            },
+                        } as GeolocationPosition);
+                    } else {
+                        failure?.(outcome as GeolocationPositionError);
+                    }
+                }
+                return 7;
+            },
+        );
+        return {
+            geolocation: {
+                watchPosition,
+                clearWatch,
+            } as unknown as Geolocation,
+            watchPosition,
+            clearWatch,
+        };
+    }
+
+    it('위치가 올 때마다 알리고, 멈추면 그 감시를 끝낸다', () => {
+        const { geolocation, watchPosition, clearWatch } = watchingGeolocation(
+            { lng: 126.97, lat: 37.56, accuracy: 8 },
+            TIMEOUT,
+            { lng: 126.971, lat: 37.561, accuracy: 6 },
+        );
+        const onFix = vi.fn();
+        const onError = vi.fn();
+
+        const stop = watchLocation(onFix, onError, geolocation);
+        stop();
+
+        expect(onFix.mock.calls).toEqual([
+            [{ position: [126.97, 37.56], accuracy: 8 }],
+            [{ position: [126.971, 37.561], accuracy: 6 }],
+        ]);
+        expect(onError).toHaveBeenCalledTimes(1);
+        expect(watchPosition.mock.calls[0][2]).toMatchObject({
+            enableHighAccuracy: true,
+        });
+        expect(clearWatch).toHaveBeenCalledWith(7);
+    });
+
+    it('권한이 없으면 권한 안내를 알린다', () => {
+        const { geolocation } = watchingGeolocation(DENIED);
+        const onError = vi.fn();
+
+        watchLocation(vi.fn(), onError, geolocation);
+
+        expect(onError.mock.calls[0][0].message).toContain('위치 권한');
+    });
+
+    it('위치 기능이 없는 브라우저를 알린다', () => {
+        const onError = vi.fn();
+
+        watchLocation(vi.fn(), onError, undefined)();
+
+        expect(onError.mock.calls[0][0].message).toContain('지원');
     });
 });
