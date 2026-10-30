@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
 from app.repositories.road_repository import load_graph
-from app.routers import routes
+from app.routers import places, routes
 
 
 @asynccontextmanager
@@ -26,6 +26,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.include_router(routes.router, prefix="/api")
+app.include_router(places.router, prefix="/api")
 
 
 @app.get("/health")
