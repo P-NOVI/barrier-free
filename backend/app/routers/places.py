@@ -74,13 +74,7 @@ def get_address(
     lat: Annotated[float, Query(ge=-90, le=90)],
 ) -> AddressLookupResponse:
     try:
-        address = find_address(
-            client,
-            (lng, lat),
-            settings.landmark_radius_m,
-            settings.landmark_on_spot_m,
-            settings.place_on_spot_m,
-        )
+        address = find_address(client, (lng, lat), settings)
     except PlaceSearchError as error:
         raise kakao_failed(
             "주소를 찾지 못했습니다. 잠시 뒤 다시 시도하세요."

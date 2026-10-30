@@ -184,19 +184,13 @@ BUILDING_LOT = AHYEON_LOT | {
 }
 
 
-def place(name: str, distance: int, category: str, group: str = "") -> dict[str, str]:
-    return {
-        "place_name": name,
-        "distance": str(distance),
-        "category_name": category,
-        "category_group_code": group,
-    }
+def place(name: str, distance: int, category: str) -> dict[str, str]:
+    return {"place_name": name, "distance": str(distance), "category_name": category}
 
 
 PARK = "여행 > 공원"
 APARTMENT = "부동산 > 주거시설 > 아파트 > 아파트 동"
 CAFE = "음식점 > 카페"
-WHOLESALE = "서비스,산업 > 식품 > 음료,주류제조 > 주류도매,주류유통"
 
 
 def kakao_local(lot: dict[str, object] | None, *nearby: dict[str, str]) -> Handler:
@@ -233,17 +227,25 @@ def test_address_fields(kakao) -> None:
     assert len(received) == 1
 
 
-def test_nearby_search_request(kakao) -> None:
+def test_nearby_search_requests(kakao) -> None:
     received = kakao(kakao_local(AHYEON_LOT))
 
     address_of({"lng": 126.9584, "lat": 37.5549})
 
-    coord, nearby = received
+    coord, on_spot, landmarks = received
     assert coord.url.path == "/v2/local/geo/coord2address.json"
     assert (coord.url.params["x"], coord.url.params["y"]) == ("126.9584", "37.5549")
-    assert nearby.url.params["query"] == "아현동"
-    assert nearby.url.params["radius"] == "60"
-    assert nearby.url.params["sort"] == "distance"
+    for nearby in (on_spot, landmarks):
+        assert nearby.url.params["query"] == "아현동"
+    params = [(n.url.params["radius"], n.url.params["sort"]) for n in received[1:]]
+    assert params == [("20", "accuracy"), ("60", "distance")]
+
+
+def test_place_on_spot_skips_landmark_search(kakao) -> None:
+    received = kakao(kakao_local(AHYEON_LOT, place("낫배드커피 한남", 3, CAFE)))
+
+    assert address_of()["name"] == "낫배드커피 한남"
+    assert len(received) == 2
 
 
 @pytest.mark.parametrize(
@@ -263,34 +265,26 @@ def test_nearby_search_request(kakao) -> None:
         ),
         pytest.param(
             AHYEON_LOT,
-            [
-                place("애오개어린이공원", 15, PARK),
-                place("낫배드커피 한남", 8, CAFE, "CE7"),
-            ],
+            [place("애오개어린이공원", 15, PARK), place("낫배드커피 한남", 8, CAFE)],
             "낫배드커피 한남",
-            id="shop-on-spot",
+            id="nearest-place-on-spot",
         ),
         pytest.param(
             AHYEON_LOT,
-            [
-                place("뉴욕브라우니코리아", 0, WHOLESALE),
-                place("낫배드커피 한남", 0, CAFE, "CE7"),
-            ],
+            # 카카오 정확도순: 지도에 이름이 보이는 곳이 앞에 온다.
+            [place("낫배드커피 한남", 3, CAFE), place("꼴라보하우스 한남", 2, CAFE)],
             "낫배드커피 한남",
-            id="shop-beats-office-at-same-spot",
+            id="first-place-in-same-building",
         ),
         pytest.param(
             AHYEON_LOT,
-            [place("동서재 닭강정", 25, CAFE, "CE7")],
+            [place("동서재 닭강정", 25, CAFE)],
             "아현동 372-2",
             id="far-shops-are-not-landmarks",
         ),
         pytest.param(
             AHYEON_LOT,
-            [
-                place("동서재 닭강정", 25, CAFE, "CE7"),
-                place("애오개어린이공원", 27, PARK),
-            ],
+            [place("동서재 닭강정", 25, CAFE), place("애오개어린이공원", 27, PARK)],
             "애오개어린이공원",
             id="landmark-beats-far-shop",
         ),

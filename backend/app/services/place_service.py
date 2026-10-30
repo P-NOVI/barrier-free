@@ -1,6 +1,6 @@
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal
 
 import httpx
 
@@ -60,8 +60,6 @@ class Lot:
 class NearbyPlace:
     name: str
     category: str
-    # 카카오 대표 분류(카페·음식점·편의점 등)가 있는 장소. 같은 거리면 이쪽을 쓴다.
-    has_group: bool
     distance_m: float
 
     @property
@@ -105,11 +103,7 @@ def search_places(
 
 
 def find_address(
-    client: httpx.Client,
-    position: tuple[float, float],
-    landmark_radius_m: int,
-    landmark_on_spot_m: float,
-    place_on_spot_m: float,
+    client: httpx.Client, position: tuple[float, float], settings: Settings
 ) -> Address | None:
     """좌표의 주소와 화면에 보일 이름. 바다처럼 주소가 없는 곳이면 None."""
     lot = request_documents(
@@ -120,25 +114,69 @@ def find_address(
     )
     if lot is None:
         return None
-    # 건물 이름이 있으면 그 이름을 쓰므로 근처를 찾지 않는다.
-    nearby = (
-        []
-        if lot.building_name
-        else nearby_places(client, position, lot.dong, landmark_radius_m)
-    )
     return Address(
-        name=location_name(lot, nearby, place_on_spot_m, landmark_on_spot_m),
+        name=location_name(client, position, lot, settings),
         building_name=lot.building_name,
         road_address=lot.road_address,
         address=lot.address,
     )
 
 
+def location_name(
+    client: httpx.Client, position: tuple[float, float], lot: Lot, settings: Settings
+) -> str:
+    """건물 이름 → 바로 앞 장소 → 랜드마크 (멀면 'OO 부근') → 짧은 지번 주소"""
+    # 건물 안 매장·창구도 근처 장소로 잡히므로 건물 이름을 먼저 쓰고 근처는 찾지 않는다.
+    if lot.building_name:
+        return lot.building_name
+    # 바로 앞은 정확도순으로 찾는다.
+    # 한 건물에 여럿이면 지도에 이름이 보이는 곳이 앞에 온다.
+    on_spot = nearby_places(
+        client, position, lot.dong, settings.place_on_spot_m, "accuracy"
+    )
+    spot = place_on_spot(on_spot, settings.place_on_spot_m, settings.same_spot_m)
+    if spot:
+        return spot.name
+    landmark = min(
+        (
+            place
+            for place in nearby_places(
+                client, position, lot.dong, settings.landmark_radius_m, "distance"
+            )
+            if place.is_landmark
+        ),
+        key=lambda place: place.distance_m,
+        default=None,
+    )
+    if landmark:
+        near = landmark.distance_m > settings.landmark_on_spot_m
+        return f"{landmark.name} 부근" if near else landmark.name
+    return lot.short_address
+
+
+def place_on_spot(
+    places: list[NearbyPlace], on_spot_m: float, same_spot_m: float
+) -> NearbyPlace | None:
+    """바로 앞(on_spot_m 안) 장소.
+
+    가장 가까운 곳과 same_spot_m 안에 있는 장소 중 places 순서로 첫 장소
+    """
+    close = [place for place in places if place.distance_m <= on_spot_m]
+    if not close:
+        return None
+    nearest = min(place.distance_m for place in close)
+    return next(place for place in close if place.distance_m <= nearest + same_spot_m)
+
+
 def nearby_places(
-    client: httpx.Client, position: tuple[float, float], dong: str, radius_m: int
+    client: httpx.Client,
+    position: tuple[float, float],
+    dong: str,
+    radius_m: int,
+    sort: Literal["accuracy", "distance"],
 ) -> list[NearbyPlace]:
     # 키워드 검색은 검색어가 필요하다. 동 이름으로 찾으면 주소가 그 동인 근처 장소가
-    # 분류와 상관없이 거리순으로 온다.
+    # 분류와 상관없이 온다.
     if not dong:
         return []
     return request_documents(
@@ -149,46 +187,18 @@ def nearby_places(
             "x": position[0],
             "y": position[1],
             "radius": radius_m,
-            "sort": "distance",
+            "sort": sort,
             "size": MAX_PAGE_SIZE,
         },
         lambda documents: [
             NearbyPlace(
                 name=document["place_name"],
                 category=document.get("category_name") or "",
-                has_group=bool(document.get("category_group_code")),
                 distance_m=float(document["distance"]),
             )
             for document in documents
         ],
     )
-
-
-def location_name(
-    lot: Lot,
-    nearby: list[NearbyPlace],
-    place_on_spot_m: float,
-    landmark_on_spot_m: float,
-) -> str:
-    """건물 이름 → 바로 앞 장소 → 랜드마크 (멀면 'OO 부근') → 짧은 지번 주소"""
-    # 건물 안 매장·창구도 근처 장소로 잡히므로 건물 이름을 먼저 쓴다.
-    if lot.building_name:
-        return lot.building_name
-    on_spot = [place for place in nearby if place.distance_m <= place_on_spot_m]
-    if on_spot:
-        # 한 건물에 여럿이면 가게(대표 분류 있음)를 도매·사무실보다 먼저 쓴다.
-        return min(
-            on_spot, key=lambda place: (place.distance_m, not place.has_group)
-        ).name
-    landmark = min(
-        (place for place in nearby if place.is_landmark),
-        key=lambda place: place.distance_m,
-        default=None,
-    )
-    if landmark:
-        near = landmark.distance_m > landmark_on_spot_m
-        return f"{landmark.name} 부근" if near else landmark.name
-    return lot.short_address
 
 
 def request_documents[T](
