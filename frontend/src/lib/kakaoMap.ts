@@ -52,3 +52,25 @@ export function toLatLng([lng, lat]: LngLat): kakao.maps.LatLng {
 export function toLngLat(latLng: kakao.maps.LatLng): LngLat {
     return [latLng.getLng(), latLng.getLat()];
 }
+
+type Box = { left: number; top: number; right: number; bottom: number };
+
+/**
+ * box(지도 화면 기준 px)가 inset 안쪽에 들어오도록 지도를 얼마나 옮길지 (panBy 인자).
+ * 위·왼쪽을 우선하고, 이미 들어와 있으면 0 이다.
+ */
+export function panToFit(
+    box: Box,
+    view: { width: number; height: number },
+    inset: Box,
+): [dx: number, dy: number] {
+    const dx =
+        box.left < inset.left
+            ? box.left - inset.left
+            : Math.max(0, box.right - (view.width - inset.right));
+    const dy =
+        box.top < inset.top
+            ? box.top - inset.top
+            : Math.max(0, box.bottom - (view.height - inset.bottom));
+    return [dx, dy];
+}
