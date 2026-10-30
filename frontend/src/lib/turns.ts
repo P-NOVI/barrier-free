@@ -12,14 +12,24 @@ import {
 const SIMPLIFY_M = 4;
 // 같은 쪽으로 이 거리(m) 안에서 이어 꺾이면 휘어진 길 하나로 보고 각도를 합친다.
 const MERGE_M = 20;
-// 꺾이는 각도(도) 기준: 이보다 덜 꺾이면 안내하지 않는다.
-export const SLIGHT_TURN_DEG = 30;
-// 이 이상이면 '왼쪽·오른쪽', 그 아래는 '약간 왼쪽·오른쪽'
+// 반대쪽으로 이 거리(m) 안에서 되꺾이면(인도 비켜 가기, 좁은 길 건너기) 합친다.
+// 보통 각도가 거의 0 이 되어 안내하지 않는다.
+const JOG_M = 12;
+// 꺾이는 각도(도) 기준. 이보다 덜 꺾이면 안내하지 않는다.
+// 휘어진 골목을 따라가는 정도는 안내하지 않게 넉넉히 둔다.
+export const SLIGHT_TURN_DEG = 40;
 export const TURN_DEG = 60;
-export const UTURN_DEG = 150;
+export const SHARP_TURN_DEG = 120;
+export const UTURN_DEG = 170;
 
 export type TurnDirection =
-    'left' | 'right' | 'slight_left' | 'slight_right' | 'uturn';
+    | 'left'
+    | 'right'
+    | 'slight_left'
+    | 'slight_right'
+    | 'sharp_left'
+    | 'sharp_right'
+    | 'uturn';
 
 export type Turn = {
     /** 출발점부터 꺾이는 지점까지 경로를 따라 간 거리(m) */
@@ -42,6 +52,8 @@ export const DIRECTION_LABELS: Record<TurnDirection, string> = {
     right: '오른쪽',
     slight_left: '약간 왼쪽',
     slight_right: '약간 오른쪽',
+    sharp_left: '크게 왼쪽',
+    sharp_right: '크게 오른쪽',
     uturn: '유턴',
 };
 
@@ -89,6 +101,9 @@ function classify(angle: number): TurnDirection | null {
     if (size >= UTURN_DEG) {
         return 'uturn';
     }
+    if (size >= SHARP_TURN_DEG) {
+        return angle > 0 ? 'sharp_right' : 'sharp_left';
+    }
     if (size >= TURN_DEG) {
         return angle > 0 ? 'right' : 'left';
     }
@@ -123,12 +138,10 @@ export function findTurns(route: RouteLine): Turn[] {
                 heading(points[before], points[at]),
         );
         const last = corners[corners.length - 1];
-        const merge =
-            last &&
-            Math.sign(last.angle) === Math.sign(angle) &&
-            distances[at] - distances[last.index] < MERGE_M;
-        if (merge) {
-            // 휘어진 길은 꺾이기 시작하는 곳을 안내 지점으로 둔다.
+        const gap = last ? distances[at] - distances[last.index] : Infinity;
+        const sameSide = last && Math.sign(last.angle) === Math.sign(angle);
+        if (gap < (sameSide ? MERGE_M : JOG_M)) {
+            // 합친 곳은 꺾이기 시작하는 곳을 안내 지점으로 둔다.
             last.angle += angle;
         } else {
             corners.push({ index: at, angle });

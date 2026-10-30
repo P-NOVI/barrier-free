@@ -22,6 +22,8 @@ const NOW_TEXTS: Record<TurnDirection, string> = {
     right: '오른쪽으로 가세요.',
     slight_left: '약간 왼쪽으로 가세요.',
     slight_right: '약간 오른쪽으로 가세요.',
+    sharp_left: '크게 왼쪽으로 가세요.',
+    sharp_right: '크게 오른쪽으로 가세요.',
     uturn: '되돌아가세요.',
 };
 

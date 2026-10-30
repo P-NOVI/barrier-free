@@ -41,14 +41,15 @@ describe('findTurns', () => {
         ).toEqual([{ direction: 'left', atM: 100, angle: -90 }]);
     });
 
-    it('조금 꺾이면 약간, 거의 되돌아가면 유턴', () => {
-        const slight = findTurns(route([0, 0], [0, 100], [64, 177]));
-        const uturn = findTurns(route([0, 0], [0, 100], [5, 0]));
+    it.each([
+        ['30° 는 안내하지 않는다', [58, 200], []],
+        ['50° 는 약간', [77, 164], ['slight_right']],
+        ['125° 는 크게', [100, 30], ['sharp_right']],
+        ['177° 는 유턴', [5, 0], ['uturn']],
+    ] as const)('%s', (_, end, expected) => {
+        const turns = findTurns(route([0, 0], [0, 100], [end[0], end[1]]));
 
-        expect(slight.map(({ direction }) => direction)).toEqual([
-            'slight_right',
-        ]);
-        expect(uturn.map(({ direction }) => direction)).toEqual(['uturn']);
+        expect(turns.map(({ direction }) => direction)).toEqual(expected);
     });
 
     it('길 모양이 조금 흔들리는 곧은 길은 안내하지 않는다', () => {
@@ -77,12 +78,18 @@ describe('findTurns', () => {
         expect(turns[0].atM).toBeLessThan(75);
     });
 
-    it('반대쪽으로 바로 이어 꺾이면(길 건너기) 따로 안내한다', () => {
-        const jog = findTurns(route([0, 0], [0, 50], [10, 50], [10, 100]));
+    it('반대쪽으로 바로 되꺾이면(인도 비켜 가기) 안내하지 않는다', () => {
+        expect(findTurns(route([0, 0], [0, 50], [10, 50], [10, 100]))).toEqual(
+            [],
+        );
+    });
 
-        expect(summary(jog)).toEqual([
+    it('반대쪽으로 꺾는 사이가 멀면 따로 안내한다', () => {
+        const zigzag = findTurns(route([0, 0], [0, 50], [30, 50], [30, 100]));
+
+        expect(summary(zigzag)).toEqual([
             { direction: 'right', atM: 50, angle: 90 },
-            { direction: 'left', atM: 60, angle: -90 },
+            { direction: 'left', atM: 80, angle: -90 },
         ]);
     });
 
