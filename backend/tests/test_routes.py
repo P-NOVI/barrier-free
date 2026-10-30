@@ -125,6 +125,52 @@ def test_no_path_for_wheelchair_over_stairs_only() -> None:
     assert response.json()["detail"]["reason"] == "no_path"
 
 
+def test_route_follows_road_shape() -> None:
+    # 두 노드 사이 길에 중간 지점이 둘 있고, 모양은 1 → 0 순서로 저장돼 있다.
+    graph = build_graph(
+        {
+            "nodes": [
+                {"lon": 126.990, "lat": 37.534, "elevation": 30.0},
+                {"lon": 126.993, "lat": 37.534, "elevation": 33.0},
+            ],
+            "edges": [
+                {
+                    "id": 0,
+                    "u": 1,
+                    "v": 0,
+                    "length": 300.0,
+                    "grade": -0.01,
+                    "steps": False,
+                    "wheelchair_ok": True,
+                    "walk_ok": True,
+                    "geometry": [[126.992, 37.534], [126.991, 37.534]],
+                }
+            ],
+        }
+    )
+    app.dependency_overrides[get_graph] = lambda: graph
+    try:
+        response = client.post(
+            "/api/route",
+            json={"start": coordinate(graph, 0), "goal": coordinate(graph, 1)},
+        )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["coordinates"] == [
+        [126.990, 37.534],
+        [126.991, 37.534],
+        [126.992, 37.534],
+        [126.993, 37.534],
+    ]
+    # 중간 지점의 고도·거리는 양 끝 값을 지나온 비율로 나눈다
+    assert body["elevations"] == pytest.approx([30.0, 31.0, 32.0, 33.0])
+    assert body["distances_m"] == pytest.approx([0.0, 100.0, 200.0, 300.0])
+    assert body["distance_m"] == 300.0
+
+
 def test_missing_graph_file(tmp_path: Path) -> None:
     missing = Settings(graph_path=tmp_path / "graph.json.gz")
     app.dependency_overrides[get_settings] = lambda: missing

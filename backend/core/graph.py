@@ -14,7 +14,10 @@ class Node:
 
 @dataclass(frozen=True, slots=True)
 class Arc:
-    """도로 구간을 한 방향으로 지나가는 단위. 반대 방향은 grade 부호만 다르다."""
+    """도로 구간을 한 방향으로 지나가는 단위.
+
+    반대 방향은 grade 부호와 geometry 순서만 다르다.
+    """
 
     edge_id: int
     source: int
@@ -24,6 +27,8 @@ class Arc:
     steps: bool
     wheelchair_ok: bool
     walk_ok: bool
+    # source → target 사이 길 모양의 중간 지점 (경도, 위도). 곧은 구간이면 비어 있다.
+    geometry: tuple[tuple[float, float], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -55,9 +60,14 @@ def build_graph(data: dict[str, Any]) -> Graph:
             steps=edge["steps"],
             wheelchair_ok=edge["wheelchair_ok"],
             walk_ok=edge["walk_ok"],
+            geometry=tuple((lon, lat) for lon, lat in edge.get("geometry", ())),
         )
         backward = replace(
-            forward, source=forward.target, target=forward.source, grade=-forward.grade
+            forward,
+            source=forward.target,
+            target=forward.source,
+            grade=-forward.grade,
+            geometry=forward.geometry[::-1],
         )
         adjacency[forward.source].append(forward)
         adjacency[backward.source].append(backward)
