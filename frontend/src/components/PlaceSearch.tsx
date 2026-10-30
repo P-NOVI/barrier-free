@@ -6,11 +6,15 @@ import { formatDistance } from '../lib/format';
 import { getCurrentPosition, type LocationFix } from '../lib/geolocation';
 import type { LngLat } from '../lib/kakaoMap';
 import type { Place } from '../lib/placeApi';
-import type { Endpoint, EndpointRole, Endpoints } from '../lib/selection';
+import {
+    CURRENT_LOCATION_LABEL,
+    type Endpoint,
+    type EndpointRole,
+    type Endpoints,
+} from '../lib/selection';
 
 // 입력을 멈추고 이만큼 지나면 검색한다.
 const SEARCH_DELAY_MS = 300;
-const CURRENT_LOCATION_LABEL = '현재 위치';
 
 const FIELD_LABELS: Record<EndpointRole, string> = {
     start: '출발',

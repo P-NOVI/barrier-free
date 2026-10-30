@@ -16,6 +16,7 @@ export type EndpointRole = keyof Endpoints;
 export const NO_ENDPOINTS: Endpoints = { start: null, goal: null };
 
 export const MAP_CLICK_LABEL = '지도에서 고른 위치';
+export const CURRENT_LOCATION_LABEL = '현재 위치';
 
 /** 지도 클릭 순서: 출발 → 도착. 둘 다 고른 뒤 누르면 새 출발지로 다시 시작한다. */
 export function selectEndpoint(current: Endpoints, clicked: LngLat): Endpoints {
