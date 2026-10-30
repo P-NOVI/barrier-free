@@ -58,6 +58,10 @@ class PlaceSearchResponse(BaseModel):
 
 
 class AddressResponse(BaseModel):
+    name: str = Field(
+        description="화면에 보일 이름: 건물 이름 → 30m 안 랜드마크 → 'OO 부근' "
+        "(60m 안 랜드마크) → 동 + 지번"
+    )
     building_name: str = Field(description="건물 이름. 없으면 빈 문자열")
     road_address: str = Field(description="도로명 주소. 없으면 빈 문자열")
     address: str = Field(description="지번 주소")

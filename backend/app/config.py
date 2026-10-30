@@ -21,6 +21,10 @@ class Settings(BaseSettings):
     kakao_rest_api_key: SecretStr = SecretStr("")
     kakao_local_base_url: str = "https://dapi.kakao.com"
     kakao_timeout_s: float = 3.0
+    # 지도에서 누른 곳의 이름: 이 반경 안 랜드마크를 찾고,
+    # on_spot 보다 가까우면 그 장소 이름으로 부른다.
+    landmark_radius_m: int = 60
+    landmark_on_spot_m: float = 30.0
 
 
 @cache
