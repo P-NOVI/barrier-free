@@ -237,7 +237,9 @@ body,
     align-items: center;
     gap: 10px;
     margin: 0;
-    font-size: 22px;
+    font-size: 20px;
+    /* '오른쪽'이 '오른 / 쪽'으로 끊기지 않게 낱말 단위로 줄을 바꾼다. */
+    word-break: keep-all;
 }
 
 .navigation-panel__icon {
