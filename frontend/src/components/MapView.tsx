@@ -25,9 +25,19 @@ const GAP_LINE: Omit<kakao.maps.PolylineOptions, 'path'> = {
     strokeStyle: 'shortdash',
 };
 /** 경로 전체가 보이게 맞출 때 지도 가장자리 여백(px) */
-export type FitPadding = { top: number; side: number; bottom: number };
+export type FitPadding = {
+    top: number;
+    right: number;
+    bottom: number;
+    left: number;
+};
 
-const DEFAULT_FIT_PADDING: FitPadding = { top: 48, side: 48, bottom: 48 };
+const DEFAULT_FIT_PADDING: FitPadding = {
+    top: 48,
+    right: 48,
+    bottom: 48,
+    left: 48,
+};
 
 type MapViewProps = {
     center?: LngLat;
@@ -119,9 +129,9 @@ function useRouteLine(
         map.setBounds(
             bounds,
             padding.top,
-            padding.side,
+            padding.right,
             padding.bottom,
-            padding.side,
+            padding.left,
         );
         return () => lines.forEach((line) => line.setMap(null));
     }, [map, path, start, goal, padding]);

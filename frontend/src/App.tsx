@@ -16,12 +16,15 @@ import {
     selectEndpoint,
 } from './lib/selection';
 
-// 이보다 넓으면 왼쪽 패널 + 오른쪽 지도, 좁으면 지도 위에 패널을 띄운다. index.css 와 같은 값.
+// 이보다 넓으면 왼쪽 위에 패널 카드 하나, 좁으면 검색창·경로 패널을 위아래에 띄운다.
+// index.css 와 같은 값.
 const WIDE_LAYOUT = '(min-width: 768px)';
+// 경로에 맞출 때 패널에 가리지 않게 둘 여백(px)
 const FIT_PADDING: Record<'wide' | 'narrow', FitPadding> = {
-    wide: { top: 48, side: 48, bottom: 48 },
+    // 왼쪽은 패널 카드(여백 12 + 폭 380)만큼 더 둔다.
+    wide: { top: 48, right: 48, bottom: 48, left: 440 },
     // 위는 검색창, 아래는 경로 패널 높이만큼 더 둔다.
-    narrow: { top: 160, side: 32, bottom: 240 },
+    narrow: { top: 160, right: 32, bottom: 240, left: 32 },
 };
 
 export default function App() {
