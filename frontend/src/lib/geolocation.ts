@@ -10,6 +10,13 @@ const COARSE: PositionOptions = {
     maximumAge: 60_000,
 };
 
+/** 찾은 위치 */
+export type LocationFix = {
+    position: LngLat;
+    /** 오차 반경(m). 실제 위치는 이 원 안에 있을 가능성이 높다. */
+    accuracy: number;
+};
+
 // GeolocationPositionError 코드
 const PERMISSION_DENIED = 1;
 
@@ -23,10 +30,14 @@ export class LocationError extends Error {
 function locate(
     geolocation: Geolocation,
     options: PositionOptions,
-): Promise<LngLat> {
+): Promise<LocationFix> {
     return new Promise((resolve, reject) =>
         geolocation.getCurrentPosition(
-            ({ coords }) => resolve([coords.longitude, coords.latitude]),
+            ({ coords }) =>
+                resolve({
+                    position: [coords.longitude, coords.latitude],
+                    accuracy: coords.accuracy,
+                }),
             reject,
             options,
         ),
@@ -51,7 +62,7 @@ function toLocationError(error: unknown): LocationError {
 
 export async function getCurrentPosition(
     geolocation: Geolocation | undefined = globalThis.navigator?.geolocation,
-): Promise<LngLat> {
+): Promise<LocationFix> {
     if (!geolocation) {
         throw new LocationError('이 브라우저는 위치 찾기를 지원하지 않습니다.');
     }
