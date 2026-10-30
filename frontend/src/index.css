@@ -11,6 +11,7 @@
     --panel-shadow: 0 2px 12px rgba(0, 0, 0, 0.18);
     --brand: #1a73e8;
     --my-location: #1a73e8;
+    --route-arrow: rgba(255, 255, 255, 0.6);
     --side-panel-width: 380px;
 
     font:
@@ -106,15 +107,14 @@ body,
     border-top-color: var(--pin-goal);
 }
 
-/* 경로 선 안 진행 방향 화살표(›). --angle 은 MapView 가 정한다. */
+/* 경로 선 안 진행 방향 화살표. 오른쪽을 가리키게 그리고 --angle(MapView 가 정함)만큼 돌린다. */
 .route-arrow {
-    box-sizing: border-box;
-    width: 7px;
-    height: 7px;
-    border-top: 2px solid #fff;
-    border-right: 2px solid #fff;
-    /* 꺾쇠 끝이 화살표 자리 가운데에 오게 조금 뒤로 민다. */
-    transform: rotate(var(--angle)) translateX(-1px) rotate(45deg);
+    width: 9px;
+    height: 8px;
+    background: var(--route-arrow);
+    /* 앞 끝, 뒤 아래, 뒤쪽 홈, 뒤 위 */
+    clip-path: polygon(100% 50%, 0 100%, 28% 50%, 0 0);
+    transform: rotate(var(--angle));
     pointer-events: none;
 }
 
