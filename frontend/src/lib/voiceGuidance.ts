@@ -88,7 +88,10 @@ export function stopSpeaking(
     synth?.cancel();
 }
 
-/** 한국어로 읽는다. 앞 안내가 아직 읽히는 중이면 끊고 새 안내를 읽는다. */
+/**
+ * 한국어로 읽는다. 앞 안내가 읽히는 중이면 끝난 뒤에 읽는다.
+ * 안내는 회전마다 한두 번이라 밀리지 않는다.
+ */
 export function speak(
     text: string,
     synth: SpeechSynthesis | undefined = globalThis.speechSynthesis,
@@ -96,7 +99,6 @@ export function speak(
     if (!synth) {
         return;
     }
-    synth.cancel();
     const utterance = new SpeechSynthesisUtterance(text);
     utterance.lang = 'ko-KR';
     synth.speak(utterance);

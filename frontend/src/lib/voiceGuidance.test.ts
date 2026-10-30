@@ -76,7 +76,7 @@ describe('speak', () => {
         vi.unstubAllGlobals();
     });
 
-    it('읽던 안내를 끊고 한국어로 읽는다', () => {
+    it('앞 안내를 끊지 않고 한국어로 읽는다', () => {
         vi.stubGlobal(
             'SpeechSynthesisUtterance',
             class {
@@ -91,7 +91,7 @@ describe('speak', () => {
 
         speak('오른쪽으로 가세요.', synth as unknown as SpeechSynthesis);
 
-        expect(synth.cancel).toHaveBeenCalled();
+        expect(synth.cancel).not.toHaveBeenCalled();
         expect(synth.speak).toHaveBeenCalledWith(
             expect.objectContaining({
                 text: '오른쪽으로 가세요.',
