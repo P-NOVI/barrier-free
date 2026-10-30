@@ -55,3 +55,17 @@ class PlaceResponse(BaseModel):
 
 class PlaceSearchResponse(BaseModel):
     places: list[PlaceResponse]
+
+
+class AddressResponse(BaseModel):
+    name: str = Field(
+        description="화면에 보일 이름: 건물 이름 → 20m 안 장소(가게 포함) "
+        "→ 30m 안 랜드마크 → 'OO 부근'(60m 안 랜드마크) → 동 + 지번"
+    )
+    building_name: str = Field(description="건물 이름. 없으면 빈 문자열")
+    road_address: str = Field(description="도로명 주소. 없으면 빈 문자열")
+    address: str = Field(description="지번 주소")
+
+
+class AddressLookupResponse(BaseModel):
+    address: AddressResponse | None = Field(description="주소가 없는 좌표면 null")

@@ -24,7 +24,7 @@ CITY_HALL = {
 }
 
 
-def respond_with(*documents: dict[str, str]) -> Handler:
+def respond_with(*documents: dict[str, object]) -> Handler:
     return lambda _: httpx.Response(200, json={"documents": list(documents)})
 
 
@@ -161,6 +161,176 @@ def test_invalid_query_is_rejected(kakao, params: dict[str, str | int]) -> None:
     received = kakao(respond_with())
 
     response = client.get("/api/places/search", params=params)
+
+    assert response.status_code == 422
+    assert received == []
+
+
+AHYEON_LOT = {
+    "road_address": None,
+    "address": {
+        "address_name": "서울 마포구 아현동 372-2",
+        "region_3depth_name": "아현동",
+        "mountain_yn": "N",
+        "main_address_no": "372",
+        "sub_address_no": "2",
+    },
+}
+BUILDING_LOT = AHYEON_LOT | {
+    "road_address": {
+        "address_name": "서울특별시 마포구 마포대로 100",
+        "building_name": "현대빌딩",
+    }
+}
+
+
+def place(name: str, distance: int, category: str) -> dict[str, str]:
+    return {"place_name": name, "distance": str(distance), "category_name": category}
+
+
+PARK = "여행 > 공원"
+APARTMENT = "부동산 > 주거시설 > 아파트 > 아파트 동"
+CAFE = "음식점 > 카페"
+
+
+def kakao_local(lot: dict[str, object] | None, *nearby: dict[str, str]) -> Handler:
+    """coord2address 는 lot, 키워드 검색은 nearby 로 답한다."""
+
+    def handle(request: httpx.Request) -> httpx.Response:
+        if request.url.path.endswith("coord2address.json"):
+            return httpx.Response(200, json={"documents": [lot] if lot else []})
+        return httpx.Response(200, json={"documents": list(nearby)})
+
+    return handle
+
+
+def address_of(params: dict[str, float] | None = None) -> dict[str, str] | None:
+    response = client.get(
+        "/api/places/address", params=params or {"lng": 126.9584, "lat": 37.5549}
+    )
+    assert response.status_code == 200
+    return response.json()["address"]
+
+
+def test_address_fields(kakao) -> None:
+    received = kakao(kakao_local(BUILDING_LOT, place("애오개어린이공원", 5, PARK)))
+
+    address = address_of()
+
+    assert address == {
+        "name": "현대빌딩",
+        "building_name": "현대빌딩",
+        "road_address": "서울특별시 마포구 마포대로 100",
+        "address": "서울 마포구 아현동 372-2",
+    }
+    # 건물 이름이 있으면 근처 장소를 찾지 않는다.
+    assert len(received) == 1
+
+
+def test_nearby_search_requests(kakao) -> None:
+    received = kakao(kakao_local(AHYEON_LOT))
+
+    address_of({"lng": 126.9584, "lat": 37.5549})
+
+    coord, on_spot, landmarks = received
+    assert coord.url.path == "/v2/local/geo/coord2address.json"
+    assert (coord.url.params["x"], coord.url.params["y"]) == ("126.9584", "37.5549")
+    for nearby in (on_spot, landmarks):
+        assert nearby.url.params["query"] == "아현동"
+    params = [(n.url.params["radius"], n.url.params["sort"]) for n in received[1:]]
+    assert params == [("20", "accuracy"), ("60", "distance")]
+
+
+def test_place_on_spot_skips_landmark_search(kakao) -> None:
+    received = kakao(kakao_local(AHYEON_LOT, place("낫배드커피 한남", 3, CAFE)))
+
+    assert address_of()["name"] == "낫배드커피 한남"
+    assert len(received) == 2
+
+
+@pytest.mark.parametrize(
+    ("lot", "nearby", "name"),
+    [
+        pytest.param(
+            AHYEON_LOT,
+            [place("애오개어린이공원", 5, PARK)],
+            "애오개어린이공원",
+            id="landmark-on-spot",
+        ),
+        pytest.param(
+            AHYEON_LOT,
+            [place("공덕자이아파트 201동", 43, APARTMENT)],
+            "공덕자이아파트 201동 부근",
+            id="far-landmark-without-building",
+        ),
+        pytest.param(
+            AHYEON_LOT,
+            [place("애오개어린이공원", 15, PARK), place("낫배드커피 한남", 8, CAFE)],
+            "낫배드커피 한남",
+            id="nearest-place-on-spot",
+        ),
+        pytest.param(
+            AHYEON_LOT,
+            # 카카오 정확도순: 지도에 이름이 보이는 곳이 앞에 온다.
+            [place("낫배드커피 한남", 3, CAFE), place("꼴라보하우스 한남", 2, CAFE)],
+            "낫배드커피 한남",
+            id="first-place-in-same-building",
+        ),
+        pytest.param(
+            AHYEON_LOT,
+            [place("동서재 닭강정", 25, CAFE)],
+            "아현동 372-2",
+            id="far-shops-are-not-landmarks",
+        ),
+        pytest.param(
+            AHYEON_LOT,
+            [place("동서재 닭강정", 25, CAFE), place("애오개어린이공원", 27, PARK)],
+            "애오개어린이공원",
+            id="landmark-beats-far-shop",
+        ),
+        pytest.param(AHYEON_LOT, [], "아현동 372-2", id="short-address"),
+    ],
+)
+def test_location_name(kakao, lot, nearby, name) -> None:
+    kakao(kakao_local(lot, *nearby))
+
+    assert address_of()["name"] == name
+
+
+def test_mountain_lot_name(kakao) -> None:
+    mountain = AHYEON_LOT | {
+        "address": AHYEON_LOT["address"] | {"mountain_yn": "Y", "sub_address_no": ""}
+    }
+    kakao(kakao_local(mountain))
+
+    assert address_of()["name"] == "아현동 산 372"
+
+
+def test_coordinate_without_address_is_null(kakao) -> None:
+    received = kakao(kakao_local(None))
+
+    assert address_of({"lng": 126.5, "lat": 37.0}) is None
+    assert len(received) == 1
+
+
+def test_address_kakao_failure_is_bad_gateway(kakao) -> None:
+    kakao(time_out)
+
+    response = client.get("/api/places/address", params={"lng": 126.97, "lat": 37.55})
+
+    assert response.status_code == 502
+    assert response.json()["detail"]["reason"] == "search_failed"
+
+
+@pytest.mark.parametrize(
+    "params",
+    [{"lng": 126.97}, {"lng": 181, "lat": 37.55}, {"lng": 126.97, "lat": -91}],
+    ids=["no-lat", "lng-out-of-range", "lat-out-of-range"],
+)
+def test_invalid_coordinate_is_rejected(kakao, params: dict[str, float]) -> None:
+    received = kakao(respond_with())
+
+    response = client.get("/api/places/address", params=params)
 
     assert response.status_code == 422
     assert received == []

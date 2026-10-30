@@ -21,6 +21,14 @@ class Settings(BaseSettings):
     kakao_rest_api_key: SecretStr = SecretStr("")
     kakao_local_base_url: str = "https://dapi.kakao.com"
     kakao_timeout_s: float = 3.0
+    # 지도에서 누른 곳의 이름
+    # - place_on_spot 안 장소는 분류와 상관없이(가게도) 그 이름으로 부른다.
+    #   가장 가까운 곳과 same_spot 안(같은 건물쯤)이면 지도에 이름이 보이는 곳을 쓴다.
+    # - 없으면 landmark_radius 안 랜드마크. landmark_on_spot 보다 멀면 'OO 부근'
+    place_on_spot_m: int = 20
+    same_spot_m: float = 5.0
+    landmark_radius_m: int = 60
+    landmark_on_spot_m: float = 30.0
 
 
 @cache

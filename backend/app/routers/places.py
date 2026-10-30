@@ -3,17 +3,37 @@ from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query, status
 
-from app.deps import KakaoClientDep
-from app.schemas import PlaceResponse, PlaceSearchResponse, RouteError
-from app.services.place_service import MAX_PAGE_SIZE, PlaceSearchError, search_places
+from app.deps import KakaoClientDep, SettingsDep
+from app.schemas import (
+    AddressLookupResponse,
+    AddressResponse,
+    PlaceResponse,
+    PlaceSearchResponse,
+    RouteError,
+)
+from app.services.place_service import (
+    MAX_PAGE_SIZE,
+    PlaceSearchError,
+    find_address,
+    search_places,
+)
 
 router = APIRouter(tags=["place"])
+
+KAKAO_ERRORS = {502: {"model": RouteError}, 503: {"model": RouteError}}
+
+
+def kakao_failed(message: str) -> HTTPException:
+    return HTTPException(
+        status.HTTP_502_BAD_GATEWAY,
+        detail={"reason": "search_failed", "message": message},
+    )
 
 
 @router.get(
     "/places/search",
     response_model=PlaceSearchResponse,
-    responses={502: {"model": RouteError}, 503: {"model": RouteError}},
+    responses=KAKAO_ERRORS,
 )
 def get_places(
     client: KakaoClientDep,
@@ -34,13 +54,31 @@ def get_places(
     try:
         places = search_places(client, query.strip(), near, size)
     except PlaceSearchError as error:
-        raise HTTPException(
-            status.HTTP_502_BAD_GATEWAY,
-            detail={
-                "reason": "search_failed",
-                "message": "장소 검색에 실패했습니다. 잠시 뒤 다시 시도하세요.",
-            },
+        raise kakao_failed(
+            "장소 검색에 실패했습니다. 잠시 뒤 다시 시도하세요."
         ) from error
     return PlaceSearchResponse(
         places=[PlaceResponse(**asdict(place)) for place in places]
+    )
+
+
+@router.get(
+    "/places/address",
+    response_model=AddressLookupResponse,
+    responses=KAKAO_ERRORS,
+)
+def get_address(
+    client: KakaoClientDep,
+    settings: SettingsDep,
+    lng: Annotated[float, Query(ge=-180, le=180)],
+    lat: Annotated[float, Query(ge=-90, le=90)],
+) -> AddressLookupResponse:
+    try:
+        address = find_address(client, (lng, lat), settings)
+    except PlaceSearchError as error:
+        raise kakao_failed(
+            "주소를 찾지 못했습니다. 잠시 뒤 다시 시도하세요."
+        ) from error
+    return AddressLookupResponse(
+        address=AddressResponse(**asdict(address)) if address else None
     )

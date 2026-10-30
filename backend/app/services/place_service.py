@@ -1,13 +1,30 @@
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Literal
 
 import httpx
 
 from app.config import Settings
 
 KEYWORD_SEARCH_PATH = "/v2/local/search/keyword.json"
+COORD_TO_ADDRESS_PATH = "/v2/local/geo/coord2address.json"
 # 카카오 키워드 검색이 한 번에 돌려주는 최대 개수
 MAX_PAGE_SIZE = 15
+# 지도에서 누른 곳을 부를 때 쓰는 장소 분류 (카카오 category_name 앞부분)
+LANDMARK_CATEGORIES = (
+    "교통,수송 > 기차,철도",
+    "교통,수송 > 지하철,전철",
+    "교통,수송 > 교통시설",
+    "여행 > 관광,명소",
+    "여행 > 공원",
+    "부동산 > 주거시설 > 아파트",
+    "교육,학문 > 학교",
+    "사회,공공기관 > 지방행정기관",
+    "의료,건강 > 병원 > 대학병원",
+    "문화,예술 > 문화시설",
+    "가정,생활 > 백화점",
+    "가정,생활 > 대형마트",
+)
 
 
 @dataclass(frozen=True)
@@ -18,6 +35,36 @@ class Place:
     category: str
     position: tuple[float, float]
     distance_m: float | None
+
+
+@dataclass(frozen=True)
+class Address:
+    name: str
+    building_name: str
+    road_address: str
+    address: str
+
+
+@dataclass(frozen=True)
+class Lot:
+    """coord2address 응답에서 이름을 정하는 데 쓰는 값"""
+
+    building_name: str
+    road_address: str
+    address: str
+    dong: str
+    short_address: str
+
+
+@dataclass(frozen=True)
+class NearbyPlace:
+    name: str
+    category: str
+    distance_m: float
+
+    @property
+    def is_landmark(self) -> bool:
+        return self.category.startswith(LANDMARK_CATEGORIES)
 
 
 class PlaceSearchError(Exception):
@@ -47,10 +94,123 @@ def search_places(
         # 정렬은 정확도순(카카오 기본값)으로 둔다. 거리순은 이름이 덜 맞는 가까운 곳을
         # 먼저 보여 준다. 좌표를 주면 근처 장소가 앞에 오고 distance 도 함께 온다.
         params |= {"x": near[0], "y": near[1]}
+    return request_documents(
+        client,
+        KEYWORD_SEARCH_PATH,
+        params,
+        lambda documents: [to_place(document) for document in documents],
+    )
+
+
+def find_address(
+    client: httpx.Client, position: tuple[float, float], settings: Settings
+) -> Address | None:
+    """좌표의 주소와 화면에 보일 이름. 바다처럼 주소가 없는 곳이면 None."""
+    lot = request_documents(
+        client,
+        COORD_TO_ADDRESS_PATH,
+        {"x": position[0], "y": position[1]},
+        lambda documents: to_lot(documents[0]) if documents else None,
+    )
+    if lot is None:
+        return None
+    return Address(
+        name=location_name(client, position, lot, settings),
+        building_name=lot.building_name,
+        road_address=lot.road_address,
+        address=lot.address,
+    )
+
+
+def location_name(
+    client: httpx.Client, position: tuple[float, float], lot: Lot, settings: Settings
+) -> str:
+    """건물 이름 → 바로 앞 장소 → 랜드마크 (멀면 'OO 부근') → 짧은 지번 주소"""
+    # 건물 안 매장·창구도 근처 장소로 잡히므로 건물 이름을 먼저 쓰고 근처는 찾지 않는다.
+    if lot.building_name:
+        return lot.building_name
+    # 바로 앞은 정확도순으로 찾는다.
+    # 한 건물에 여럿이면 지도에 이름이 보이는 곳이 앞에 온다.
+    on_spot = nearby_places(
+        client, position, lot.dong, settings.place_on_spot_m, "accuracy"
+    )
+    spot = place_on_spot(on_spot, settings.place_on_spot_m, settings.same_spot_m)
+    if spot:
+        return spot.name
+    landmark = min(
+        (
+            place
+            for place in nearby_places(
+                client, position, lot.dong, settings.landmark_radius_m, "distance"
+            )
+            if place.is_landmark
+        ),
+        key=lambda place: place.distance_m,
+        default=None,
+    )
+    if landmark:
+        near = landmark.distance_m > settings.landmark_on_spot_m
+        return f"{landmark.name} 부근" if near else landmark.name
+    return lot.short_address
+
+
+def place_on_spot(
+    places: list[NearbyPlace], on_spot_m: float, same_spot_m: float
+) -> NearbyPlace | None:
+    """바로 앞(on_spot_m 안) 장소.
+
+    가장 가까운 곳과 same_spot_m 안에 있는 장소 중 places 순서로 첫 장소
+    """
+    close = [place for place in places if place.distance_m <= on_spot_m]
+    if not close:
+        return None
+    nearest = min(place.distance_m for place in close)
+    return next(place for place in close if place.distance_m <= nearest + same_spot_m)
+
+
+def nearby_places(
+    client: httpx.Client,
+    position: tuple[float, float],
+    dong: str,
+    radius_m: int,
+    sort: Literal["accuracy", "distance"],
+) -> list[NearbyPlace]:
+    # 키워드 검색은 검색어가 필요하다. 동 이름으로 찾으면 주소가 그 동인 근처 장소가
+    # 분류와 상관없이 온다.
+    if not dong:
+        return []
+    return request_documents(
+        client,
+        KEYWORD_SEARCH_PATH,
+        {
+            "query": dong,
+            "x": position[0],
+            "y": position[1],
+            "radius": radius_m,
+            "sort": sort,
+            "size": MAX_PAGE_SIZE,
+        },
+        lambda documents: [
+            NearbyPlace(
+                name=document["place_name"],
+                category=document.get("category_name") or "",
+                distance_m=float(document["distance"]),
+            )
+            for document in documents
+        ],
+    )
+
+
+def request_documents[T](
+    client: httpx.Client,
+    path: str,
+    params: dict[str, str | int | float],
+    parse: Callable[[list[dict[str, Any]]], T],
+) -> T:
     try:
-        response = client.get(KEYWORD_SEARCH_PATH, params=params)
+        response = client.get(path, params=params)
         response.raise_for_status()
-        return [to_place(document) for document in response.json()["documents"]]
+        return parse(response.json()["documents"])
     except (httpx.HTTPError, ValueError, KeyError, TypeError) as error:
         raise PlaceSearchError from error
 
@@ -65,4 +225,26 @@ def to_place(document: dict[str, Any]) -> Place:
         category=document.get("category_group_name") or "",
         position=(float(document["x"]), float(document["y"])),
         distance_m=float(distance) if distance else None,
+    )
+
+
+def to_lot(document: dict[str, Any]) -> Lot:
+    # 도로명 주소가 없는 땅이면 road_address 는 null 로 온다.
+    road = document.get("road_address") or {}
+    jibun = document["address"]
+    dong = jibun.get("region_3depth_name") or ""
+    number = "-".join(
+        part
+        for part in (jibun.get("main_address_no"), jibun.get("sub_address_no"))
+        if part
+    )
+    if jibun.get("mountain_yn") == "Y":
+        number = f"산 {number}"
+    return Lot(
+        building_name=road.get("building_name") or "",
+        road_address=road.get("address_name") or "",
+        address=jibun["address_name"],
+        dong=dong,
+        # 시·구를 뺀 "아현동 372-2". 동 이름이 없으면 전체 지번 주소
+        short_address=f"{dong} {number}" if dong and number else jibun["address_name"],
     )
