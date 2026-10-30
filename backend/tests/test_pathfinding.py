@@ -6,7 +6,7 @@ import pytest
 
 from core.cost import SLOPE_FACTORS, is_passable
 from core.graph import Graph, build_graph
-from core.pathfinding import find_path, summarize
+from core.pathfinding import find_path, find_path_between, summarize
 from core.profiles import CONGESTION_WEIGHTS, PRESETS, CongestionTolerance
 
 
@@ -174,3 +174,19 @@ def test_astar_cost_matches_dijkstra(sample_graph: Graph, preset: str) -> None:
         else:
             assert astar is not None
             assert astar.cost == pytest.approx(dijkstra.cost)
+
+
+def test_path_between_candidates_adds_their_costs() -> None:
+    # 0 → 3 은 5m, 1 → 2 → 3 은 40m. 0 에서 시작하는 비용이 크면 1 에서 시작한다.
+    graph = make_graph(4, [edge(0, 0, 3, 5), edge(1, 1, 2, 20), edge(2, 2, 3, 20)])
+    goal = graph.nodes[3]
+    general = PRESETS["general"]
+
+    near = find_path_between(
+        graph, {0: 10, 1: 0}, {3: 0}, (goal.lon, goal.lat), general
+    )
+    far = find_path_between(graph, {0: 50, 1: 0}, {3: 0}, (goal.lon, goal.lat), general)
+
+    assert near is not None and far is not None
+    assert (near.nodes, near.cost) == ([0, 3], pytest.approx(15))
+    assert (far.nodes, far.cost) == ([1, 2, 3], pytest.approx(40))

@@ -1,10 +1,14 @@
 import math
 from collections import defaultdict
-from collections.abc import Iterator, Sequence
+from collections.abc import Iterable, Iterator, Sequence
+from dataclasses import dataclass
+from itertools import pairwise
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from core.graph import Graph
+
+LngLat = tuple[float, float]
 
 EARTH_RADIUS_M = 6_371_000.0
 METERS_PER_DEGREE = EARTH_RADIUS_M * math.pi / 180
@@ -123,6 +127,82 @@ class NodeIndex:
             if ring * cell_m > radius_m:
                 break
         return sorted(hits, key=lambda hit: hit[1])
+
+
+class EdgeIndex:
+    """길(지점을 이은 선) 격자 색인. 선을 감싸는 상자가 걸치는 칸마다 길 번호를 둔다.
+
+    선 모양은 따로 들고 있지 않는다. 정확한 거리는 부르는 쪽이 project 로 잰다.
+    """
+
+    __slots__ = ("_cell", "_cells")
+
+    def __init__(
+        self, shapes: Iterable[Sequence[LngLat]], cell_degrees: float = CELL_DEGREES
+    ) -> None:
+        self._cell = cell_degrees
+        self._cells: dict[tuple[int, int], list[int]] = defaultdict(list)
+        for index, shape in enumerate(shapes):
+            lons = [lon for lon, _ in shape]
+            lats = [lat for _, lat in shape]
+            x0, y0 = self._key(min(lons), min(lats))
+            x1, y1 = self._key(max(lons), max(lats))
+            for x in range(x0, x1 + 1):
+                for y in range(y0, y1 + 1):
+                    self._cells[x, y].append(index)
+
+    def _key(self, lon: float, lat: float) -> tuple[int, int]:
+        return math.floor(lon / self._cell), math.floor(lat / self._cell)
+
+    def near(self, lon: float, lat: float, radius_m: float) -> set[int]:
+        """radius_m 안을 지날 수도 있는 길 번호."""
+        d_lat = radius_m / METERS_PER_DEGREE
+        widest_lat = min(abs(lat) + d_lat, 89.0)
+        d_lon = d_lat / math.cos(math.radians(widest_lat))
+        x0, y0 = self._key(lon - d_lon, lat - d_lat)
+        x1, y1 = self._key(lon + d_lon, lat + d_lat)
+        return {
+            index
+            for x in range(x0, x1 + 1)
+            for y in range(y0, y1 + 1)
+            for index in self._cells.get((x, y), ())
+        }
+
+
+@dataclass(frozen=True)
+class Projection:
+    # 선 위에서 찍은 좌표에 가장 가까운 지점
+    point: LngLat
+    # 찍은 좌표에서 그 지점까지 거리(m)
+    distance_m: float
+    # 선 처음부터 그 지점까지 온 비율(0~1)
+    share: float
+
+
+def project(lon: float, lat: float, shape: Sequence[LngLat]) -> Projection:
+    """shape 선 위에서 (lon, lat) 에 가장 가까운 지점.
+
+    찍은 좌표 둘레를 평면으로 보고 잰다. 수백 m 안에서는 오차가 작다.
+    """
+    east = METERS_PER_DEGREE * math.cos(math.radians(lat))
+
+    def local(point: LngLat) -> tuple[float, float]:
+        return (point[0] - lon) * east, (point[1] - lat) * METERS_PER_DEGREE
+
+    best = (math.inf, 0.0, shape[0])
+    travelled = 0.0
+    for a, b in pairwise(shape):
+        (ax, ay), (bx, by) = local(a), local(b)
+        dx, dy = bx - ax, by - ay
+        length = math.hypot(dx, dy)
+        t = 0.0 if length == 0 else min(1.0, max(0.0, -(ax * dx + ay * dy) / length**2))
+        distance = math.hypot(ax + t * dx, ay + t * dy)
+        if distance < best[0]:
+            point = (a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t)
+            best = (distance, travelled + t * length, point)
+        travelled += length
+    distance, reached, point = best
+    return Projection(point, distance, reached / travelled if travelled else 0.0)
 
 
 def nearest_node(
