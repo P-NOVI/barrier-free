@@ -26,3 +26,10 @@ elevation:
   output: data/interim/walk_elevation.graphml
   # DEM 빈 칸 노드를 이웃 노드 평균으로 채우는 최대 반복 횟수
   max_fill_passes: 50
+
+barriers:
+  output: data/interim/walk_tagged.graphml
+
+export:
+  # backend/app/config.py 의 기본 그래프 경로와 같아야 한다.
+  output: data/processed/graph.json.gz
