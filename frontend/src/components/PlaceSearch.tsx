@@ -3,7 +3,7 @@ import { type ReactNode, useId, useState } from 'react';
 import { useDebouncedValue } from '../hooks/useDebouncedValue';
 import { type PlaceSearchState, usePlaceSearch } from '../hooks/usePlaceSearch';
 import { formatDistance } from '../lib/format';
-import { getCurrentPosition } from '../lib/geolocation';
+import { getCurrentPosition, type LocationFix } from '../lib/geolocation';
 import type { LngLat } from '../lib/kakaoMap';
 import type { Place } from '../lib/placeApi';
 import type { Endpoint, EndpointRole, Endpoints } from '../lib/selection';
@@ -22,6 +22,8 @@ type PlaceSearchProps = {
     /** 이 근처 장소를 앞에 두고 거리를 함께 보인다. */
     near: LngLat;
     onSelect: (role: EndpointRole, endpoint: Endpoint) => void;
+    /** 현재 위치를 찾으면 알린다. 지도에 내 위치로 표시한다. */
+    onLocate: (fix: LocationFix) => void;
 };
 
 type LocateState =
@@ -155,18 +157,20 @@ export default function PlaceSearch({
     endpoints,
     near,
     onSelect,
+    onLocate,
 }: PlaceSearchProps) {
     const [locate, setLocate] = useState<LocateState>({ status: 'idle' });
 
     const locateStart = () => {
         setLocate({ status: 'locating' });
         getCurrentPosition()
-            .then((position) => {
+            .then((fix) => {
                 setLocate({ status: 'idle' });
                 onSelect('start', {
-                    position,
+                    position: fix.position,
                     label: CURRENT_LOCATION_LABEL,
                 });
+                onLocate(fix);
             })
             .catch((error: unknown) =>
                 setLocate({
