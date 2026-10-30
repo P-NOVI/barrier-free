@@ -57,33 +57,12 @@ export function distanceM(a: LngLat, b: LngLat): number {
 }
 
 /** origin 기준 동쪽·북쪽 m */
-export function toLocal(
-    [lng, lat]: LngLat,
-    [lng0, lat0]: LngLat,
-): [number, number] {
+function toLocal([lng, lat]: LngLat, [lng0, lat0]: LngLat): [number, number] {
     const cos = Math.cos((lat0 * Math.PI) / 180);
     return [
         (lng - lng0) * METERS_PER_DEGREE * cos,
         (lat - lat0) * METERS_PER_DEGREE,
     ];
-}
-
-/**
- * 원점에서 선분 AB 위 가장 가까운 점 A + t(B - A) 의 t(0~1)와 거리.
- * a, b 는 원점 기준 평면 좌표(m)다.
- */
-export function closestOnSegment(
-    [ax, ay]: [number, number],
-    [bx, by]: [number, number],
-): { t: number; distance: number } {
-    const dx = bx - ax;
-    const dy = by - ay;
-    const lengthSquared = dx * dx + dy * dy;
-    const t =
-        lengthSquared === 0
-            ? 0
-            : Math.min(1, Math.max(0, -(ax * dx + ay * dy) / lengthSquared));
-    return { t, distance: Math.hypot(ax + t * dx, ay + t * dy) };
 }
 
 /** 내 위치를 경로 선 위 가장 가까운 점에 맞춰 진행 정도를 계산한다. */
@@ -99,11 +78,20 @@ export function progressAlong(
         offRouteM: distanceM(position, coordinates[0]),
     };
     for (let i = 0; i + 1 < coordinates.length; i += 1) {
-        // 내 위치를 원점으로 두고 구간 위 가장 가까운 점을 찾는다.
-        const { t, distance: offRouteM } = closestOnSegment(
-            toLocal(coordinates[i], position),
-            toLocal(coordinates[i + 1], position),
-        );
+        // 내 위치를 원점으로 두고 구간 AB 위 가장 가까운 점 A + t(B - A) 를 찾는다.
+        const [ax, ay] = toLocal(coordinates[i], position);
+        const [bx, by] = toLocal(coordinates[i + 1], position);
+        const dx = bx - ax;
+        const dy = by - ay;
+        const lengthSquared = dx * dx + dy * dy;
+        const t =
+            lengthSquared === 0
+                ? 0
+                : Math.min(
+                      1,
+                      Math.max(0, -(ax * dx + ay * dy) / lengthSquared),
+                  );
+        const offRouteM = Math.hypot(ax + t * dx, ay + t * dy);
         if (offRouteM < best.offRouteM) {
             const [lng1, lat1] = coordinates[i];
             const [lng2, lat2] = coordinates[i + 1];

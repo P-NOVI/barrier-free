@@ -10,6 +10,14 @@ export type RouteRequest = {
     preset: PresetId;
 };
 
+/** 경로가 갈림길에서 다른 길로 꺾어 들어가는 곳 */
+export type TurnPoint = {
+    /** coordinates 에서 몇 번째 지점인지 */
+    index: number;
+    /** 들어온 방향에서 나가는 방향으로 꺾는 각도(도). 오른쪽이 + */
+    angle: number;
+};
+
 export type RouteResponse = {
     distance_m: number;
     /** 계단을 뺀 구간 중 가장 가파른 |경사| (비율) */
@@ -19,6 +27,8 @@ export type RouteResponse = {
     coordinates: LngLat[];
     elevations: number[];
     distances_m: number[];
+    /** 갈림길에서 다른 길로 꺾어 들어가는 곳. 출발점에서 가까운 순서 */
+    turns: TurnPoint[];
     /** 요청한 출발 좌표에서 경로 시작점까지 거리 */
     start_gap_m: number;
     goal_gap_m: number;
