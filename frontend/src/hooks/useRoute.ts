@@ -6,7 +6,11 @@ import { fetchRoute, type RouteResponse } from '../lib/routeApi';
 
 export type RouteState =
     | { status: 'idle' }
-    | { status: 'loading' }
+    | {
+          status: 'loading';
+          /** 바로 전에 찾은 경로. 다시 찾는 동안 계속 보여 줄 때 쓴다. */
+          previous: RouteResponse | null;
+      }
     | { status: 'success'; route: RouteResponse }
     | { status: 'error'; message: string };
 
@@ -49,7 +53,13 @@ export function useRoute(
         return { status: 'idle' };
     }
     if (settled?.key !== key) {
-        return { status: 'loading' };
+        return {
+            status: 'loading',
+            previous:
+                settled?.state.status === 'success'
+                    ? settled.state.route
+                    : null,
+        };
     }
     return settled.state;
 }

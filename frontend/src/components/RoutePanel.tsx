@@ -13,6 +13,7 @@ type RoutePanelProps = {
     route: RouteState;
     onPresetChange: (preset: PresetId) => void;
     onReset: () => void;
+    onStartNavigation: () => void;
 };
 
 function guide(endpoints: Endpoints): string | null {
@@ -76,6 +77,7 @@ export default function RoutePanel({
     route,
     onPresetChange,
     onReset,
+    onStartNavigation,
 }: RoutePanelProps) {
     const message = guide(endpoints);
 
@@ -124,6 +126,15 @@ export default function RoutePanel({
                     <RouteSummary route={route.route} />
                 )}
             </div>
+            {route.status === 'success' && (
+                <button
+                    type="button"
+                    className="route-panel__start"
+                    onClick={onStartNavigation}
+                >
+                    안내 시작
+                </button>
+            )}
         </section>
     );
 }
