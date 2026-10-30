@@ -7,16 +7,19 @@ import {
     type Judgement,
     NEW_TRACKER,
     progressAlong,
-    type RouteLine,
     type RouteProgress,
     trackOffRoute,
 } from '../lib/navigation';
+import type { RouteResponse } from '../lib/routeApi';
+import { type NextTurn, nextTurn, routeTurns } from '../lib/turns';
 
 export type NavigationState = {
     /** 마지막으로 받은 내 위치 */
     fix: LocationFix | null;
     progress: RouteProgress | null;
     judgement: Judgement | null;
+    /** 다음 회전(없으면 도착)과 거기까지 거리 */
+    next: NextTurn | null;
     /** 위치를 받지 못한 이유. 다음 위치가 오면 지운다. */
     error: string | null;
 };
@@ -27,7 +30,7 @@ export type NavigationState = {
  */
 export function useNavigation(
     active: boolean,
-    route: RouteLine | null,
+    route: RouteResponse | null,
     rerouting: boolean,
     onReroute: (position: LngLat) => void,
 ): NavigationState {
@@ -72,14 +75,20 @@ export function useNavigation(
         };
     }, [active]);
 
+    const turns = useMemo(() => (route ? routeTurns(route) : []), [route]);
     const progress = useMemo(
         () => (fix && route ? progressAlong(route, fix.position) : null),
         [fix, route],
+    );
+    const next = useMemo(
+        () => (progress ? nextTurn(turns, progress) : null),
+        [turns, progress],
     );
     return {
         fix,
         progress,
         judgement: fix && progress ? judge(progress, fix.accuracy) : null,
+        next,
         error,
     };
 }
