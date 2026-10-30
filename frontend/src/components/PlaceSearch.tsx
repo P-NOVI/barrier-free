@@ -19,7 +19,7 @@ const FIELD_LABELS: Record<EndpointRole, string> = {
 
 type PlaceSearchProps = {
     endpoints: Endpoints;
-    /** 이 근처부터 가까운 순으로 찾는다. */
+    /** 이 근처 장소를 앞에 두고 거리를 함께 보인다. */
     near: LngLat | null;
     onSelect: (role: EndpointRole, endpoint: Endpoint) => void;
 };

@@ -15,7 +15,7 @@ export type Place = {
     distance_m: number | null;
 };
 
-/** near 를 주면 그 근처에서 가까운 순으로 찾는다. */
+/** near 를 주면 그 근처 장소를 앞에 두고 거리를 함께 돌려준다. */
 export async function searchPlaces(
     query: string,
     near: LngLat | null,
