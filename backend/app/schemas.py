@@ -25,6 +25,13 @@ class RouteRequest(BaseModel):
         return value
 
 
+class TurnPoint(BaseModel):
+    index: int = Field(description="꺾는 갈림길이 coordinates 에서 몇 번째인지")
+    angle: float = Field(
+        description="들어온 방향에서 나가는 방향으로 꺾는 각도(도). 오른쪽이 +"
+    )
+
+
 class RouteResponse(BaseModel):
     distance_m: float
     max_grade: float = Field(description="계단을 뺀 구간 중 가장 가파른 |경사| (비율)")
@@ -33,6 +40,9 @@ class RouteResponse(BaseModel):
     coordinates: list[Coordinate] = Field(description="경로 지점 [경도, 위도]")
     elevations: list[float]
     distances_m: list[float] = Field(description="출발점부터 각 지점까지 누적 거리")
+    turns: list[TurnPoint] = Field(
+        description="갈림길에서 다른 길로 꺾어 들어가는 곳. 출발점에서 가까운 순서"
+    )
     start_gap_m: float = Field(description="요청한 출발 좌표에서 경로 시작점까지 거리")
     goal_gap_m: float = Field(description="요청한 도착 좌표에서 경로 끝점까지 거리")
 
