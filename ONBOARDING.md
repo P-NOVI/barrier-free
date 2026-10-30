@@ -48,6 +48,7 @@ npm run dev
 ```
 
 - 터미널에 나온 주소(보통 http://localhost:5173)에서 화면이 뜨면 성공입니다.
+- 지도에서 경로를 찾으려면 backend를 켜 두고 `.env`에 `VITE_API_BASE_URL=http://127.0.0.1:8000`을 넣습니다.
 - 테스트와 린트: `npm run test` · `npm run lint` · `npm run format`
 
 ## 5. 환경변수
