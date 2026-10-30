@@ -1,13 +1,13 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 
 import {
     type LngLat,
     loadKakaoMaps,
+    SEOUL_CITY_HALL,
     toLatLng,
     toLngLat,
 } from '../lib/kakaoMap';
 
-const SEOUL_CITY_HALL: LngLat = [126.9779, 37.5663];
 // 카카오맵 확대 수준. 숫자가 작을수록 확대 (1~14)
 const DEFAULT_LEVEL = 4;
 
@@ -24,8 +24,8 @@ const GAP_LINE: Omit<kakao.maps.PolylineOptions, 'path'> = {
     strokeOpacity: 0.8,
     strokeStyle: 'shortdash',
 };
-// 경로 전체가 보이게 맞출 때 지도 가장자리 여백(px). 아래는 경로 패널 높이만큼 더 둔다.
-const FIT_PADDING = { top: 48, side: 32, bottom: 240 };
+// 경로 전체가 보이게 맞출 때 지도 가장자리 여백(px). 위는 검색창, 아래는 경로 패널 높이만큼 더 둔다.
+const FIT_PADDING = { top: 160, side: 32, bottom: 240 };
 
 type MapViewProps = {
     center?: LngLat;
@@ -33,7 +33,27 @@ type MapViewProps = {
     goal?: LngLat | null;
     path?: LngLat[] | null;
     onMapClick?: (position: LngLat) => void;
+    /** 지도 이동·확대가 끝날 때마다 화면 중심을 알린다. */
+    onCenterChange?: (center: LngLat) => void;
 };
+
+/** 지도 이벤트를 붙이고, 지도나 handler 가 바뀌면 뗀다. */
+function useMapEvent(
+    map: kakao.maps.Map | null,
+    type: 'click' | 'idle',
+    handler:
+        | ((event: kakao.maps.event.MouseEvent) => void)
+        | (() => void)
+        | undefined,
+) {
+    useEffect(() => {
+        if (!map || !handler) {
+            return;
+        }
+        kakao.maps.event.addListener(map, type, handler);
+        return () => kakao.maps.event.removeListener(map, type, handler);
+    }, [map, type, handler]);
+}
 
 function usePin(
     map: kakao.maps.Map | null,
@@ -108,21 +128,18 @@ export default function MapView({
     goal,
     path,
     onMapClick,
+    onCenterChange,
 }: MapViewProps) {
     const containerRef = useRef<HTMLDivElement>(null);
     const mapRef = useRef<kakao.maps.Map | null>(null);
     const centerRef = useRef(center);
-    const onMapClickRef = useRef(onMapClick);
     const [map, setMap] = useState<kakao.maps.Map | null>(null);
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
-        onMapClickRef.current = onMapClick;
-    }, [onMapClick]);
-
-    useEffect(() => {
         centerRef.current = center;
-        mapRef.current?.setCenter(toLatLng(center));
+        // 화면보다 먼 곳이면 카카오맵이 애니메이션 없이 옮긴다.
+        mapRef.current?.panTo(toLatLng(center));
     }, [center]);
 
     useEffect(() => {
@@ -136,12 +153,6 @@ export default function MapView({
                     center: toLatLng(centerRef.current),
                     level: DEFAULT_LEVEL,
                 });
-                maps.event.addListener(
-                    map,
-                    'click',
-                    (event: kakao.maps.event.MouseEvent) =>
-                        onMapClickRef.current?.(toLngLat(event.latLng)),
-                );
                 mapRef.current = map;
                 setMap(map);
             })
@@ -159,6 +170,22 @@ export default function MapView({
         };
     }, []);
 
+    const handleClick = useMemo(
+        () =>
+            onMapClick &&
+            ((event: kakao.maps.event.MouseEvent) =>
+                onMapClick(toLngLat(event.latLng))),
+        [onMapClick],
+    );
+    const handleIdle = useMemo(() => {
+        if (!map || !onCenterChange) {
+            return undefined;
+        }
+        return () => onCenterChange(toLngLat(map.getCenter()));
+    }, [map, onCenterChange]);
+
+    useMapEvent(map, 'click', handleClick);
+    useMapEvent(map, 'idle', handleIdle);
     useRouteLine(map, path, start, goal);
     usePin(map, start, '출발', 'start');
     usePin(map, goal, '도착', 'goal');
