@@ -232,27 +232,57 @@ body,
     cursor: pointer;
 }
 
-.navigation-panel__remaining {
+.navigation-panel__next {
+    display: flex;
+    align-items: center;
+    gap: 10px;
     margin: 0;
-    font-size: 13px;
+    font-size: 22px;
+}
+
+.navigation-panel__icon {
+    flex: none;
+    width: 36px;
+    height: 36px;
+    fill: var(--brand);
+}
+
+.navigation-panel__remaining {
+    margin: 8px 0 0;
+    font-size: 14px;
     color: var(--muted);
 }
 
 .navigation-panel__remaining strong {
-    display: block;
-    font-size: 26px;
     color: var(--text);
 }
 
-.navigation-panel__stop {
+.navigation-panel__stop,
+.navigation-panel__voice {
+    flex: none;
     min-height: 40px;
     padding: 0 14px;
     border: 1px solid var(--border);
     border-radius: 8px;
     font: inherit;
-    color: var(--error-text);
     background: var(--bg);
     cursor: pointer;
+}
+
+.navigation-panel__stop {
+    color: var(--error-text);
+}
+
+.navigation-panel__voice {
+    min-height: 32px;
+    margin-top: 8px;
+    font-size: 13px;
+    color: var(--muted);
+}
+
+.navigation-panel__voice[aria-pressed='true'] {
+    border-color: var(--brand);
+    color: var(--brand);
 }
 
 .route-panel__guide,
