@@ -17,10 +17,10 @@ type RoutePanelProps = {
 
 function guide(endpoints: Endpoints): string | null {
     if (!endpoints.start) {
-        return '출발지를 검색하거나 지도를 눌러 고르세요.';
+        return '출발지를 검색하거나, 지도를 눌러 나온 카드에서 고르세요.';
     }
     if (!endpoints.goal) {
-        return '도착지를 검색하거나 지도를 눌러 고르세요.';
+        return '도착지를 검색하거나, 지도를 눌러 나온 카드에서 고르세요.';
     }
     return null;
 }
