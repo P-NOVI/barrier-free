@@ -82,7 +82,7 @@ def test_search_returns_places(kakao) -> None:
     assert "sort" not in request.url.params
 
 
-def test_search_near_coordinate_sorts_by_distance(kakao) -> None:
+def test_search_near_coordinate_sends_center(kakao) -> None:
     received = kakao(respond_with(CITY_HALL))
 
     client.get(
@@ -93,7 +93,7 @@ def test_search_near_coordinate_sorts_by_distance(kakao) -> None:
     params = received[0].url.params
     assert params["query"] == "시청"
     assert (params["x"], params["y"]) == ("126.9779", "37.5663")
-    assert params["sort"] == "distance"
+    assert "sort" not in params
     assert params["size"] == "5"
 
 

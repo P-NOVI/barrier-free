@@ -44,7 +44,9 @@ def search_places(
 ) -> list[Place]:
     params: dict[str, str | int | float] = {"query": query, "size": size}
     if near is not None:
-        params |= {"x": near[0], "y": near[1], "sort": "distance"}
+        # 정렬은 정확도순(카카오 기본값)으로 둔다. 거리순은 이름이 덜 맞는 가까운 곳을
+        # 먼저 보여 준다. 좌표를 주면 근처 장소가 앞에 오고 distance 도 함께 온다.
+        params |= {"x": near[0], "y": near[1]}
     try:
         response = client.get(KEYWORD_SEARCH_PATH, params=params)
         response.raise_for_status()

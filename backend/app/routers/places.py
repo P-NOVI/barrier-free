@@ -21,7 +21,11 @@ def get_places(
     query: Annotated[str, Query(min_length=1, max_length=100, pattern=r"\S")],
     lng: Annotated[
         float | None,
-        Query(ge=-180, le=180, description="lat 과 함께 주면 가까운 순으로 정렬"),
+        Query(
+            ge=-180,
+            le=180,
+            description="lat 과 함께 주면 그 근처를 우선하고 거리를 돌려준다",
+        ),
     ] = None,
     lat: Annotated[float | None, Query(ge=-90, le=90)] = None,
     size: Annotated[int, Query(ge=1, le=MAX_PAGE_SIZE)] = MAX_PAGE_SIZE,
