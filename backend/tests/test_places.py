@@ -184,13 +184,19 @@ BUILDING_LOT = AHYEON_LOT | {
 }
 
 
-def place(name: str, distance: int, category: str) -> dict[str, str]:
-    return {"place_name": name, "distance": str(distance), "category_name": category}
+def place(name: str, distance: int, category: str, group: str = "") -> dict[str, str]:
+    return {
+        "place_name": name,
+        "distance": str(distance),
+        "category_name": category,
+        "category_group_code": group,
+    }
 
 
 PARK = "여행 > 공원"
 APARTMENT = "부동산 > 주거시설 > 아파트 > 아파트 동"
 CAFE = "음식점 > 카페"
+WHOLESALE = "서비스,산업 > 식품 > 음료,주류제조 > 주류도매,주류유통"
 
 
 def kakao_local(lot: dict[str, object] | None, *nearby: dict[str, str]) -> Handler:
@@ -257,9 +263,36 @@ def test_nearby_search_request(kakao) -> None:
         ),
         pytest.param(
             AHYEON_LOT,
-            [place("동서재 닭강정", 3, CAFE)],
+            [
+                place("애오개어린이공원", 15, PARK),
+                place("낫배드커피 한남", 8, CAFE, "CE7"),
+            ],
+            "낫배드커피 한남",
+            id="shop-on-spot",
+        ),
+        pytest.param(
+            AHYEON_LOT,
+            [
+                place("뉴욕브라우니코리아", 0, WHOLESALE),
+                place("낫배드커피 한남", 0, CAFE, "CE7"),
+            ],
+            "낫배드커피 한남",
+            id="shop-beats-office-at-same-spot",
+        ),
+        pytest.param(
+            AHYEON_LOT,
+            [place("동서재 닭강정", 25, CAFE, "CE7")],
             "아현동 372-2",
-            id="shops-are-not-landmarks",
+            id="far-shops-are-not-landmarks",
+        ),
+        pytest.param(
+            AHYEON_LOT,
+            [
+                place("동서재 닭강정", 25, CAFE, "CE7"),
+                place("애오개어린이공원", 27, PARK),
+            ],
+            "애오개어린이공원",
+            id="landmark-beats-far-shop",
         ),
         pytest.param(AHYEON_LOT, [], "아현동 372-2", id="short-address"),
     ],

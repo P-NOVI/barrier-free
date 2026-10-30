@@ -79,6 +79,7 @@ def get_address(
             (lng, lat),
             settings.landmark_radius_m,
             settings.landmark_on_spot_m,
+            settings.place_on_spot_m,
         )
     except PlaceSearchError as error:
         raise kakao_failed(
