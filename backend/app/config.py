@@ -33,6 +33,11 @@ class Settings(BaseSettings):
     sdot_page_size: int = 1000
     # 센서는 10분마다 측정한다. 이 시간 안에는 API를 다시 부르지 않는다.
     sdot_cache_ttl_s: float = 60.0
+    # PostgreSQL 접속 주소. 비밀번호가 들어 있으므로 backend/.env 에만 둔다.
+    # 형식: postgresql+psycopg://barrierfree:<비밀번호>@localhost:5432/barrierfree
+    database_url: SecretStr = SecretStr("")
+    # DB가 꺼져 있을 때 이 시간만 기다리고 실패한다.
+    database_connect_timeout_s: int = 3
     # 지도에서 누른 곳의 이름
     # - place_on_spot 안 장소는 분류와 상관없이(가게도) 그 이름으로 부른다.
     #   가장 가까운 곳과 same_spot 안(같은 건물쯤)이면 지도에 이름이 보이는 곳을 쓴다.
