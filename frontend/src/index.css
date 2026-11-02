@@ -644,6 +644,33 @@ body,
     outline: 2px solid var(--border);
 }
 
+/* 검색어가 없을 때 검색창 아래에 보이는 최근 경로·검색 */
+.place-search__recent-title {
+    margin: 8px 0 0;
+    padding: 0 8px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--muted);
+}
+
+.place-search__recent-item {
+    display: flex;
+}
+
+.place-search__recent-item button:first-child {
+    flex: 1;
+    min-width: 0;
+}
+
+.place-search__results .place-search__remove {
+    flex: none;
+    justify-content: center;
+    align-items: center;
+    width: 44px;
+    font-size: 18px;
+    color: var(--muted);
+}
+
 .place-search__name {
     font-weight: 600;
 }
