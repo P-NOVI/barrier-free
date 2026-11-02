@@ -1,6 +1,7 @@
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
+import { type Elevator, elevatorName } from '../lib/elevators';
 import type { LocationFix } from '../lib/geolocation';
 import {
     type LngLat,
@@ -62,6 +63,8 @@ const PIN_SVG =
     '<svg viewBox="0 0 24 35" aria-hidden="true">' +
     '<path d="M12 35 1.76 18.26A12 12 0 1 1 22.24 18.26Z"/>' +
     '</svg>';
+// 기본값을 렌더마다 새 배열로 만들면 마커 effect 가 매번 다시 돈다
+const NO_ELEVATORS: Elevator[] = [];
 /** 경로 전체가 보이게 맞출 때 지도 가장자리 여백(px) */
 export type FitPadding = {
     top: number;
@@ -86,6 +89,8 @@ type MapViewProps = {
     /** picked 위치 위에 띄울 카드. 아래 꼬리가 그 위치를 가리킨다. */
     popup?: ReactNode;
     path?: LngLat[] | null;
+    /** 마커로 보여 줄 지하철역 엘리베이터 */
+    elevators?: Elevator[];
     /** 내 위치. 파란 점과 오차 반경 원으로 그린다. */
     myLocation?: LocationFix | null;
     /** 지도 위에 패널이 떠 있으면 그만큼 여백을 더 준다. 바뀌면 경로에 다시 맞춘다. */
@@ -95,6 +100,7 @@ type MapViewProps = {
     /** 지도 가운데에 계속 둘 위치 (안내 중 내 위치) */
     follow?: LngLat | null;
     onMapClick?: (position: LngLat) => void;
+    onElevatorClick?: (elevator: Elevator) => void;
     /** 사용자가 지도를 끌기 시작할 때 */
     onDragStart?: () => void;
     /** 지도 이동·확대가 끝날 때마다 화면 중심을 알린다. */
@@ -216,6 +222,32 @@ function usePopup(
         };
     }, [map, position, content, inset]);
     return content;
+}
+
+function useElevatorMarkers(
+    map: kakao.maps.Map | null,
+    elevators: Elevator[],
+    onClick: ((elevator: Elevator) => void) | undefined,
+) {
+    useEffect(() => {
+        if (!map) {
+            return;
+        }
+        const markers = elevators.map((elevator) => {
+            const marker = new kakao.maps.Marker({
+                map,
+                position: toLatLng(elevator.position),
+                title: elevatorName(elevator),
+            });
+            if (onClick) {
+                kakao.maps.event.addListener(marker, 'click', () =>
+                    onClick(elevator),
+                );
+            }
+            return marker;
+        });
+        return () => markers.forEach((marker) => marker.setMap(null));
+    }, [map, elevators, onClick]);
 }
 
 function useMyLocation(
@@ -369,11 +401,13 @@ export default function MapView({
     picked,
     popup,
     path,
+    elevators = NO_ELEVATORS,
     myLocation,
     fitPadding = DEFAULT_FIT_PADDING,
     fitRoute = true,
     follow,
     onMapClick,
+    onElevatorClick,
     onCenterChange,
     onDragStart,
 }: MapViewProps) {
@@ -449,6 +483,7 @@ export default function MapView({
     useFollow(map, follow);
     useRouteArrows(map, path);
     useMyLocation(map, myLocation);
+    useElevatorMarkers(map, elevators, onElevatorClick);
     usePin(map, start, '출발', 'start');
     usePin(map, goal, '도착', 'goal');
     const popupContainer = usePopup(map, picked, fitPadding);
@@ -465,6 +500,9 @@ export default function MapView({
                 © OpenStreetMap contributors
             </a>
             {popup && createPortal(popup, popupContainer)}
+            <span className="map-view__source">
+                엘리베이터 위치: 서울시 공공데이터
+            </span>
             {error && (
                 <p role="alert" className="map-view__error">
                     {error}
