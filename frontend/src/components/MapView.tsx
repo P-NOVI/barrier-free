@@ -1,11 +1,14 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 
 import type { SensorCongestion } from '../lib/congestionApi';
+import { type Elevator, elevatorName } from '../lib/elevators';
 import { formatClock } from '../lib/format';
 import type { LocationFix } from '../lib/geolocation';
 import {
     type LngLat,
     loadKakaoMaps,
+    panToFit,
     SEOUL_CITY_HALL,
     toLatLng,
     toLngLat,
@@ -54,11 +57,17 @@ const ROUTE_ARROW_Z_INDEX = 0;
 const CONGESTION_PIN_Z_INDEX = 1;
 const MY_LOCATION_Z_INDEX = 2;
 const PIN_Z_INDEX = 3;
+// 선택한 장소 카드는 핀 위에 뜬다.
+const POPUP_Z_INDEX = 4;
+// 카드 아래 꼬리 높이(px). index.css 의 .place-info::after 와 같은 값.
+const POPUP_TAIL = 10;
 // 출발·도착 핀: 둥근 머리에 글자를 넣고, 아래 뾰족한 끝이 지점을 가리킨다. 색은 CSS 가 정한다.
 const PIN_SVG =
     '<svg viewBox="0 0 24 35" aria-hidden="true">' +
     '<path d="M12 35 1.76 18.26A12 12 0 1 1 22.24 18.26Z"/>' +
     '</svg>';
+// 기본값을 렌더마다 새 배열로 만들면 마커 effect 가 매번 다시 돈다
+const NO_ELEVATORS: Elevator[] = [];
 /** 경로 전체가 보이게 맞출 때 지도 가장자리 여백(px) */
 export type FitPadding = {
     top: number;
@@ -78,7 +87,13 @@ type MapViewProps = {
     center?: LngLat;
     start?: LngLat | null;
     goal?: LngLat | null;
+    /** 지도를 눌러 고른 장소. 카드가 이 위치를 가리킨다. */
+    picked?: LngLat | null;
+    /** picked 위치 위에 띄울 카드. 아래 꼬리가 그 위치를 가리킨다. */
+    popup?: ReactNode;
     path?: LngLat[] | null;
+    /** 마커로 보여 줄 지하철역 엘리베이터 */
+    elevators?: Elevator[];
     /** 내 위치. 파란 점과 오차 반경 원으로 그린다. */
     myLocation?: LocationFix | null;
     /** 센서별 유동인구. 있으면 센서 위치에 숫자 핀으로 그린다. */
@@ -90,6 +105,7 @@ type MapViewProps = {
     /** 지도 가운데에 계속 둘 위치 (안내 중 내 위치) */
     follow?: LngLat | null;
     onMapClick?: (position: LngLat) => void;
+    onElevatorClick?: (elevator: Elevator) => void;
     /** 사용자가 지도를 끌기 시작할 때 */
     onDragStart?: () => void;
     /** 지도 이동·확대가 끝날 때마다 화면 중심을 알린다. */
@@ -181,6 +197,103 @@ function useCongestionPins(
         });
         return () => overlays.forEach((overlay) => overlay.setMap(null));
     }, [map, sensors]);
+}
+
+/** position 위에 카드를 띄울 자리를 만들고, 그 DOM 을 돌려준다. 카드는 portal 로 그린다. */
+function usePopup(
+    map: kakao.maps.Map | null,
+    position: LngLat | null | undefined,
+    inset: FitPadding,
+) {
+    const [content] = useState(() => {
+        const element = document.createElement('div');
+        element.className = 'map-popup';
+        return element;
+    });
+    useEffect(() => {
+        if (!map || !position) {
+            return;
+        }
+        const overlay = new kakao.maps.CustomOverlay({
+            position: toLatLng(position),
+            content,
+            yAnchor: 1,
+            // 카드 안을 눌러도 지도 클릭으로 넘어가지 않게 한다.
+            clickable: true,
+            zIndex: POPUP_Z_INDEX,
+        });
+        overlay.setMap(map);
+
+        // 카드 DOM 은 높이 0 인 자리에 아래를 기준으로 붙어 있다(.map-popup).
+        // 이름·주소가 와서 카드가 커져도 꼬리 끝이 고른 위치에 그대로 있다.
+        const card = content.firstElementChild;
+        if (!(card instanceof HTMLElement)) {
+            return () => overlay.setMap(null);
+        }
+
+        // 카드가 화면 밖이나 패널 뒤로 잘리면 보이도록 지도를 옮긴다.
+        // 이름·주소가 오면 카드 크기가 달라지므로 크기가 바뀔 때마다 다시 본다.
+        let lastHeight = 0;
+        const keepInView = () => {
+            const height = card.offsetHeight + POPUP_TAIL;
+            // 사용자가 지도를 끌어 카드를 화면 밖으로 보냈을 때 되돌리지 않도록,
+            // 카드 높이가 실제로 달라졌을 때만 본다. 숨겨졌다 다시 보이는 것(0)은 무시한다.
+            if (height === POPUP_TAIL || height === lastHeight) {
+                return;
+            }
+            lastHeight = height;
+            const { x, y } = map
+                .getProjection()
+                .containerPointFromCoords(toLatLng(position));
+            const node = map.getNode();
+            const [dx, dy] = panToFit(
+                {
+                    left: x - card.offsetWidth / 2,
+                    right: x + card.offsetWidth / 2,
+                    top: y - height,
+                    bottom: y,
+                },
+                { width: node.clientWidth, height: node.clientHeight },
+                inset,
+            );
+            if (dx || dy) {
+                map.panBy(dx, dy);
+            }
+        };
+        const observer = new ResizeObserver(keepInView);
+        observer.observe(card);
+        return () => {
+            observer.disconnect();
+            overlay.setMap(null);
+        };
+    }, [map, position, content, inset]);
+    return content;
+}
+
+function useElevatorMarkers(
+    map: kakao.maps.Map | null,
+    elevators: Elevator[],
+    onClick: ((elevator: Elevator) => void) | undefined,
+) {
+    useEffect(() => {
+        if (!map) {
+            return;
+        }
+        const markers = elevators.map((elevator) => {
+            const marker = new kakao.maps.Marker({
+                map,
+                position: toLatLng(elevator.position),
+                title: elevatorName(elevator),
+            });
+            if (onClick) {
+                kakao.maps.event.addListener(marker, 'click', () =>
+                    onClick(elevator),
+                );
+            }
+            return marker;
+        });
+        return () => markers.forEach((marker) => marker.setMap(null));
+    }, [map, elevators, onClick]);
 }
 
 function useMyLocation(
@@ -331,13 +444,17 @@ export default function MapView({
     center = SEOUL_CITY_HALL,
     start,
     goal,
+    picked,
+    popup,
     path,
+    elevators = NO_ELEVATORS,
     myLocation,
     congestion,
     fitPadding = DEFAULT_FIT_PADDING,
     fitRoute = true,
     follow,
     onMapClick,
+    onElevatorClick,
     onCenterChange,
     onDragStart,
 }: MapViewProps) {
@@ -414,8 +531,10 @@ export default function MapView({
     useRouteArrows(map, path);
     useCongestionPins(map, congestion);
     useMyLocation(map, myLocation);
+    useElevatorMarkers(map, elevators, onElevatorClick);
     usePin(map, start, '출발', 'start');
     usePin(map, goal, '도착', 'goal');
+    const popupContainer = usePopup(map, picked, fitPadding);
 
     return (
         <div className="map-view">
@@ -428,6 +547,10 @@ export default function MapView({
             >
                 © OpenStreetMap contributors
             </a>
+            {popup && createPortal(popup, popupContainer)}
+            <span className="map-view__source">
+                엘리베이터 위치: 서울시 공공데이터
+            </span>
             {error && (
                 <p role="alert" className="map-view__error">
                     {error}
