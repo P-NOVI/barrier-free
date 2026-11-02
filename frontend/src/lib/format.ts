@@ -12,3 +12,10 @@ export function formatDistance(meters: number): string {
 export function formatGrade(ratio: number): string {
     return `${(ratio * 100).toFixed(1)}%`;
 }
+
+const CLOCK_PATTERN = /T(\d{2}:\d{2})/;
+
+/** ISO 8601 시각의 시:분. 브라우저 시간대와 상관없이 문자열에 적힌 시각 그대로 쓴다. */
+export function formatClock(iso: string): string {
+    return CLOCK_PATTERN.exec(iso)?.[1] ?? iso;
+}
