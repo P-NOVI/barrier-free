@@ -9,7 +9,7 @@ from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
 from itertools import accumulate, pairwise
 
-from core.graph import Arc, Graph
+from core.graph import Arc, Graph, shape
 from core.pathfinding import Path
 from core.snap import distance_m
 
@@ -68,11 +68,6 @@ def leaving_turns(graph: Graph, path: Path) -> Iterator[tuple[int, float]]:
         if straight == outgoing and abs(straight_angle) <= CONTINUE_MAX_DEG:
             continue
         yield step, turn_angle(arrival, graph, outgoing)
-
-
-def shape(graph: Graph, arc: Arc) -> list[LngLat]:
-    source, target = graph.nodes[arc.source], graph.nodes[arc.target]
-    return [(source.lon, source.lat), *arc.geometry, (target.lon, target.lat)]
 
 
 def sample(points: Iterable[LngLat]) -> LngLat:

@@ -3,13 +3,18 @@ from enum import StrEnum
 from itertools import accumulate, pairwise
 
 from core.graph import Graph, Node
-from core.pathfinding import Path, PathSummary, find_path, summarize
+from core.pathfinding import Path, PathSummary, find_path_between, summarize
 from core.profiles import Profile
 from core.reachability import EndpointFailure, pick_endpoints
+from core.road_point import RoadPoint, with_road_points
 from core.snap import distance_m
 from core.turns import find_turns
 
 LngLat = tuple[float, float]
+
+# 찍은 곳에서 길까지는 길이 아닌 곳을 걷는 거리라, 경로 비용에 이 배로 더한다.
+# 더 먼 길은 그만큼 경로가 짧아질 때만 고른다. 1 이상이어야 A* 결과가 가장 싸다.
+GAP_COST_FACTOR = 3.0
 
 
 class RouteFailure(StrEnum):
@@ -61,12 +66,23 @@ def find_route(
     profile: Profile,
     max_snap_distance_m: float,
 ) -> Route:
-    """반경 안에서 이동 조건으로 이어진 출발·도착 노드를 골라 추천 경로를 찾는다."""
+    """이동 조건으로 이어진 길 위 출발·도착 지점을 골라 추천 경로를 찾는다."""
     endpoints = pick_endpoints(graph, start, goal, profile, max_snap_distance_m)
     if isinstance(endpoints, EndpointFailure):
         raise RouteNotFoundError(ENDPOINT_FAILURES[endpoints])
 
-    path = find_path(graph, endpoints.start, endpoints.goal, profile)
+    # 후보 지점에서 길을 나눠 임시 노드로 더한 그래프로, 길까지 거리를 더해 가장 싼
+    # 출발·도착 후보 조합을 찾는다.
+    graph, nodes = with_road_points(graph, [*endpoints.starts, *endpoints.goals])
+    starts = gaps_by_node(endpoints.starts, nodes[: len(endpoints.starts)])
+    goals = gaps_by_node(endpoints.goals, nodes[len(endpoints.starts) :])
+    path = find_path_between(
+        graph,
+        {node: gap * GAP_COST_FACTOR for node, gap in starts.items()},
+        {node: gap * GAP_COST_FACTOR for node, gap in goals.items()},
+        goal,
+        profile,
+    )
     if path is None:
         raise RouteNotFoundError(RouteFailure.NO_PATH)
 
@@ -84,9 +100,17 @@ def find_route(
             RouteTurn(node_indices[turn.step], turn.angle)
             for turn in find_turns(graph, path)
         ],
-        start_gap_m=endpoints.start_gap_m,
-        goal_gap_m=endpoints.goal_gap_m,
+        start_gap_m=starts[path.nodes[0]],
+        goal_gap_m=goals[path.nodes[-1]],
     )
+
+
+def gaps_by_node(points: list[RoadPoint], nodes: list[int]) -> dict[int, float]:
+    """노드 → 찍은 곳에서 그 지점까지 거리. 여러 지점이 한 노드(길 끝)면 가까운 쪽."""
+    gaps: dict[int, float] = {}
+    for point, node in zip(points, nodes, strict=True):
+        gaps[node] = min(point.gap_m, gaps.get(node, point.gap_m))
+    return gaps
 
 
 def trace(graph: Graph, path: Path) -> tuple[list[LngLat], list[float], list[float]]:

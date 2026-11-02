@@ -1,7 +1,8 @@
+from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
 from typing import Any
 
-from core.snap import NodeIndex
+from core.snap import EdgeIndex, LngLat, NodeIndex
 
 
 # slots: 서울 전체 그래프(노드 약 17만, 구간 약 48만 방향)의 메모리를 줄인다.
@@ -33,10 +34,15 @@ class Arc:
 
 @dataclass(frozen=True)
 class Graph:
-    nodes: list[Node]
-    adjacency: list[list[Arc]]
+    # 출발·도착을 더한 그래프(core/road_point.py)는 원래 목록 위에 덧붙인 목록을 쓴다.
+    nodes: Sequence[Node]
+    adjacency: Sequence[Sequence[Arc]]
     # 좌표 → 최근접 노드 검색용 (core/snap.py)
     node_index: NodeIndex
+    # 길마다 정방향(u → v) Arc 하나. edge_index 의 길 번호가 이 목록의 순서다.
+    edges: Sequence[Arc]
+    # 좌표 → 가까운 길 검색용 (core/snap.py)
+    edge_index: EdgeIndex
     # 이동 조건별 연결 요소 번호 캐시 (core/reachability.py)
     component_cache: dict[tuple, list[int]] = field(
         default_factory=dict, compare=False, repr=False
@@ -50,6 +56,7 @@ def build_graph(data: dict[str, Any]) -> Graph:
     """
     nodes = [Node(n["lon"], n["lat"], n["elevation"]) for n in data["nodes"]]
     adjacency: list[list[Arc]] = [[] for _ in nodes]
+    edges: list[Arc] = []
     for edge in data["edges"]:
         forward = Arc(
             edge_id=edge["id"],
@@ -71,4 +78,21 @@ def build_graph(data: dict[str, Any]) -> Graph:
         )
         adjacency[forward.source].append(forward)
         adjacency[backward.source].append(backward)
-    return Graph(nodes, adjacency, NodeIndex([(n.lon, n.lat) for n in nodes]))
+        edges.append(forward)
+    return Graph(
+        nodes,
+        adjacency,
+        NodeIndex([(n.lon, n.lat) for n in nodes]),
+        edges,
+        EdgeIndex(arc_shape(nodes, arc) for arc in edges),
+    )
+
+
+def shape(graph: Graph, arc: Arc) -> list[LngLat]:
+    """arc 의 길 모양. source 부터 target 까지 (경도, 위도)."""
+    return arc_shape(graph.nodes, arc)
+
+
+def arc_shape(nodes: Sequence[Node], arc: Arc) -> list[LngLat]:
+    source, target = nodes[arc.source], nodes[arc.target]
+    return [(source.lon, source.lat), *arc.geometry, (target.lon, target.lat)]
