@@ -1,6 +1,12 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { loadKakaoMaps, sdkUrl, toLatLng, toLngLat } from './kakaoMap';
+import {
+    loadKakaoMaps,
+    panToFit,
+    sdkUrl,
+    toLatLng,
+    toLngLat,
+} from './kakaoMap';
 
 class FakeLatLng {
     private readonly lat: number;
@@ -56,5 +62,30 @@ describe('loadKakaoMaps', () => {
         await expect(loadKakaoMaps('')).rejects.toThrow(
             'VITE_KAKAO_MAP_APP_KEY',
         );
+    });
+});
+
+describe('panToFit', () => {
+    const view = { width: 1000, height: 800 };
+    const inset = { top: 48, right: 48, bottom: 48, left: 440 };
+
+    it('이미 들어와 있으면 옮기지 않는다', () => {
+        const box = { left: 500, top: 200, right: 760, bottom: 400 };
+        expect(panToFit(box, view, inset)).toEqual([0, 0]);
+    });
+
+    it('위로 잘리면 그만큼 지도를 위로 옮긴다 (panBy 는 음수)', () => {
+        const box = { left: 500, top: 10, right: 760, bottom: 200 };
+        expect(panToFit(box, view, inset)).toEqual([0, -38]);
+    });
+
+    it('왼쪽 패널에 가리면 지도를 왼쪽으로 옮긴다', () => {
+        const box = { left: 300, top: 200, right: 560, bottom: 400 };
+        expect(panToFit(box, view, inset)).toEqual([-140, 0]);
+    });
+
+    it('오른쪽으로 잘리면 지도를 오른쪽으로 옮긴다', () => {
+        const box = { left: 800, top: 200, right: 1060, bottom: 400 };
+        expect(panToFit(box, view, inset)).toEqual([108, 0]);
     });
 });
