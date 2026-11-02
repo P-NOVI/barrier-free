@@ -1,12 +1,17 @@
 import type { NavigationState } from '../hooks/useNavigation';
 import type { RouteState } from '../hooks/useRoute';
 import { formatDistance } from '../lib/format';
+import { DIRECTION_LABELS, type Turn } from '../lib/turns';
 
 type NavigationPanelProps = {
     route: RouteState;
     navigation: NavigationState;
     /** 지도가 내 위치를 따라가는 중인지 */
     following: boolean;
+    /** 음성 안내가 켜져 있는지 */
+    voice: boolean;
+    /** 없으면(음성 기능이 없는 브라우저) 음성 버튼을 숨긴다. */
+    onVoiceChange?: (on: boolean) => void;
     onStop: () => void;
 };
 
@@ -44,15 +49,57 @@ function notice(route: RouteState, navigation: NavigationState): Notice | null {
     }
 }
 
-/** 안내 중 경로 패널 자리에 남은 거리와 안내 상태를 보인다. */
+/** 다음 회전 방향 화살표. 회전이 더 없으면 도착 깃발 */
+function TurnIcon({ turn }: { turn: Turn | null }) {
+    if (!turn) {
+        return (
+            <svg
+                className="navigation-panel__icon"
+                viewBox="0 0 24 24"
+                aria-hidden="true"
+            >
+                <path d="M6 3h2v18H6zM8 4h10l-2.5 4L18 12H8z" />
+            </svg>
+        );
+    }
+    // 위쪽 화살표를 꺾이는 각도만큼 돌린다. 오른쪽이 +
+    const angle = Math.max(-180, Math.min(180, turn.angle));
+    return (
+        <svg
+            className="navigation-panel__icon"
+            viewBox="0 0 24 24"
+            style={{ transform: `rotate(${angle}deg)` }}
+            aria-hidden="true"
+        >
+            <path d="M12 2l8 9h-5v11H9V11H4z" />
+        </svg>
+    );
+}
+
+function instruction({ next, judgement }: NavigationState): string {
+    if (!next) {
+        return '-';
+    }
+    if (judgement === 'arrived') {
+        return '도착';
+    }
+    const distance = formatDistance(next.distanceM);
+    return next.turn
+        ? `${distance} 앞 ${DIRECTION_LABELS[next.turn.direction]}`
+        : `${distance} 앞 도착`;
+}
+
+/** 안내 중 경로 패널 자리에 다음 회전, 남은 거리, 안내 상태를 보인다. */
 export default function NavigationPanel({
     route,
     navigation,
     following,
+    voice,
+    onVoiceChange,
     onStop,
 }: NavigationPanelProps) {
     const message = notice(route, navigation);
-    const { progress } = navigation;
+    const { progress, next, judgement } = navigation;
 
     return (
         <section
@@ -60,11 +107,13 @@ export default function NavigationPanel({
             aria-label="경로 안내"
         >
             <div className="route-panel__row">
-                <p className="navigation-panel__remaining">
-                    남은 거리
-                    <strong>
-                        {progress ? formatDistance(progress.remainingM) : '-'}
-                    </strong>
+                <p className="navigation-panel__next">
+                    {next && (
+                        <TurnIcon
+                            turn={judgement === 'arrived' ? null : next.turn}
+                        />
+                    )}
+                    <strong>{instruction(navigation)}</strong>
                 </p>
                 <button
                     type="button"
@@ -73,6 +122,24 @@ export default function NavigationPanel({
                 >
                     안내 종료
                 </button>
+            </div>
+            <div className="route-panel__row">
+                <p className="navigation-panel__remaining">
+                    남은 거리{' '}
+                    <strong>
+                        {progress ? formatDistance(progress.remainingM) : '-'}
+                    </strong>
+                </p>
+                {onVoiceChange && (
+                    <button
+                        type="button"
+                        className="navigation-panel__voice"
+                        aria-pressed={voice}
+                        onClick={() => onVoiceChange(!voice)}
+                    >
+                        {voice ? '음성 안내 켬' : '음성 안내 끔'}
+                    </button>
+                )}
             </div>
             <div aria-live="polite">
                 {message && (

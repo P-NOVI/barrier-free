@@ -8,6 +8,7 @@ import RoutePanel from './components/RoutePanel';
 import { useMediaQuery } from './hooks/useMediaQuery';
 import { useNavigation } from './hooks/useNavigation';
 import { useRoute } from './hooks/useRoute';
+import { useVoiceGuidance } from './hooks/useVoiceGuidance';
 import { useWakeLock } from './hooks/useWakeLock';
 import type { LocationFix } from './lib/geolocation';
 import { type LngLat, SEOUL_CITY_HALL } from './lib/kakaoMap';
@@ -21,6 +22,13 @@ import {
     renameEndpoint,
     selectEndpoint,
 } from './lib/selection';
+import {
+    canSpeak,
+    speak,
+    START_TEXT,
+    stopSpeaking,
+    VOICE_ON_TEXT,
+} from './lib/voiceGuidance';
 
 // 이보다 넓으면 왼쪽 위에 패널 카드 하나, 좁으면 검색창·경로 패널을 위아래에 띄운다.
 // index.css 와 같은 값.
@@ -46,6 +54,9 @@ export default function App() {
     const [navigating, setNavigating] = useState(false);
     // 안내 중 지도가 내 위치를 따라가는지. 지도를 끌면 멈추고, 내 위치 버튼을 누르면 다시 따라간다.
     const [following, setFollowing] = useState(true);
+    // 음성 안내. 음성 기능이 없는 브라우저에서는 끈다.
+    const speechSupported = canSpeak();
+    const [voice, setVoice] = useState(speechSupported);
     const start = endpoints.start?.position ?? null;
     const goal = endpoints.goal?.position ?? null;
     const route = useRoute(start, goal, preset);
@@ -71,6 +82,11 @@ export default function App() {
         reroute,
     );
     useWakeLock(navigating);
+    useVoiceGuidance(
+        navigating && voice,
+        navigation,
+        route.status === 'loading',
+    );
     const navigationFix = navigation.fix;
 
     const handleMapClick = useCallback((position: LngLat) => {
@@ -103,10 +119,14 @@ export default function App() {
         setFollowing(true);
     }, []);
 
+    // 휴대폰 브라우저는 버튼을 누를 때 처음 소리를 내야 이후 안내도 읽어 준다.
     const startNavigation = useCallback(() => {
         setFollowing(true);
         setNavigating(true);
-    }, []);
+        if (voice) {
+            speak(START_TEXT);
+        }
+    }, [voice]);
 
     const stopNavigation = () => {
         // 안내를 마친 자리를 내 위치로 남긴다.
@@ -114,6 +134,16 @@ export default function App() {
             setMyLocation(navigationFix);
         }
         setNavigating(false);
+        stopSpeaking();
+    };
+
+    const changeVoice = (on: boolean) => {
+        setVoice(on);
+        if (on) {
+            speak(VOICE_ON_TEXT);
+        } else {
+            stopSpeaking();
+        }
     };
 
     const stopFollowing = useCallback(() => setFollowing(false), []);
@@ -135,6 +165,10 @@ export default function App() {
                         route={route}
                         navigation={navigation}
                         following={following}
+                        voice={voice}
+                        onVoiceChange={
+                            speechSupported ? changeVoice : undefined
+                        }
                         onStop={stopNavigation}
                     />
                 ) : (
