@@ -46,3 +46,12 @@ sdot:
   max_lat: 37.75
   min_lon: 126.7
   max_lon: 127.2
+
+# 06 단계. 05 단계처럼 run_all.py 에 넣지 않고 따로 실행한다.
+sdot_history:
+  # 열린데이터광장 OA-15964 주간 CSV (S-DoT_WALK_*.csv)
+  source_dir: raw/sdot/history
+  output: interim/sdot/history.parquet
+  report: interim/sdot/history_report.json
+  # 저장소 기준. 위치를 모르는 센서 코드를 보고서에 남기는 데 쓴다.
+  sensors: data/processed/sdot_sensors.json
