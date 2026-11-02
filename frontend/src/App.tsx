@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import AccountMenu from './components/AccountMenu';
 import CongestionToggle from './components/CongestionToggle';
 import MapView, { type FitPadding } from './components/MapView';
 import MyLocationControl from './components/MyLocationControl';
@@ -11,13 +12,15 @@ import { useCongestion } from './hooks/useCongestion';
 import { useMediaQuery } from './hooks/useMediaQuery';
 import { useNavigation } from './hooks/useNavigation';
 import { useRoute } from './hooks/useRoute';
+import { useRouteHistory } from './hooks/useRouteHistory';
 import { useVoiceGuidance } from './hooks/useVoiceGuidance';
 import { useWakeLock } from './hooks/useWakeLock';
 import { type Elevator, elevatorName, fetchElevators } from './lib/elevators';
 import type { LocationFix } from './lib/geolocation';
+import { type RouteHistory, routeEndpoints } from './lib/historyApi';
 import { type LngLat, SEOUL_CITY_HALL } from './lib/kakaoMap';
 import { findAddress } from './lib/placeApi';
-import { DEFAULT_PRESET, type PresetId } from './lib/presets';
+import { DEFAULT_PRESET, isPresetId, type PresetId } from './lib/presets';
 import {
     CURRENT_LOCATION_LABEL,
     type Endpoint,
@@ -73,6 +76,7 @@ export default function App() {
     const start = endpoints.start?.position ?? null;
     const goal = endpoints.goal?.position ?? null;
     const route = useRoute(start, goal, preset);
+    useRouteHistory(endpoints, preset, route, navigating);
     // 안내 중 경로를 다시 찾는 동안에는 전 경로를 그대로 보여 준다.
     const shownRoute =
         route.status === 'success'
@@ -176,6 +180,21 @@ export default function App() {
         [],
     );
 
+    // 최근 경로: 그때의 출발·도착과 프리셋으로 다시 찾는다.
+    const handleSelectRoute = useCallback(
+        (entry: RouteHistory) => {
+            const { start: from, goal: to } = routeEndpoints(entry);
+            if (from) {
+                handleSelect('start', from);
+            }
+            handleSelect('goal', to);
+            if (isPresetId(entry.preset)) {
+                setPreset(entry.preset);
+            }
+        },
+        [handleSelect],
+    );
+
     const handlePick = useCallback(
         (role: EndpointRole) => {
             if (!picked) {
@@ -239,6 +258,7 @@ export default function App() {
                     endpoints={endpoints}
                     near={mapCenter}
                     onSelect={handleSelect}
+                    onSelectRoute={handleSelectRoute}
                     onLocate={setMyLocation}
                 />
                 {navigating ? (
@@ -301,6 +321,7 @@ export default function App() {
                 state={congestion}
                 onChange={setShowCongestion}
             />
+            {!navigating && <AccountMenu />}
             <MyLocationControl
                 onLocate={showMyLocation}
                 locate={

@@ -9,7 +9,11 @@ from fastapi import APIRouter, HTTPException, status
 from app.deps import CurrentUserDep, DbSessionDep, SettingsDep, UserDep
 from app.models import RouteHistory, SearchHistory
 from app.repositories import history_repository
-from app.repositories.user_repository import is_guest, load_preset, save_preset
+from app.repositories.user_repository import (
+    linked_providers,
+    load_preset,
+    save_preset,
+)
 from app.schemas import (
     PresetRequest,
     RouteError,
@@ -21,6 +25,7 @@ from app.schemas import (
     SearchHistoryResponse,
     SessionResponse,
 )
+from core.profiles import DEFAULT_PRESET
 
 router = APIRouter(tags=["me"])
 
@@ -29,9 +34,14 @@ NOT_FOUND = {
 }
 
 
-def session_response(session: DbSessionDep, user_id: int) -> SessionResponse:
+def session_response(session: DbSessionDep, user_id: int | None) -> SessionResponse:
+    if user_id is None:
+        return SessionResponse(is_guest=True, providers=[], preset=DEFAULT_PRESET)
+    providers = linked_providers(session, user_id)
     return SessionResponse(
-        is_guest=is_guest(session, user_id), preset=load_preset(session, user_id)
+        is_guest=not providers,
+        providers=providers,
+        preset=load_preset(session, user_id),
     )
 
 
@@ -74,6 +84,12 @@ def delete_or_404(
             detail={"reason": "history_not_found", "message": "이력이 없습니다."},
         )
     session.commit()
+
+
+@router.get("/session", response_model=SessionResponse)
+def get_session(user: CurrentUserDep, session: DbSessionDep) -> SessionResponse:
+    """쿠키의 사용자. 쿠키가 없어도 게스트를 만들지 않고 기본값을 준다."""
+    return session_response(session, user.id if user else None)
 
 
 @router.post("/session", response_model=SessionResponse)

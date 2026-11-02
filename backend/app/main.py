@@ -14,7 +14,7 @@ from app.db import create_tables, get_engine
 from app.deps import DbSessionDep
 from app.repositories.road_repository import load_graph
 from app.repositories.user_repository import purge_inactive_guests
-from app.routers import congestion, me, places, routes
+from app.routers import auth, congestion, me, places, routes
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +64,7 @@ app.include_router(routes.router, prefix="/api")
 app.include_router(places.router, prefix="/api")
 app.include_router(congestion.router, prefix="/api")
 app.include_router(me.router, prefix="/api")
+app.include_router(auth.router, prefix="/api")
 
 
 @app.exception_handler(OperationalError)

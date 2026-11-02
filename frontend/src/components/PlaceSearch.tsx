@@ -1,11 +1,24 @@
-import { type ReactNode, useId, useState } from 'react';
+import { type MouseEvent, type ReactNode, useId, useState } from 'react';
 
 import { useDebouncedValue } from '../hooks/useDebouncedValue';
 import { type PlaceSearchState, usePlaceSearch } from '../hooks/usePlaceSearch';
+import {
+    type RecentHistory,
+    useRecentHistory,
+} from '../hooks/useRecentHistory';
 import { formatDistance } from '../lib/format';
 import { getCurrentPosition, type LocationFix } from '../lib/geolocation';
+import {
+    addSearch,
+    recentPlaces,
+    type RouteHistory,
+    type SearchHistory,
+    searchEndpoint,
+    toSearchEntry,
+} from '../lib/historyApi';
 import type { LngLat } from '../lib/kakaoMap';
 import type { Place } from '../lib/placeApi';
+import { PRESETS } from '../lib/presets';
 import {
     CURRENT_LOCATION_LABEL,
     type Endpoint,
@@ -15,6 +28,9 @@ import {
 
 // 입력을 멈추고 이만큼 지나면 검색한다.
 const SEARCH_DELAY_MS = 300;
+// 검색창을 누르면 보일 최근 기록 수
+const RECENT_ROUTES = 3;
+const RECENT_PLACES = 5;
 
 const FIELD_LABELS: Record<EndpointRole, string> = {
     start: '출발',
@@ -26,6 +42,8 @@ type PlaceSearchProps = {
     /** 이 근처 장소를 앞에 두고 거리를 함께 보인다. */
     near: LngLat;
     onSelect: (role: EndpointRole, endpoint: Endpoint) => void;
+    /** 최근 경로를 고르면 출발·도착을 함께 바꾼다. */
+    onSelectRoute: (entry: RouteHistory) => void;
     /** 현재 위치를 찾으면 알린다. 지도에 내 위치로 표시한다. */
     onLocate: (fix: LocationFix) => void;
 };
@@ -85,6 +103,101 @@ function SearchResults({
     }
 }
 
+// 목록을 눌러도 입력창 포커스가 남아 목록이 닫히지 않게 한다.
+function keepFocus(event: MouseEvent) {
+    event.preventDefault();
+}
+
+function presetLabel(id: string): string {
+    return PRESETS.find((preset) => preset.id === id)?.label ?? id;
+}
+
+function RecentItem({
+    name,
+    detail,
+    onPick,
+    onRemove,
+}: {
+    name: string;
+    detail: string | null;
+    onPick: () => void;
+    onRemove: () => void;
+}) {
+    return (
+        <li className="place-search__recent-item">
+            <button type="button" onMouseDown={keepFocus} onClick={onPick}>
+                <span className="place-search__name">{name}</span>
+                {detail && (
+                    <span className="place-search__address">{detail}</span>
+                )}
+            </button>
+            <button
+                type="button"
+                className="place-search__remove"
+                aria-label={`${name} 기록 지우기`}
+                onMouseDown={keepFocus}
+                onClick={onRemove}
+            >
+                ×
+            </button>
+        </li>
+    );
+}
+
+function RecentList({
+    listId,
+    recent,
+    onPickSearch,
+    onPickRoute,
+}: {
+    listId: string;
+    recent: RecentHistory;
+    onPickSearch: (entry: SearchHistory) => void;
+    onPickRoute: (entry: RouteHistory) => void;
+}) {
+    const routes = recent.routes.slice(0, RECENT_ROUTES);
+    const places = recentPlaces(recent.searches, RECENT_PLACES);
+    if (routes.length === 0 && places.length === 0) {
+        return null;
+    }
+    return (
+        <div id={listId} className="place-search__recent">
+            {routes.length > 0 && (
+                <>
+                    <p className="place-search__recent-title">최근 경로</p>
+                    <ul className="place-search__results">
+                        {routes.map((entry) => (
+                            <RecentItem
+                                key={entry.id}
+                                name={`${entry.start_name} → ${entry.goal_name}`}
+                                detail={`${presetLabel(entry.preset)} · ${formatDistance(entry.distance_m)}`}
+                                onPick={() => onPickRoute(entry)}
+                                onRemove={() => recent.removeRoute(entry.id)}
+                            />
+                        ))}
+                    </ul>
+                </>
+            )}
+            {places.length > 0 && (
+                <>
+                    <p className="place-search__recent-title">최근 검색</p>
+                    <ul className="place-search__results">
+                        {places.map((entry) => (
+                            <RecentItem
+                                key={entry.id}
+                                name={entry.place_name ?? entry.query}
+                                detail={entry.address}
+                                onPick={() => onPickSearch(entry)}
+                                onRemove={() => recent.removeSearch(entry.id)}
+                            />
+                        ))}
+                    </ul>
+                </>
+            )}
+        </div>
+    );
+}
+
 /** 고른 장소가 바뀌면 부모가 key 로 다시 만들어 입력값을 그 이름으로 맞춘다. */
 function PlaceField({
     role,
@@ -92,29 +205,70 @@ function PlaceField({
     near,
     action,
     onSelect,
+    onSelectRoute,
 }: {
     role: EndpointRole;
     endpoint: Endpoint | null;
     near: LngLat | null;
     action?: ReactNode;
     onSelect: (endpoint: Endpoint) => void;
+    onSelectRoute: (entry: RouteHistory) => void;
 }) {
     const label = FIELD_LABELS[role];
     const [text, setText] = useState(endpoint?.label ?? '');
     // 사용자가 입력을 고친 뒤에만 검색한다.
     const [editing, setEditing] = useState(false);
+    // 입력창을 누르면 열고, 포커스가 이 칸 밖으로 나가면 닫는다.
+    const [listOpen, setListOpen] = useState(false);
+    const typing = editing && text.trim() !== '';
     const query = useDebouncedValue(editing ? text : '', SEARCH_DELAY_MS);
     const search = usePlaceSearch(query, near);
+    // 검색어가 없을 때는 검색 결과 대신 최근 기록을 보인다.
+    const recent = useRecentHistory(listOpen && !typing);
     const listId = useId();
 
-    const pick = (place: Place) => {
-        setText(place.name);
+    const choose = (endpoint: Endpoint) => {
+        setText(endpoint.label);
         setEditing(false);
-        onSelect({ position: place.position, label: place.name });
+        setListOpen(false);
+        onSelect(endpoint);
+    };
+
+    const pick = (place: Place) => {
+        // 기록을 못 남겨도 고른 장소는 그대로 쓴다.
+        addSearch(toSearchEntry(text, place)).catch(() => undefined);
+        choose({ position: place.position, label: place.name });
+    };
+
+    const pickRecent = (entry: SearchHistory) => {
+        const picked = searchEndpoint(entry);
+        if (!picked) {
+            return;
+        }
+        // 다시 고른 기록은 맨 앞으로 옮긴다.
+        addSearch({
+            query: entry.query,
+            place_name: entry.place_name,
+            address: entry.address,
+            position: entry.position,
+        }).catch(() => undefined);
+        choose(picked);
+    };
+
+    const pickRoute = (entry: RouteHistory) => {
+        setListOpen(false);
+        onSelectRoute(entry);
     };
 
     return (
-        <div className="place-search__field">
+        <div
+            className="place-search__field"
+            onBlur={(event) => {
+                if (!event.currentTarget.contains(event.relatedTarget)) {
+                    setListOpen(false);
+                }
+            }}
+        >
             <div className="place-search__row">
                 <label
                     className={`place-search__label place-search__label--${role}`}
@@ -126,6 +280,8 @@ function PlaceField({
                         placeholder={`${label}지 이름이나 주소`}
                         autoComplete="off"
                         aria-controls={listId}
+                        onFocus={() => setListOpen(true)}
+                        onClick={() => setListOpen(true)}
                         onChange={(event) => {
                             setText(event.target.value);
                             setEditing(true);
@@ -134,13 +290,14 @@ function PlaceField({
                             if (event.key === 'Escape') {
                                 setText(endpoint?.label ?? '');
                                 setEditing(false);
+                                setListOpen(false);
                             }
                         }}
                     />
                 </label>
                 {action}
             </div>
-            {editing && (
+            {typing && (
                 <div aria-live="polite">
                     <SearchResults
                         listId={listId}
@@ -148,6 +305,14 @@ function PlaceField({
                         onPick={pick}
                     />
                 </div>
+            )}
+            {listOpen && !typing && (
+                <RecentList
+                    listId={listId}
+                    recent={recent}
+                    onPickSearch={pickRecent}
+                    onPickRoute={pickRoute}
+                />
             )}
         </div>
     );
@@ -161,6 +326,7 @@ export default function PlaceSearch({
     endpoints,
     near,
     onSelect,
+    onSelectRoute,
     onLocate,
 }: PlaceSearchProps) {
     const [locate, setLocate] = useState<LocateState>({ status: 'idle' });
@@ -194,6 +360,7 @@ export default function PlaceSearch({
                 endpoint={endpoints.start}
                 near={near}
                 onSelect={(endpoint) => onSelect('start', endpoint)}
+                onSelectRoute={onSelectRoute}
                 action={
                     <button
                         type="button"
@@ -218,6 +385,7 @@ export default function PlaceSearch({
                 endpoint={endpoints.goal}
                 near={near}
                 onSelect={(endpoint) => onSelect('goal', endpoint)}
+                onSelectRoute={onSelectRoute}
             />
         </section>
     );

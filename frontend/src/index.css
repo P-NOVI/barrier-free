@@ -14,6 +14,9 @@
     --route-arrow: rgba(255, 255, 255, 0.6);
     --congestion-pin: #e8710a;
     --side-panel-width: 380px;
+    /* 카카오 로그인 버튼 색(카카오 디자인 가이드) */
+    --kakao-yellow: #fee500;
+    --kakao-label: rgba(0, 0, 0, 0.85);
 
     font:
         16px/1.5 system-ui,
@@ -259,6 +262,80 @@ body,
 
 .congestion-pin--open .congestion-pin__detail {
     display: block;
+}
+
+/* 좁은 화면: 엘리베이터 토글 아래 왼쪽 */
+.account-menu {
+    position: absolute;
+    top: 182px;
+    left: 12px;
+    z-index: 15;
+    max-width: 260px;
+}
+
+.account-menu__toggle {
+    display: inline-flex;
+    align-items: center;
+    height: 44px;
+    padding: 0 16px;
+    border-radius: 22px;
+    font-weight: 600;
+    color: var(--text);
+    background: var(--bg);
+    box-shadow: var(--panel-shadow);
+    list-style: none;
+    cursor: pointer;
+}
+
+.account-menu__toggle::-webkit-details-marker {
+    display: none;
+}
+
+.account-menu__panel {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 8px;
+    padding: 12px;
+    border-radius: 12px;
+    background: var(--bg);
+    box-shadow: var(--panel-shadow);
+}
+
+.account-menu__status,
+.account-menu__message {
+    margin: 0;
+    font-size: 13px;
+    color: var(--muted);
+}
+
+.account-menu__message {
+    padding: 6px 8px;
+    border-radius: 8px;
+    color: var(--error-text);
+    background: var(--error-bg);
+}
+
+.account-menu__login,
+.account-menu__logout {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 44px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font: inherit;
+    font-weight: 600;
+    color: var(--text);
+    text-decoration: none;
+    background: var(--bg);
+    cursor: pointer;
+}
+
+.account-menu__login--kakao {
+    border-color: var(--kakao-yellow);
+    color: var(--kakao-label);
+    background: var(--kakao-yellow);
 }
 
 /* 좁은 화면: 내 위치 버튼 아래 오른쪽 */
@@ -567,6 +644,33 @@ body,
     outline: 2px solid var(--border);
 }
 
+/* 검색어가 없을 때 검색창 아래에 보이는 최근 경로·검색 */
+.place-search__recent-title {
+    margin: 8px 0 0;
+    padding: 0 8px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--muted);
+}
+
+.place-search__recent-item {
+    display: flex;
+}
+
+.place-search__recent-item button:first-child {
+    flex: 1;
+    min-width: 0;
+}
+
+.place-search__results .place-search__remove {
+    flex: none;
+    justify-content: center;
+    align-items: center;
+    width: 44px;
+    font-size: 18px;
+    color: var(--muted);
+}
+
 .place-search__name {
     font-weight: 600;
 }
@@ -757,6 +861,18 @@ body,
     }
 
     /* 패널 카드 오른쪽 위 */
+    /* 넓은 화면: 지도 오른쪽 위. 메뉴를 펼쳐도 버튼은 오른쪽에 그대로 둔다. */
+    .account-menu {
+        top: 12px;
+        right: 12px;
+        left: auto;
+        text-align: right;
+    }
+
+    .account-menu__panel {
+        text-align: left;
+    }
+
     .map-toggle {
         top: 12px;
         left: calc(var(--side-panel-width) + 24px);
