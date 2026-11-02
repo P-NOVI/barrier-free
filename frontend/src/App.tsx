@@ -1,10 +1,12 @@
 import { useCallback, useState } from 'react';
 
 import MapView, { type FitPadding } from './components/MapView';
+import MyLocationControl from './components/MyLocationControl';
 import PlaceSearch from './components/PlaceSearch';
 import RoutePanel from './components/RoutePanel';
 import { useMediaQuery } from './hooks/useMediaQuery';
 import { useRoute } from './hooks/useRoute';
+import type { LocationFix } from './lib/geolocation';
 import { type LngLat, SEOUL_CITY_HALL } from './lib/kakaoMap';
 import { findAddress } from './lib/placeApi';
 import { DEFAULT_PRESET, type PresetId } from './lib/presets';
@@ -35,6 +37,8 @@ export default function App() {
     const [focus, setFocus] = useState<LngLat | null>(null);
     // 지도 화면 중심. 장소 검색은 이 근처를 앞에 둔다.
     const [mapCenter, setMapCenter] = useState<LngLat>(SEOUL_CITY_HALL);
+    // 마지막으로 찾은 내 위치. 지도에 파란 점으로 보인다.
+    const [myLocation, setMyLocation] = useState<LocationFix | null>(null);
     const start = endpoints.start?.position ?? null;
     const goal = endpoints.goal?.position ?? null;
     const route = useRoute(start, goal, preset);
@@ -63,6 +67,11 @@ export default function App() {
         [],
     );
 
+    const showMyLocation = useCallback((fix: LocationFix) => {
+        setMyLocation(fix);
+        setFocus(fix.position);
+    }, []);
+
     return (
         <div className="app">
             <aside className="side-panel" aria-label="길찾기">
@@ -73,6 +82,7 @@ export default function App() {
                     endpoints={endpoints}
                     near={mapCenter}
                     onSelect={handleSelect}
+                    onLocate={setMyLocation}
                 />
                 <RoutePanel
                     preset={preset}
@@ -92,7 +102,9 @@ export default function App() {
                 fitPadding={wide ? FIT_PADDING.wide : FIT_PADDING.narrow}
                 onMapClick={handleMapClick}
                 onCenterChange={setMapCenter}
+                myLocation={myLocation}
             />
+            <MyLocationControl onLocate={showMyLocation} />
         </div>
     );
 }

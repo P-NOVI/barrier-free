@@ -2,7 +2,8 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { getCurrentPosition } from './geolocation';
 
-type Outcome = { lng: number; lat: number } | { code: number };
+type Outcome =
+    { lng: number; lat: number; accuracy: number } | { code: number };
 
 const DENIED = { code: 1 };
 const TIMEOUT = { code: 3 };
@@ -14,7 +15,11 @@ function fakeGeolocation(...outcomes: Outcome[]) {
             const outcome = outcomes.shift();
             if (outcome && 'lng' in outcome) {
                 success({
-                    coords: { longitude: outcome.lng, latitude: outcome.lat },
+                    coords: {
+                        longitude: outcome.lng,
+                        latitude: outcome.lat,
+                        accuracy: outcome.accuracy,
+                    },
                 } as GeolocationPosition);
             } else {
                 failure?.(outcome as GeolocationPositionError);
@@ -28,15 +33,17 @@ function fakeGeolocation(...outcomes: Outcome[]) {
 }
 
 describe('getCurrentPosition', () => {
-    it('정확한 위치를 [경도, 위도] 로 돌려준다', async () => {
+    it('정확한 위치를 [경도, 위도] 와 오차 반경으로 돌려준다', async () => {
         const { geolocation, getCurrentPosition: call } = fakeGeolocation({
             lng: 126.97,
             lat: 37.56,
+            accuracy: 15,
         });
 
-        await expect(getCurrentPosition(geolocation)).resolves.toEqual([
-            126.97, 37.56,
-        ]);
+        await expect(getCurrentPosition(geolocation)).resolves.toEqual({
+            position: [126.97, 37.56],
+            accuracy: 15,
+        });
         expect(call.mock.calls[0][2]).toMatchObject({
             enableHighAccuracy: true,
         });
@@ -45,12 +52,13 @@ describe('getCurrentPosition', () => {
     it('정확한 위치가 실패하면 대략적인 위치로 다시 묻는다', async () => {
         const { geolocation, getCurrentPosition: call } = fakeGeolocation(
             TIMEOUT,
-            { lng: 126.98, lat: 37.57 },
+            { lng: 126.98, lat: 37.57, accuracy: 1200 },
         );
 
-        await expect(getCurrentPosition(geolocation)).resolves.toEqual([
-            126.98, 37.57,
-        ]);
+        await expect(getCurrentPosition(geolocation)).resolves.toEqual({
+            position: [126.98, 37.57],
+            accuracy: 1200,
+        });
         expect(call.mock.calls[1][2]).toMatchObject({
             enableHighAccuracy: false,
         });

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 
+import type { LocationFix } from '../lib/geolocation';
 import {
     type LngLat,
     loadKakaoMaps,
@@ -24,6 +25,17 @@ const GAP_LINE: Omit<kakao.maps.PolylineOptions, 'path'> = {
     strokeOpacity: 0.8,
     strokeStyle: 'shortdash',
 };
+// 내 위치 오차 반경
+const ACCURACY_CIRCLE: Omit<kakao.maps.CircleOptions, 'center' | 'radius'> = {
+    strokeWeight: 1,
+    strokeColor: '#1a73e8',
+    strokeOpacity: 0.5,
+    fillColor: '#1a73e8',
+    fillOpacity: 0.12,
+};
+// 출발·도착 핀이 내 위치 점보다 위에 오게 한다.
+const MY_LOCATION_Z_INDEX = 1;
+const PIN_Z_INDEX = 2;
 /** 경로 전체가 보이게 맞출 때 지도 가장자리 여백(px) */
 export type FitPadding = {
     top: number;
@@ -44,6 +56,8 @@ type MapViewProps = {
     start?: LngLat | null;
     goal?: LngLat | null;
     path?: LngLat[] | null;
+    /** 내 위치. 파란 점과 오차 반경 원으로 그린다. */
+    myLocation?: LocationFix | null;
     /** 지도 위에 패널이 떠 있으면 그만큼 여백을 더 준다. 바뀌면 경로에 다시 맞춘다. */
     fitPadding?: FitPadding;
     onMapClick?: (position: LngLat) => void;
@@ -86,10 +100,43 @@ function usePin(
             position: toLatLng(position),
             content,
             yAnchor: 1,
+            zIndex: PIN_Z_INDEX,
         });
         overlay.setMap(map);
         return () => overlay.setMap(null);
     }, [map, position, label, modifier]);
+}
+
+function useMyLocation(
+    map: kakao.maps.Map | null,
+    fix: LocationFix | null | undefined,
+) {
+    useEffect(() => {
+        if (!map || !fix) {
+            return;
+        }
+        const center = toLatLng(fix.position);
+        const content = document.createElement('div');
+        content.className = 'my-location-dot';
+        content.setAttribute('role', 'img');
+        content.setAttribute('aria-label', '내 위치');
+        const dot = new kakao.maps.CustomOverlay({
+            position: center,
+            content,
+            zIndex: MY_LOCATION_Z_INDEX,
+        });
+        const circle = new kakao.maps.Circle({
+            ...ACCURACY_CIRCLE,
+            center,
+            radius: fix.accuracy,
+        });
+        circle.setMap(map);
+        dot.setMap(map);
+        return () => {
+            dot.setMap(null);
+            circle.setMap(null);
+        };
+    }, [map, fix]);
 }
 
 function useRouteLine(
@@ -142,6 +189,7 @@ export default function MapView({
     start,
     goal,
     path,
+    myLocation,
     fitPadding = DEFAULT_FIT_PADDING,
     onMapClick,
     onCenterChange,
@@ -214,6 +262,7 @@ export default function MapView({
     }, [map]);
 
     useRouteLine(map, path, start, goal, fitPadding);
+    useMyLocation(map, myLocation);
     usePin(map, start, '출발', 'start');
     usePin(map, goal, '도착', 'goal');
 
