@@ -35,6 +35,18 @@ describe('fetchRoute', () => {
         expect(String(url)).toBe('http://api.test/api/route');
         expect(init.method).toBe('POST');
         expect(JSON.parse(init.body)).toEqual(REQUEST);
+        expect(init.credentials).toBe('include');
+    });
+
+    it('주소 설정이 비어 있으면 화면과 같은 주소로 보낸다', async () => {
+        const fetchMock = vi.fn().mockResolvedValue(jsonResponse({}));
+        vi.stubGlobal('fetch', fetchMock);
+        vi.stubGlobal('location', { origin: 'http://localhost:5173' });
+
+        await fetchRoute(REQUEST, { baseUrl: '' });
+
+        const [url] = fetchMock.mock.calls[0];
+        expect(String(url)).toBe('http://localhost:5173/api/route');
     });
 
     it('백엔드 detail 의 안내 문구와 reason 을 오류로 바꾼다', async () => {

@@ -65,7 +65,8 @@ npm run dev
 ```
 
 - 터미널에 나온 주소(보통 http://localhost:5173)에서 화면이 뜨면 성공입니다.
-- 지도에서 경로를 찾으려면 backend를 켜 두고 `.env`에 `VITE_API_BASE_URL=http://127.0.0.1:8000`을 넣습니다.
+- 지도에서 경로를 찾으려면 backend를 켜 둡니다. `npm run dev`가 `/api` 요청을 backend(`http://127.0.0.1:8000`)로 넘깁니다.
+- `.env`의 `VITE_API_BASE_URL`은 비워 둡니다. 주소를 넣으면 화면과 backend가 다른 사이트가 되어 검색·경로 이력(쿠키)이 저장되지 않습니다.
 - 테스트와 린트: `npm run test` · `npm run lint` · `npm run format`
 
 ## 5. 환경변수
@@ -151,4 +152,5 @@ uv run python steps/run_all.py
 | `docker`를 찾을 수 없음 | Docker Desktop을 설치한 뒤 터미널을 새로 엽니다. Docker Desktop이 실행 중인지도 확인합니다. |
 | `docker compose up`에서 `POSTGRES_PASSWORD` 오류 | 루트 `.env`가 없거나 값이 비어 있습니다. `.env.example`을 복사해 비밀번호를 넣습니다. |
 | `5432` 포트 사용 중 | PC에 따로 설치한 PostgreSQL이 켜져 있습니다. 그 서비스를 끄거나 compose의 앞쪽 포트를 바꿉니다. |
+| 검색·경로 이력이 저장되지 않음 | `frontend/.env`의 `VITE_API_BASE_URL`이 비어 있는지 확인합니다. 화면은 `http://localhost:5173`으로 엽니다. |
 | PR 본문 템플릿이 비어 있음 | 템플릿은 `main`에 있어야 보입니다. `dev`가 `main`과 같은지 확인합니다. |
