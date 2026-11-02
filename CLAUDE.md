@@ -25,7 +25,8 @@
 | `backend/` | 린트 · 포맷 | `uv run ruff check .` · `uv run ruff format .` |
 | `backend/` | 테스트 | `uv run pytest` |
 | `pipeline/` | 설치 | `uv sync` |
-| `pipeline/` | DEM 생성 (원본은 `data/raw/dem/`) | `uv run python steps/00_build_dem.py` |
+| `pipeline/` | 전체 실행 (결과 있는 단계는 건너뜀) | `uv run python steps/run_all.py` · `--from 02` · `--force` |
+| `pipeline/` | 테스트 | `uv run pytest` |
 | `pipeline/` | 린트 · 포맷 | `uv run ruff check .` · `uv run ruff format .` |
 
 - Python 도구는 uv + ruff + pytest로 통일한다. pip, poetry, black은 쓰지 않는다.
@@ -88,6 +89,7 @@ main   ← 배포용 (직접 push 금지)
 ## 건드리지 않는 것
 
 - `data/raw/`는 원본이므로 수정하거나 커밋하지 않는다.
+- pipeline 원본·중간 데이터(`raw/`, `interim/`)는 `pipeline/.env`의 `DATA_DIR`(팀 Google Drive 공유 폴더) 기준이다. 비어 있으면 저장소 `data/`를 쓴다. 공유 폴더 링크는 저장소에 적지 않는다.
 - `data/processed/`와 `models/*.pkl`은 직접 편집하지 않는다. `pipeline/`, `ml/`로 다시 생성한다.
 - `package-lock.json`, `uv.lock`은 직접 편집하지 않는다. 설치 명령으로만 바꾼다.
 - `*.db` 파일은 커밋하지 않는다.

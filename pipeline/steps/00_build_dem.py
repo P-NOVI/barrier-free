@@ -9,20 +9,16 @@ import struct
 import time
 from collections.abc import Iterator
 from pathlib import Path
-from typing import Any
 
 import numpy as np
 import rasterio
-import yaml
 from rasterio.transform import from_origin
 from rasterio.warp import transform
 from rasterio.windows import Window
 from scipy.interpolate import griddata
 from scipy.spatial import cKDTree
 
-PIPELINE_DIR = Path(__file__).resolve().parents[1]
-REPO_ROOT = PIPELINE_DIR.parent
-CONFIG_PATH = PIPELINE_DIR / "config.yaml"
+from common import CONFIG_PATH, data_path, load_config, require_files
 
 NODATA = -9999.0
 SHP_HEADER_BYTES = 100
@@ -180,21 +176,19 @@ def build_dem(
     print("saved", output, flush=True)
 
 
-def load_config(path: Path) -> dict[str, Any]:
-    return yaml.safe_load(path.read_text(encoding="utf-8"))["dem"]
-
-
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", type=Path, default=CONFIG_PATH)
-    config = load_config(parser.parse_args().config)
-    output = REPO_ROOT / config["output"]
+    config = load_config(parser.parse_args().config)["dem"]
+    inputs = [
+        data_path(config[key])
+        for key in ("contour_shp", "contour_dbf", "point_shp", "point_dbf")
+    ]
+    require_files(*inputs)
+    output = data_path(config["output"])
     output.parent.mkdir(parents=True, exist_ok=True)
     build_dem(
-        REPO_ROOT / config["contour_shp"],
-        REPO_ROOT / config["contour_dbf"],
-        REPO_ROOT / config["point_shp"],
-        REPO_ROOT / config["point_dbf"],
+        *inputs,
         output,
         source_crs=config["source_crs"],
         target_crs=config["target_crs"],

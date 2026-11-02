@@ -1,11 +1,13 @@
-# 경로는 저장소 루트 기준
+# 경로 기준
+# - raw/…, interim/… : 데이터 폴더 (pipeline/.env 의 DATA_DIR, 없으면 저장소 data/)
+# - data/processed/… : 저장소 루트 (서버가 읽고 Git 에 커밋)
 
 dem:
-  contour_shp: data/raw/dem/등고선 5000/N3L_F001.shp
-  contour_dbf: data/raw/dem/등고선 5000/N3L_F001.dbf
-  point_shp: data/raw/dem/표고 5000/N3P_F002.shp
-  point_dbf: data/raw/dem/표고 5000/N3P_F002.dbf
-  output: data/raw/dem/seoul_dem_5m.tif
+  contour_shp: raw/dem/등고선 5000/N3L_F001.shp
+  contour_dbf: raw/dem/등고선 5000/N3L_F001.dbf
+  point_shp: raw/dem/표고 5000/N3P_F002.shp
+  point_dbf: raw/dem/표고 5000/N3P_F002.dbf
+  output: raw/dem/seoul_dem_5m.tif
   # 원본은 옛 Bessel 측지계. .prj 만으로 변환하면 수백 m 어긋나서 명시한다.
   source_crs: EPSG:5174
   target_crs: EPSG:5186
@@ -18,18 +20,18 @@ dem:
 network:
   # OSM(Nominatim) 지명. 범위를 줄이려면 구 이름 등으로 바꾼다.
   place: Seoul, South Korea
-  output: data/interim/walk.graphml
+  output: interim/walk.graphml
   # Overpass 응답 캐시. 다시 실행할 때 내려받기를 건너뛴다.
-  cache_folder: data/interim/osmnx_cache
+  cache_folder: interim/osmnx_cache
 
 elevation:
-  output: data/interim/walk_elevation.graphml
+  output: interim/walk_elevation.graphml
   # DEM 빈 칸 노드를 이웃 노드 평균으로 채우는 최대 반복 횟수
   max_fill_passes: 50
 
 barriers:
-  output: data/interim/walk_tagged.graphml
+  output: interim/walk_tagged.graphml
 
 export:
-  # backend/app/config.py 의 기본 그래프 경로와 같아야 한다.
+  # 저장소 기준. backend/app/config.py 의 기본 그래프 경로와 같아야 한다.
   output: data/processed/graph.json.gz

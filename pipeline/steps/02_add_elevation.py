@@ -14,22 +14,15 @@ import networkx as nx
 import numpy as np
 import osmnx as ox
 import rasterio
-import yaml
 from rasterio.warp import transform
 
-PIPELINE_DIR = Path(__file__).resolve().parents[1]
-REPO_ROOT = PIPELINE_DIR.parent
-CONFIG_PATH = PIPELINE_DIR / "config.yaml"
+from common import CONFIG_PATH, data_path, load_config, require_files
 
 GRADE_DIGITS = 4
 # 지면 높이와 다른 구조물. building_passage 는 지면을 지나는 건물 통로라 제외한다.
 STRUCTURE_TAGS = {"bridge": {"no"}, "tunnel": {"no", "building_passage"}}
 
 Elevations = dict[Hashable, float | None]
-
-
-def load_config(path: Path) -> dict[str, Any]:
-    return yaml.safe_load(path.read_text(encoding="utf-8"))
 
 
 def sample_elevations(graph: nx.MultiDiGraph, dem_path: Path) -> Elevations:
@@ -138,9 +131,10 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", type=Path, default=CONFIG_PATH)
     config = load_config(parser.parse_args().config)
-    network_path = REPO_ROOT / config["network"]["output"]
-    dem_path = REPO_ROOT / config["dem"]["output"]
-    output = REPO_ROOT / config["elevation"]["output"]
+    network_path = data_path(config["network"]["output"])
+    dem_path = data_path(config["dem"]["output"])
+    output = data_path(config["elevation"]["output"])
+    require_files(network_path, dem_path)
 
     started = time.time()
     graph = ox.load_graphml(network_path)

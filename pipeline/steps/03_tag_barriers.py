@@ -15,18 +15,11 @@ from pathlib import Path
 from typing import Any
 
 import osmnx as ox
-import yaml
 
-PIPELINE_DIR = Path(__file__).resolve().parents[1]
-REPO_ROOT = PIPELINE_DIR.parent
-CONFIG_PATH = PIPELINE_DIR / "config.yaml"
+from common import CONFIG_PATH, data_path, load_config, require_files
 
 FOOT_ALLOWED = {"yes", "designated", "permissive"}
 ACCESS_BLOCKED = {"no", "private"}
-
-
-def load_config(path: Path) -> dict[str, Any]:
-    return yaml.safe_load(path.read_text(encoding="utf-8"))
 
 
 def tag_values(data: Mapping[str, Any], tag: str) -> set[str]:
@@ -60,8 +53,9 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", type=Path, default=CONFIG_PATH)
     config = load_config(parser.parse_args().config)
-    source = REPO_ROOT / config["elevation"]["output"]
-    output = REPO_ROOT / config["barriers"]["output"]
+    source = data_path(config["elevation"]["output"])
+    output = data_path(config["barriers"]["output"])
+    require_files(source)
 
     started = time.time()
     graph = ox.load_graphml(source)
