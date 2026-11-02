@@ -16,7 +16,9 @@ export type ApiOptions = { baseUrl?: string; signal?: AbortSignal };
 type ApiRequest = {
     path: string;
     query?: Record<string, string>;
-    /** 있으면 JSON 으로 POST 한다. */
+    /** 없으면 body 가 있을 때 POST, 없을 때 GET */
+    method?: 'POST' | 'PUT' | 'DELETE';
+    /** 있으면 JSON 으로 보낸다. */
     body?: unknown;
     /** 오류 응답에 detail 안내 문구가 없을 때 쓰는 문구 */
     failureMessage: string;
@@ -51,8 +53,16 @@ function resolveBaseUrl(baseUrl: string | undefined): string | undefined {
     return baseUrl || globalThis.location?.origin;
 }
 
+/** 이동(링크)으로 여는 API 주소. 예: 카카오·구글 로그인 시작 */
+export function apiUrl(
+    path: string,
+    baseUrl = import.meta.env.VITE_API_BASE_URL,
+): string {
+    return new URL(path, resolveBaseUrl(baseUrl)).toString();
+}
+
 export async function requestJson<T>(
-    { path, query, body, failureMessage }: ApiRequest,
+    { path, query, method, body, failureMessage }: ApiRequest,
     { baseUrl = import.meta.env.VITE_API_BASE_URL, signal }: ApiOptions = {},
 ): Promise<T> {
     const base = resolveBaseUrl(baseUrl);
@@ -68,9 +78,9 @@ export async function requestJson<T>(
     const credentials: RequestCredentials = 'include';
     const init: RequestInit =
         body === undefined
-            ? { signal, credentials }
+            ? { method, signal, credentials }
             : {
-                  method: 'POST',
+                  method: method ?? 'POST',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify(body),
                   signal,
@@ -90,6 +100,9 @@ export async function requestJson<T>(
     }
     if (!response.ok) {
         throw await toApiError(response, failureMessage);
+    }
+    if (response.status === 204) {
+        return undefined as T;
     }
     return (await response.json()) as T;
 }

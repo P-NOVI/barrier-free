@@ -38,6 +38,7 @@ uv run fastapi dev
 - http://127.0.0.1:8000/health 에서 `{"status":"ok"}`가 나오면 성공입니다.
 - Python은 루트의 `.python-version`(3.12)을 uv가 읽어 자동으로 설치합니다. 직접 설치하지 않아도 됩니다.
 - 장소 검색(`/api/places/search`)을 쓰려면 `.env`의 `KAKAO_REST_API_KEY`에 카카오 REST API 키를 넣습니다. 없으면 검색만 503으로 실패합니다.
+- 카카오·구글 로그인을 쓰려면 `.env`에 `KAKAO_CLIENT_SECRET`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`을 넣습니다(값은 팀 채널). 로그인 후 돌아오는 주소는 `http://localhost:8000/api/auth/{kakao|google}/callback`으로 콘솔에 등록돼 있으므로, 화면은 `127.0.0.1`이 아니라 `localhost:5173`으로 엽니다.
 - 테스트와 린트: `uv run pytest` · `uv run ruff check .` · `uv run ruff format .`
 
 ### DB (PostgreSQL)

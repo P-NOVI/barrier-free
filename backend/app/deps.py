@@ -14,6 +14,7 @@ from app.repositories.road_repository import load_graph
 from app.repositories.sensor_repository import Sensor, load_sensors
 from app.repositories.user_repository import create_guest, find_user_by_token
 from app.services.congestion_service import Reading, TtlCache, create_sdot_client
+from app.services.oauth_service import create_oauth_client
 from app.services.place_service import create_kakao_client
 from core.graph import Graph
 
@@ -160,3 +161,11 @@ def ensure_user(
 
 
 UserDep = Annotated[User, Depends(ensure_user)]
+
+
+def get_oauth_client(settings: SettingsDep) -> Iterator[httpx.Client]:
+    with create_oauth_client(settings) as client:
+        yield client
+
+
+OAuthClientDep = Annotated[httpx.Client, Depends(get_oauth_client)]

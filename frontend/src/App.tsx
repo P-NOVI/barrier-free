@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import AccountMenu from './components/AccountMenu';
 import CongestionToggle from './components/CongestionToggle';
 import MapView, { type FitPadding } from './components/MapView';
 import MyLocationControl from './components/MyLocationControl';
@@ -301,6 +302,7 @@ export default function App() {
                 state={congestion}
                 onChange={setShowCongestion}
             />
+            {!navigating && <AccountMenu />}
             <MyLocationControl
                 onLocate={showMyLocation}
                 locate={
