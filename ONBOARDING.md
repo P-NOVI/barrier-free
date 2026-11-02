@@ -12,6 +12,7 @@
 | uv | backend (Python 3.12을 자동으로 받아 줌) | `uv --version` |
 | GitHub 계정 | P-NOVI 조직 초대 수락 필요 | |
 | GitHub CLI (선택) | 이슈·PR을 터미널에서 | `gh --version` |
+| Docker Desktop | 개발용 PostgreSQL | `docker compose version` |
 
 uv 설치: `winget install --id astral-sh.uv`
 
@@ -38,6 +39,21 @@ uv run fastapi dev
 - Python은 루트의 `.python-version`(3.12)을 uv가 읽어 자동으로 설치합니다. 직접 설치하지 않아도 됩니다.
 - 장소 검색(`/api/places/search`)을 쓰려면 `.env`의 `KAKAO_REST_API_KEY`에 카카오 REST API 키를 넣습니다. 없으면 검색만 503으로 실패합니다.
 - 테스트와 린트: `uv run pytest` · `uv run ruff check .` · `uv run ruff format .`
+
+### DB (PostgreSQL)
+
+저장소 루트에서 Docker로 켭니다. Docker Desktop이 실행 중이어야 합니다.
+
+```powershell
+Copy-Item .env.example .env   # 처음 한 번. POSTGRES_PASSWORD 에 비밀번호를 정해 넣습니다.
+docker compose up -d
+docker compose exec db psql -U barrierfree -c "select version();"
+```
+
+- 마지막 명령에서 PostgreSQL 17 버전이 나오면 성공입니다.
+- `backend/.env`의 `DATABASE_URL`에 같은 비밀번호로 접속 주소를 넣습니다. 형식은 `backend/.env.example`에 있습니다.
+- 끄기: `docker compose stop`. 데이터는 Docker 볼륨(`pgdata`)에 남습니다. `docker compose down -v`는 데이터까지 지우므로 쓰지 않습니다.
+- DB는 이 PC(`127.0.0.1:5432`)에서만 접속할 수 있습니다.
 
 ## 4. frontend 실행
 
@@ -132,4 +148,7 @@ uv run python steps/run_all.py
 | `npm install`에서 typescript 충돌(ERESOLVE) | `typescript-eslint`가 TS 6.1 미만만 지원합니다. `package.json`의 `typescript`가 `~6.0.x`인지 확인합니다. `--force`는 쓰지 않습니다. |
 | PowerShell에서 `uv add fastapi[standard]` 오류 | 따옴표로 감쌉니다: `uv add "fastapi[standard]"` |
 | `fastapi: program not found` | `backend/`에서 `uv sync`를 먼저 실행합니다. |
+| `docker`를 찾을 수 없음 | Docker Desktop을 설치한 뒤 터미널을 새로 엽니다. Docker Desktop이 실행 중인지도 확인합니다. |
+| `docker compose up`에서 `POSTGRES_PASSWORD` 오류 | 루트 `.env`가 없거나 값이 비어 있습니다. `.env.example`을 복사해 비밀번호를 넣습니다. |
+| `5432` 포트 사용 중 | PC에 따로 설치한 PostgreSQL이 켜져 있습니다. 그 서비스를 끄거나 compose의 앞쪽 포트를 바꿉니다. |
 | PR 본문 템플릿이 비어 있음 | 템플릿은 `main`에 있어야 보입니다. `dev`가 `main`과 같은지 확인합니다. |
