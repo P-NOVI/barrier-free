@@ -1,15 +1,18 @@
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from typing import Any
 
+from core.snap import NodeIndex
 
-@dataclass(frozen=True)
+
+# slots: 서울 전체 그래프(노드 약 17만, 구간 약 48만 방향)의 메모리를 줄인다.
+@dataclass(frozen=True, slots=True)
 class Node:
     lon: float
     lat: float
     elevation: float
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, slots=True)
 class Arc:
     """도로 구간을 한 방향으로 지나가는 단위. 반대 방향은 grade 부호만 다르다."""
 
@@ -27,6 +30,12 @@ class Arc:
 class Graph:
     nodes: list[Node]
     adjacency: list[list[Arc]]
+    # 좌표 → 최근접 노드 검색용 (core/snap.py)
+    node_index: NodeIndex
+    # 이동 조건별 연결 요소 번호 캐시 (core/reachability.py)
+    component_cache: dict[tuple, list[int]] = field(
+        default_factory=dict, compare=False, repr=False
+    )
 
 
 def build_graph(data: dict[str, Any]) -> Graph:
@@ -52,4 +61,4 @@ def build_graph(data: dict[str, Any]) -> Graph:
         )
         adjacency[forward.source].append(forward)
         adjacency[backward.source].append(backward)
-    return Graph(nodes, adjacency)
+    return Graph(nodes, adjacency, NodeIndex([(n.lon, n.lat) for n in nodes]))
