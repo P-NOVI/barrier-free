@@ -3,13 +3,15 @@
 실행: pipeline/ 에서 uv run python steps/04_export_graph.py
 형식은 backend/core/graph.py 의 build_graph 입력과 같다.
 - nodes: [{lon, lat, elevation}], 노드 번호는 배열 순서
-- edges: [{id, u, v, length, grade, steps, ramp, wheelchair_ok, walk_ok}]
+- edges: [{id, u, v, length, grade, steps, ramp, wheelchair_ok, walk_ok, geometry?}]
   같은 길의 양방향 구간은 하나만 남기고, grade 는 u → v 방향 값이다.
+  geometry 는 u → v 사이 중간 지점 [[lon, lat]]. 곧은 구간이면 없다.
 """
 
 import argparse
 import gzip
 import json
+import math
 import time
 from collections.abc import Hashable
 from pathlib import Path
@@ -58,17 +60,36 @@ def export_graph(graph: nx.MultiDiGraph) -> dict[str, list[dict[str, Any]]]:
         if key in seen:
             continue
         seen.add(key)
-        edges.append(
-            {
-                "id": len(edges),
-                "u": index[u],
-                "v": index[v],
-                "length": round(data["length"], LENGTH_DIGITS),
-                "grade": data["grade"],
-                **{tag: bool(data[tag]) for tag in BOOL_TAGS},
-            }
-        )
+        edge = {
+            "id": len(edges),
+            "u": index[u],
+            "v": index[v],
+            "length": round(data["length"], LENGTH_DIGITS),
+            "grade": data["grade"],
+            **{tag: bool(data[tag]) for tag in BOOL_TAGS},
+        }
+        if inner := inner_points(graph.nodes[u], data):
+            edge["geometry"] = inner
+        edges.append(edge)
     return {"nodes": nodes, "edges": edges}
+
+
+def inner_points(start: dict[str, Any], data: dict[str, Any]) -> list[list[float]]:
+    """구간 모양(OSM geometry)에서 양 끝을 뺀 중간 지점. start 쪽부터 순서대로.
+
+    osmnx 는 여러 OSM 지점을 이은 길을 구간 하나로 합치고 모양을 geometry 에 둔다.
+    """
+    line = data.get("geometry")
+    if line is None:
+        return []
+    points = list(line.coords)
+    origin = (start["x"], start["y"])
+    if math.dist(points[-1], origin) < math.dist(points[0], origin):
+        points.reverse()
+    return [
+        [round(lon, COORD_DIGITS), round(lat, COORD_DIGITS)]
+        for lon, lat in points[1:-1]
+    ]
 
 
 def main() -> None:
