@@ -40,3 +40,18 @@ class RouteResponse(BaseModel):
 class RouteError(BaseModel):
     reason: str
     message: str
+
+
+class PlaceResponse(BaseModel):
+    name: str
+    address: str = Field(description="지번 주소")
+    road_address: str = Field(description="도로명 주소. 없으면 빈 문자열")
+    category: str = Field(description="카카오 카테고리 그룹 이름. 없으면 빈 문자열")
+    position: Coordinate = Field(description="[경도, 위도]")
+    distance_m: float | None = Field(
+        description="기준 좌표에서 거리. 기준 좌표 없이 검색하면 null"
+    )
+
+
+class PlaceSearchResponse(BaseModel):
+    places: list[PlaceResponse]
