@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import Annotated
 
 from pydantic import BaseModel, Field, field_validator
@@ -79,3 +80,15 @@ class AddressResponse(BaseModel):
 
 class AddressLookupResponse(BaseModel):
     address: AddressResponse | None = Field(description="주소가 없는 좌표면 null")
+
+
+class SensorCongestionResponse(BaseModel):
+    code: int = Field(description="센서 코드")
+    position: Coordinate = Field(description="센서 위치 [경도, 위도]")
+    address: str = Field(description="센서 설치 주소")
+    visitor_count: int = Field(description="유동인구 원시값(10분 단위 측정)")
+    measured_at: datetime = Field(description="측정 시각(한국 시간)")
+
+
+class CongestionResponse(BaseModel):
+    sensors: list[SensorCongestionResponse]

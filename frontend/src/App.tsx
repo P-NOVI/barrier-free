@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
+import CongestionToggle from './components/CongestionToggle';
 import MapView, { type FitPadding } from './components/MapView';
 import MyLocationControl from './components/MyLocationControl';
 import NavigationPanel from './components/NavigationPanel';
 import PlaceInfoCard from './components/PlaceInfoCard';
 import PlaceSearch from './components/PlaceSearch';
 import RoutePanel from './components/RoutePanel';
+import { useCongestion } from './hooks/useCongestion';
 import { useMediaQuery } from './hooks/useMediaQuery';
 import { useNavigation } from './hooks/useNavigation';
 import { useRoute } from './hooks/useRoute';
@@ -62,6 +64,9 @@ export default function App() {
     // 음성 안내. 음성 기능이 없는 브라우저에서는 끈다.
     const speechSupported = canSpeak();
     const [voice, setVoice] = useState(speechSupported);
+    // 센서별 유동인구를 지도에 보일지. 켤 때 받아 온다.
+    const [showCongestion, setShowCongestion] = useState(false);
+    const congestion = useCongestion(showCongestion);
     const [elevators, setElevators] = useState<Elevator[]>([]);
     const [elevatorError, setElevatorError] = useState<string | null>(null);
     const [showElevators, setShowElevators] = useState(false);
@@ -287,6 +292,14 @@ export default function App() {
                 onCenterChange={setMapCenter}
                 onDragStart={stopFollowing}
                 myLocation={navigationFix ?? myLocation}
+                congestion={
+                    congestion.status === 'success' ? congestion.sensors : null
+                }
+            />
+            <CongestionToggle
+                enabled={showCongestion}
+                state={congestion}
+                onChange={setShowCongestion}
             />
             <MyLocationControl
                 onLocate={showMyLocation}
