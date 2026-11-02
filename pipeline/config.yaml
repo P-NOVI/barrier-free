@@ -35,3 +35,14 @@ barriers:
 export:
   # 저장소 기준. backend/app/config.py 의 기본 그래프 경로와 같아야 한다.
   output: data/processed/graph.json.gz
+
+# 05 단계. 그래프와 관계가 없어서 run_all.py 에 넣지 않고 따로 실행한다.
+sdot:
+  source: raw/sdot/서울시 도시데이터 센서(S-DoT) 유동인구 설치 위치정보_251113.xlsx
+  # 저장소 기준. backend/app/config.py 의 기본 센서 위치 경로와 같아야 한다.
+  output: data/processed/sdot_sensors.json
+  # 서울 범위 밖 좌표(오타 등)를 걸러낸다.
+  min_lat: 37.4
+  max_lat: 37.75
+  min_lon: 126.7
+  max_lon: 127.2

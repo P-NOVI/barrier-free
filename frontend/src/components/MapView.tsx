@@ -1,7 +1,9 @@
 import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
+import type { SensorCongestion } from '../lib/congestionApi';
 import { type Elevator, elevatorName } from '../lib/elevators';
+import { formatClock } from '../lib/format';
 import type { LocationFix } from '../lib/geolocation';
 import {
     type LngLat,
@@ -50,12 +52,13 @@ const ACCURACY_CIRCLE: Omit<kakao.maps.CircleOptions, 'center' | 'radius'> = {
     fillColor: '#1a73e8',
     fillOpacity: 0.12,
 };
-// 화살표 < 내 위치 점 < 출발·도착 핀 순으로 위에 그린다.
+// 화살표 < 혼잡도 핀 < 내 위치 점 < 출발·도착 핀 순으로 위에 그린다.
 const ROUTE_ARROW_Z_INDEX = 0;
-const MY_LOCATION_Z_INDEX = 1;
-const PIN_Z_INDEX = 2;
+const CONGESTION_PIN_Z_INDEX = 1;
+const MY_LOCATION_Z_INDEX = 2;
+const PIN_Z_INDEX = 3;
 // 선택한 장소 카드는 핀 위에 뜬다.
-const POPUP_Z_INDEX = 3;
+const POPUP_Z_INDEX = 4;
 // 카드 아래 꼬리 높이(px). index.css 의 .place-info::after 와 같은 값.
 const POPUP_TAIL = 10;
 // 출발·도착 핀: 둥근 머리에 글자를 넣고, 아래 뾰족한 끝이 지점을 가리킨다. 색은 CSS 가 정한다.
@@ -93,6 +96,8 @@ type MapViewProps = {
     elevators?: Elevator[];
     /** 내 위치. 파란 점과 오차 반경 원으로 그린다. */
     myLocation?: LocationFix | null;
+    /** 센서별 유동인구. 있으면 센서 위치에 숫자 핀으로 그린다. */
+    congestion?: SensorCongestion[] | null;
     /** 지도 위에 패널이 떠 있으면 그만큼 여백을 더 준다. 바뀌면 경로에 다시 맞춘다. */
     fitPadding?: FitPadding;
     /** 경로가 바뀌면 경로 전체가 보이게 맞출지. 안내 중에는 내 위치를 따라가므로 끈다. */
@@ -151,6 +156,47 @@ function usePin(
         overlay.setMap(map);
         return () => overlay.setMap(null);
     }, [map, position, label, modifier]);
+}
+
+/** 센서마다 유동인구 숫자 핀을 그린다. 누르면 설치 주소와 측정 시각을 펼친다. */
+function useCongestionPins(
+    map: kakao.maps.Map | null,
+    sensors: SensorCongestion[] | null | undefined,
+) {
+    useEffect(() => {
+        if (!map || !sensors) {
+            return;
+        }
+        const overlays = sensors.map((sensor) => {
+            const content = document.createElement('button');
+            content.type = 'button';
+            content.className = 'congestion-pin';
+            content.setAttribute(
+                'aria-label',
+                `${sensor.address} 유동인구 ${sensor.visitor_count}명`,
+            );
+            const count = document.createElement('span');
+            count.className = 'congestion-pin__count';
+            count.textContent = String(sensor.visitor_count);
+            const detail = document.createElement('span');
+            detail.className = 'congestion-pin__detail';
+            detail.textContent = `${sensor.address} · ${formatClock(sensor.measured_at)} 측정`;
+            content.append(count, detail);
+            content.addEventListener('click', () =>
+                content.classList.toggle('congestion-pin--open'),
+            );
+            const overlay = new kakao.maps.CustomOverlay({
+                position: toLatLng(sensor.position),
+                content,
+                // 눌러도 지도 클릭(출발·도착 고르기)으로 번지지 않게 한다.
+                clickable: true,
+                zIndex: CONGESTION_PIN_Z_INDEX,
+            });
+            overlay.setMap(map);
+            return overlay;
+        });
+        return () => overlays.forEach((overlay) => overlay.setMap(null));
+    }, [map, sensors]);
 }
 
 /** position 위에 카드를 띄울 자리를 만들고, 그 DOM 을 돌려준다. 카드는 portal 로 그린다. */
@@ -403,6 +449,7 @@ export default function MapView({
     path,
     elevators = NO_ELEVATORS,
     myLocation,
+    congestion,
     fitPadding = DEFAULT_FIT_PADDING,
     fitRoute = true,
     follow,
@@ -482,6 +529,7 @@ export default function MapView({
     useRouteLine(map, path, start, goal, fitPadding, fitRoute);
     useFollow(map, follow);
     useRouteArrows(map, path);
+    useCongestionPins(map, congestion);
     useMyLocation(map, myLocation);
     useElevatorMarkers(map, elevators, onElevatorClick);
     usePin(map, start, '출발', 'start');
