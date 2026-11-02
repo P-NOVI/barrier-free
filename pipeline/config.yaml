@@ -1,0 +1,16 @@
+# 경로는 저장소 루트 기준
+
+dem:
+  contour_shp: data/raw/dem/등고선 5000/N3L_F001.shp
+  contour_dbf: data/raw/dem/등고선 5000/N3L_F001.dbf
+  point_shp: data/raw/dem/표고 5000/N3P_F002.shp
+  point_dbf: data/raw/dem/표고 5000/N3P_F002.dbf
+  output: data/raw/dem/seoul_dem_5m.tif
+  # 원본은 옛 Bessel 측지계. .prj 만으로 변환하면 수백 m 어긋나서 명시한다.
+  source_crs: EPSG:5174
+  target_crs: EPSG:5186
+  resolution_m: 5
+  tile_m: 5000
+  buffer_m: 500
+  # 가장 가까운 등고선·표고점에서 이보다 먼 칸은 빈 값으로 둔다.
+  max_gap_m: 500

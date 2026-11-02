@@ -1,0 +1,21 @@
+[project]
+name = "pipeline"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "numpy>=2.5.4",
+    "pyyaml>=6.0.3",
+    "rasterio>=1.5.2",
+    "scipy>=1.18.1",
+]
+
+[tool.ruff]
+line-length = 88
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.17.3",
+]
