@@ -1,3 +1,4 @@
+import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
@@ -5,19 +6,41 @@ from fastapi import FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 from sqlalchemy.exc import OperationalError
+from sqlalchemy.orm import Session
 
-from app.config import get_settings
+from app.config import Settings, get_settings
+from app.db import create_tables, get_engine
 from app.deps import DbSessionDep
 from app.repositories.road_repository import load_graph
+from app.repositories.user_repository import purge_inactive_guests
 from app.routers import congestion, places, routes
+
+logger = logging.getLogger(__name__)
+
+
+def prepare_database(settings: Settings) -> None:
+    """테이블을 만들고 오래된 게스트를 지운다. DB가 꺼져 있어도 서버는 켠다."""
+    database_url = settings.database_url.get_secret_value()
+    if not database_url:
+        return
+    engine = get_engine(database_url, settings.database_connect_timeout_s)
+    try:
+        create_tables(engine)
+        with Session(engine) as session:
+            purge_inactive_guests(session, settings.guest_retention_days)
+            session.commit()
+    except OperationalError:
+        # 오류 문구에 접속 정보가 섞일 수 있어 로그에 남기지 않는다.
+        logger.warning("DB에 접속할 수 없어 테이블을 준비하지 못했습니다.")
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    settings = get_settings()
     # 첫 경로 요청이 느리지 않도록 서버 시작 때 그래프를 한 번 읽어 둔다.
-    graph_path = get_settings().graph_path
-    if graph_path.exists():
-        load_graph(graph_path)
+    if settings.graph_path.exists():
+        load_graph(settings.graph_path)
+    prepare_database(settings)
     yield
 
 

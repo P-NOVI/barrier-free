@@ -38,6 +38,13 @@ class Settings(BaseSettings):
     database_url: SecretStr = SecretStr("")
     # DB가 꺼져 있을 때 이 시간만 기다리고 실패한다.
     database_connect_timeout_s: int = 3
+    # 마지막 접속 후 이 기간이 지난 게스트는 이력과 함께 지운다.
+    # 경로 이력은 위치 정보이므로 기한 없이 쌓아 두지 않는다.
+    guest_retention_days: int = 30
+    # 이 기간 동안 쓰지 않은 토큰은 만료된다.
+    token_idle_days: int = 30
+    # 사용자마다 검색·경로 이력을 최근 이만큼만 남긴다.
+    history_keep: int = 50
     # 지도에서 누른 곳의 이름
     # - place_on_spot 안 장소는 분류와 상관없이(가게도) 그 이름으로 부른다.
     #   가장 가까운 곳과 same_spot 안(같은 건물쯤)이면 지도에 이름이 보이는 곳을 쓴다.
