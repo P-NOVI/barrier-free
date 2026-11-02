@@ -31,6 +31,7 @@ describe('fetchCongestion', () => {
         const [url, init] = fetchMock.mock.calls[0];
         expect(String(url)).toBe('http://api.test/api/congestion');
         expect(init.method).toBeUndefined();
+        expect(init.credentials).toBe('include');
     });
 
     it('혼잡도 키가 없다는 백엔드 안내를 그대로 쓴다', async () => {

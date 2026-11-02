@@ -1,8 +1,9 @@
 from fastapi.testclient import TestClient
 from httpx import Response
+from sqlalchemy import create_engine, inspect
 
 from app.config import Settings, get_settings
-from app.main import app
+from app.main import app, prepare_database
 
 client = TestClient(app)
 
@@ -37,3 +38,18 @@ def test_unreachable_db_is_503(tmp_path) -> None:
 
     assert response.status_code == 503
     assert response.json()["detail"]["reason"] == "db_unavailable"
+
+
+def test_prepare_database_creates_tables(tmp_path) -> None:
+    database_url = f"sqlite:///{tmp_path / 'app.db'}"
+
+    prepare_database(Settings(_env_file=None, database_url=database_url))
+
+    tables = set(inspect(create_engine(database_url)).get_table_names())
+    assert {"users", "auth_sessions", "search_history", "route_history"} <= tables
+
+
+def test_prepare_database_skips_unreachable_db(tmp_path) -> None:
+    database_url = f"sqlite:///{tmp_path / 'none' / 'app.db'}"
+
+    prepare_database(Settings(_env_file=None, database_url=database_url))

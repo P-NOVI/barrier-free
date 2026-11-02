@@ -42,26 +42,39 @@ async function toApiError(
     return new ApiError(`${failureMessage} (HTTP ${response.status})`, 'http');
 }
 
+/**
+ * VITE_API_BASE_URL 이 비어 있으면 화면과 같은 주소로 보낸다.
+ * 개발 중에는 Vite 가 /api 요청을 백엔드로 넘긴다(vite.config.ts 의 proxy).
+ * 게스트·회원 토큰 쿠키가 실리려면 화면과 백엔드가 같은 사이트여야 한다.
+ */
+function resolveBaseUrl(baseUrl: string | undefined): string | undefined {
+    return baseUrl || globalThis.location?.origin;
+}
+
 export async function requestJson<T>(
     { path, query, body, failureMessage }: ApiRequest,
     { baseUrl = import.meta.env.VITE_API_BASE_URL, signal }: ApiOptions = {},
 ): Promise<T> {
-    if (!baseUrl) {
+    const base = resolveBaseUrl(baseUrl);
+    if (!base) {
         throw new ApiError(
-            'VITE_API_BASE_URL 이 없습니다. frontend/.env 를 확인하세요.',
+            'API 주소를 정할 수 없습니다. frontend/.env 의 VITE_API_BASE_URL 을 확인하세요.',
             'config',
         );
     }
-    const url = new URL(path, baseUrl);
+    const url = new URL(path, base);
     url.search = new URLSearchParams(query).toString();
+    // 게스트·회원 토큰 쿠키(HttpOnly)를 함께 보내고 받는다.
+    const credentials: RequestCredentials = 'include';
     const init: RequestInit =
         body === undefined
-            ? { signal }
+            ? { signal, credentials }
             : {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify(body),
                   signal,
+                  credentials,
               };
     let response: Response;
     try {
