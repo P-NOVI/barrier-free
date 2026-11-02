@@ -11,6 +11,7 @@
     --panel-shadow: 0 2px 12px rgba(0, 0, 0, 0.18);
     --brand: #1a73e8;
     --my-location: #1a73e8;
+    --route-arrow: rgba(255, 255, 255, 0.6);
     --side-panel-width: 380px;
 
     font:
@@ -76,34 +77,52 @@ body,
 
 .map-pin {
     position: relative;
-    margin-bottom: 8px;
-    padding: 2px 8px;
-    border-radius: 12px;
-    font-size: 13px;
-    font-weight: 600;
+    width: 32px;
+    height: 47px;
+    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.35));
+}
+
+.map-pin svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+    fill: currentColor;
+}
+
+/* 핀 머리(지름 = 핀 너비) 가운데 */
+.map-pin__label {
+    position: absolute;
+    top: 0;
+    left: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1;
     color: #fff;
     white-space: nowrap;
 }
 
-.map-pin::after {
-    content: '';
-    position: absolute;
-    left: 50%;
-    bottom: -6px;
-    transform: translateX(-50%);
-    border: 6px solid transparent;
-    border-bottom: 0;
-    border-top-color: inherit;
-}
-
 .map-pin--start {
-    background: var(--pin-start);
-    border-top-color: var(--pin-start);
+    color: var(--pin-start);
 }
 
 .map-pin--goal {
-    background: var(--pin-goal);
-    border-top-color: var(--pin-goal);
+    color: var(--pin-goal);
+}
+
+/* 경로 선 안 진행 방향 화살표. 오른쪽을 가리키게 그리고 --angle(MapView 가 정함)만큼 돌린다. */
+.route-arrow {
+    width: 9px;
+    height: 8px;
+    background: var(--route-arrow);
+    /* 앞 끝, 뒤 아래, 뒤쪽 홈, 뒤 위 */
+    clip-path: polygon(100% 50%, 0 100%, 28% 50%, 0 0);
+    transform: rotate(var(--angle));
+    pointer-events: none;
 }
 
 .my-location-dot {
@@ -205,6 +224,74 @@ body,
 
 .route-panel__reset {
     cursor: pointer;
+}
+
+.route-panel__start {
+    width: 100%;
+    min-height: 44px;
+    margin-top: 12px;
+    border: 0;
+    border-radius: 8px;
+    font: inherit;
+    font-weight: 600;
+    color: #fff;
+    background: var(--brand);
+    cursor: pointer;
+}
+
+.navigation-panel__next {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 0;
+    font-size: 20px;
+    /* '오른쪽'이 '오른 / 쪽'으로 끊기지 않게 낱말 단위로 줄을 바꾼다. */
+    word-break: keep-all;
+}
+
+.navigation-panel__icon {
+    flex: none;
+    width: 36px;
+    height: 36px;
+    fill: var(--brand);
+}
+
+.navigation-panel__remaining {
+    margin: 8px 0 0;
+    font-size: 14px;
+    color: var(--muted);
+}
+
+.navigation-panel__remaining strong {
+    color: var(--text);
+}
+
+.navigation-panel__stop,
+.navigation-panel__voice {
+    flex: none;
+    min-height: 40px;
+    padding: 0 14px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font: inherit;
+    background: var(--bg);
+    cursor: pointer;
+}
+
+.navigation-panel__stop {
+    color: var(--error-text);
+}
+
+.navigation-panel__voice {
+    min-height: 32px;
+    margin-top: 8px;
+    font-size: 13px;
+    color: var(--muted);
+}
+
+.navigation-panel__voice[aria-pressed='true'] {
+    border-color: var(--brand);
+    color: var(--brand);
 }
 
 .route-panel__guide,

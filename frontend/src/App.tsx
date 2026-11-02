@@ -2,16 +2,21 @@ import { useCallback, useRef, useState } from 'react';
 
 import MapView, { type FitPadding } from './components/MapView';
 import MyLocationControl from './components/MyLocationControl';
+import NavigationPanel from './components/NavigationPanel';
 import PlaceInfoCard from './components/PlaceInfoCard';
 import PlaceSearch from './components/PlaceSearch';
 import RoutePanel from './components/RoutePanel';
 import { useMediaQuery } from './hooks/useMediaQuery';
+import { useNavigation } from './hooks/useNavigation';
 import { useRoute } from './hooks/useRoute';
+import { useVoiceGuidance } from './hooks/useVoiceGuidance';
+import { useWakeLock } from './hooks/useWakeLock';
 import type { LocationFix } from './lib/geolocation';
 import { type LngLat, SEOUL_CITY_HALL } from './lib/kakaoMap';
 import { findAddress } from './lib/placeApi';
 import { DEFAULT_PRESET, type PresetId } from './lib/presets';
 import {
+    CURRENT_LOCATION_LABEL,
     type Endpoint,
     type EndpointRole,
     MAP_CLICK_LABEL,
@@ -19,6 +24,13 @@ import {
     type PickedPlace,
     toPickedPlace,
 } from './lib/selection';
+import {
+    canSpeak,
+    speak,
+    START_TEXT,
+    stopSpeaking,
+    VOICE_ON_TEXT,
+} from './lib/voiceGuidance';
 
 // 이보다 넓으면 왼쪽 위에 패널 카드 하나, 좁으면 검색창·경로 패널을 위아래에 띄운다.
 // index.css 와 같은 값.
@@ -43,9 +55,43 @@ export default function App() {
     const [mapCenter, setMapCenter] = useState<LngLat>(SEOUL_CITY_HALL);
     // 마지막으로 찾은 내 위치. 지도에 파란 점으로 보인다.
     const [myLocation, setMyLocation] = useState<LocationFix | null>(null);
+    const [navigating, setNavigating] = useState(false);
+    // 안내 중 지도가 내 위치를 따라가는지. 지도를 끌면 멈추고, 내 위치 버튼을 누르면 다시 따라간다.
+    const [following, setFollowing] = useState(true);
+    // 음성 안내. 음성 기능이 없는 브라우저에서는 끈다.
+    const speechSupported = canSpeak();
+    const [voice, setVoice] = useState(speechSupported);
     const start = endpoints.start?.position ?? null;
     const goal = endpoints.goal?.position ?? null;
     const route = useRoute(start, goal, preset);
+    // 안내 중 경로를 다시 찾는 동안에는 전 경로를 그대로 보여 준다.
+    const shownRoute =
+        route.status === 'success'
+            ? route.route
+            : navigating && route.status === 'loading'
+              ? route.previous
+              : null;
+
+    // 경로를 벗어나면 지금 위치를 출발지로 경로를 다시 찾는다.
+    const reroute = useCallback((position: LngLat) => {
+        setEndpoints((current) => ({
+            ...current,
+            start: { position, label: CURRENT_LOCATION_LABEL },
+        }));
+    }, []);
+    const navigation = useNavigation(
+        navigating,
+        shownRoute,
+        route.status === 'loading',
+        reroute,
+    );
+    useWakeLock(navigating);
+    useVoiceGuidance(
+        navigating && voice,
+        navigation,
+        route.status === 'loading',
+    );
+    const navigationFix = navigation.fix;
 
     // 마지막으로 누른 곳. 응답을 기다리는 사이 다른 곳을 눌렀는지 구분한다(배열 자체로 비교).
     const latestClick = useRef<LngLat | null>(null);
@@ -103,7 +149,37 @@ export default function App() {
     const showMyLocation = useCallback((fix: LocationFix) => {
         setMyLocation(fix);
         setFocus(fix.position);
+        setFollowing(true);
     }, []);
+
+    // 휴대폰 브라우저는 버튼을 누를 때 처음 소리를 내야 이후 안내도 읽어 준다.
+    const startNavigation = useCallback(() => {
+        setFollowing(true);
+        setNavigating(true);
+        if (voice) {
+            speak(START_TEXT);
+        }
+    }, [voice]);
+
+    const stopNavigation = () => {
+        // 안내를 마친 자리를 내 위치로 남긴다.
+        if (navigationFix) {
+            setMyLocation(navigationFix);
+        }
+        setNavigating(false);
+        stopSpeaking();
+    };
+
+    const changeVoice = (on: boolean) => {
+        setVoice(on);
+        if (on) {
+            speak(VOICE_ON_TEXT);
+        } else {
+            stopSpeaking();
+        }
+    };
+
+    const stopFollowing = useCallback(() => setFollowing(false), []);
 
     return (
         <div className="app">
@@ -117,13 +193,27 @@ export default function App() {
                     onSelect={handleSelect}
                     onLocate={setMyLocation}
                 />
-                <RoutePanel
-                    preset={preset}
-                    endpoints={endpoints}
-                    route={route}
-                    onPresetChange={setPreset}
-                    onReset={() => setEndpoints(NO_ENDPOINTS)}
-                />
+                {navigating ? (
+                    <NavigationPanel
+                        route={route}
+                        navigation={navigation}
+                        following={following}
+                        voice={voice}
+                        onVoiceChange={
+                            speechSupported ? changeVoice : undefined
+                        }
+                        onStop={stopNavigation}
+                    />
+                ) : (
+                    <RoutePanel
+                        preset={preset}
+                        endpoints={endpoints}
+                        route={route}
+                        onPresetChange={setPreset}
+                        onReset={() => setEndpoints(NO_ENDPOINTS)}
+                        onStartNavigation={startNavigation}
+                    />
+                )}
             </aside>
             <MapView
                 center={focus ?? undefined}
@@ -139,15 +229,28 @@ export default function App() {
                         />
                     )
                 }
-                path={
-                    route.status === 'success' ? route.route.coordinates : null
-                }
+                path={shownRoute?.coordinates ?? null}
                 fitPadding={wide ? FIT_PADDING.wide : FIT_PADDING.narrow}
-                onMapClick={handleMapClick}
+                fitRoute={!navigating}
+                follow={
+                    navigating && following
+                        ? (navigationFix?.position ?? null)
+                        : null
+                }
+                // 안내 중에는 지도를 눌러도 출발·도착을 바꾸지 않는다.
+                onMapClick={navigating ? undefined : handleMapClick}
                 onCenterChange={setMapCenter}
-                myLocation={myLocation}
+                onDragStart={stopFollowing}
+                myLocation={navigationFix ?? myLocation}
             />
-            <MyLocationControl onLocate={showMyLocation} />
+            <MyLocationControl
+                onLocate={showMyLocation}
+                locate={
+                    navigationFix
+                        ? () => Promise.resolve(navigationFix)
+                        : undefined
+                }
+            />
         </div>
     );
 }

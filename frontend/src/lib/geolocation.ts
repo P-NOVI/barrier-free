@@ -9,6 +9,8 @@ const COARSE: PositionOptions = {
     timeout: 10_000,
     maximumAge: 60_000,
 };
+// 안내 중에는 GPS 위치를 계속 받는다. 다음 위치가 늦어도 오류로 끊지 않는다.
+const WATCH: PositionOptions = { enableHighAccuracy: true, maximumAge: 0 };
 
 /** 찾은 위치 */
 export type LocationFix = {
@@ -27,17 +29,22 @@ export class LocationError extends Error {
     }
 }
 
+const UNSUPPORTED = '이 브라우저는 위치 찾기를 지원하지 않습니다.';
+
+function toFix({ coords }: GeolocationPosition): LocationFix {
+    return {
+        position: [coords.longitude, coords.latitude],
+        accuracy: coords.accuracy,
+    };
+}
+
 function locate(
     geolocation: Geolocation,
     options: PositionOptions,
 ): Promise<LocationFix> {
     return new Promise((resolve, reject) =>
         geolocation.getCurrentPosition(
-            ({ coords }) =>
-                resolve({
-                    position: [coords.longitude, coords.latitude],
-                    accuracy: coords.accuracy,
-                }),
+            (position) => resolve(toFix(position)),
             reject,
             options,
         ),
@@ -64,7 +71,7 @@ export async function getCurrentPosition(
     geolocation: Geolocation | undefined = globalThis.navigator?.geolocation,
 ): Promise<LocationFix> {
     if (!geolocation) {
-        throw new LocationError('이 브라우저는 위치 찾기를 지원하지 않습니다.');
+        throw new LocationError(UNSUPPORTED);
     }
     try {
         return await locate(geolocation, PRECISE);
@@ -79,4 +86,25 @@ export async function getCurrentPosition(
     } catch (error) {
         throw toLocationError(error);
     }
+}
+
+/**
+ * 위치가 바뀔 때마다 onFix 로 알린다. 돌려준 함수를 부르면 멈춘다.
+ * 위치를 잠시 못 받아도 멈추지 않고, 다음 위치가 오면 다시 onFix 를 부른다.
+ */
+export function watchLocation(
+    onFix: (fix: LocationFix) => void,
+    onError: (error: LocationError) => void,
+    geolocation: Geolocation | undefined = globalThis.navigator?.geolocation,
+): () => void {
+    if (!geolocation) {
+        onError(new LocationError(UNSUPPORTED));
+        return () => undefined;
+    }
+    const id = geolocation.watchPosition(
+        (position) => onFix(toFix(position)),
+        (error) => onError(toLocationError(error)),
+        WATCH,
+    );
+    return () => geolocation.clearWatch(id);
 }

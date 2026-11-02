@@ -16,6 +16,7 @@ export type EndpointRole = keyof Endpoints;
 export const NO_ENDPOINTS: Endpoints = { start: null, goal: null };
 
 export const MAP_CLICK_LABEL = '지도에서 고른 위치';
+export const CURRENT_LOCATION_LABEL = '현재 위치';
 
 /** 지도를 눌러 고른 장소. 이름·주소를 찾은 뒤에 만든다. */
 export type PickedPlace = {
