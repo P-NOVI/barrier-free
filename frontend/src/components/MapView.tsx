@@ -8,16 +8,28 @@ import {
     toLatLng,
     toLngLat,
 } from '../lib/kakaoMap';
+import { arrowsAlong } from '../lib/routeArrows';
 
 // 카카오맵 확대 수준. 숫자가 작을수록 확대 (1~14)
 const DEFAULT_LEVEL = 4;
 
-const ROUTE_LINE: Omit<kakao.maps.PolylineOptions, 'path'> = {
-    strokeWeight: 6,
-    strokeColor: '#1a73e8',
-    strokeOpacity: 0.9,
+// 경로 선: 진한 테두리 위에 밝은 선을 겹쳐 지도 도로·노선과 구분한다.
+const ROUTE_OUTLINE: Omit<kakao.maps.PolylineOptions, 'path'> = {
+    strokeWeight: 12,
+    strokeColor: '#0d47a1',
+    strokeOpacity: 1,
     strokeStyle: 'solid',
+    zIndex: 1,
 };
+const ROUTE_LINE: Omit<kakao.maps.PolylineOptions, 'path'> = {
+    strokeWeight: 8,
+    strokeColor: '#1a73e8',
+    strokeOpacity: 1,
+    strokeStyle: 'solid',
+    zIndex: 2,
+};
+// 경로 선 안 진행 방향 화살표 간격(화면 px)
+const ROUTE_ARROW_SPACING_PX = 40;
 // 찍은 위치와 실제 경로 시작·끝 지점 사이를 잇는 점선
 const GAP_LINE: Omit<kakao.maps.PolylineOptions, 'path'> = {
     strokeWeight: 3,
@@ -33,7 +45,8 @@ const ACCURACY_CIRCLE: Omit<kakao.maps.CircleOptions, 'center' | 'radius'> = {
     fillColor: '#1a73e8',
     fillOpacity: 0.12,
 };
-// 출발·도착 핀이 내 위치 점보다 위에 오게 한다.
+// 화살표 < 내 위치 점 < 출발·도착 핀 순으로 위에 그린다.
+const ROUTE_ARROW_Z_INDEX = 0;
 const MY_LOCATION_Z_INDEX = 1;
 const PIN_Z_INDEX = 2;
 /** 경로 전체가 보이게 맞출 때 지도 가장자리 여백(px) */
@@ -155,10 +168,13 @@ function useRouteLine(
             goal && [path[path.length - 1], goal],
         ].filter((gap): gap is LngLat[] => Boolean(gap));
         const lines = [
-            new kakao.maps.Polyline({
-                ...ROUTE_LINE,
-                path: path.map(toLatLng),
-            }),
+            ...[ROUTE_OUTLINE, ROUTE_LINE].map(
+                (style) =>
+                    new kakao.maps.Polyline({
+                        ...style,
+                        path: path.map(toLatLng),
+                    }),
+            ),
             ...gaps.map(
                 (gap) =>
                     new kakao.maps.Polyline({
@@ -182,6 +198,49 @@ function useRouteLine(
         );
         return () => lines.forEach((line) => line.setMap(null));
     }, [map, path, start, goal, padding]);
+}
+
+/** 경로 선 안에 진행 방향 화살표를 그린다. 확대 수준이 바뀌면 화면 간격에 맞춰 다시 놓는다. */
+function useRouteArrows(
+    map: kakao.maps.Map | null,
+    path: LngLat[] | null | undefined,
+) {
+    useEffect(() => {
+        if (!map || !path || path.length < 2) {
+            return;
+        }
+        let arrows: kakao.maps.CustomOverlay[] = [];
+        const clear = () => arrows.forEach((arrow) => arrow.setMap(null));
+        const draw = () => {
+            clear();
+            const projection = map.getProjection();
+            const points = path.map((point) =>
+                projection.pointFromCoords(toLatLng(point)),
+            );
+            arrows = arrowsAlong(points, ROUTE_ARROW_SPACING_PX).map(
+                ({ x, y, angle }) => {
+                    const content = document.createElement('div');
+                    content.className = 'route-arrow';
+                    content.style.setProperty('--angle', `${angle}deg`);
+                    const arrow = new kakao.maps.CustomOverlay({
+                        position: projection.coordsFromPoint(
+                            new kakao.maps.Point(x, y),
+                        ),
+                        content,
+                        zIndex: ROUTE_ARROW_Z_INDEX,
+                    });
+                    arrow.setMap(map);
+                    return arrow;
+                },
+            );
+        };
+        draw();
+        kakao.maps.event.addListener(map, 'zoom_changed', draw);
+        return () => {
+            kakao.maps.event.removeListener(map, 'zoom_changed', draw);
+            clear();
+        };
+    }, [map, path]);
 }
 
 export default function MapView({
@@ -262,6 +321,7 @@ export default function MapView({
     }, [map]);
 
     useRouteLine(map, path, start, goal, fitPadding);
+    useRouteArrows(map, path);
     useMyLocation(map, myLocation);
     usePin(map, start, '출발', 'start');
     usePin(map, goal, '도착', 'goal');
