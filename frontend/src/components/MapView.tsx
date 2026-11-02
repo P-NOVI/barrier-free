@@ -12,6 +12,8 @@ import { arrowsAlong } from '../lib/routeArrows';
 
 // 카카오맵 확대 수준. 숫자가 작을수록 확대 (1~14)
 const DEFAULT_LEVEL = 4;
+// 안내를 시작할 때 확대 수준. 걸으며 골목이 보이게 기본보다 한 단계 확대한다.
+const FOLLOW_LEVEL = 3;
 
 // 경로 선: 진한 테두리 위에 밝은 선을 겹쳐 지도 도로·노선과 구분한다.
 const ROUTE_OUTLINE: Omit<kakao.maps.PolylineOptions, 'path'> = {
@@ -73,7 +75,13 @@ type MapViewProps = {
     myLocation?: LocationFix | null;
     /** 지도 위에 패널이 떠 있으면 그만큼 여백을 더 준다. 바뀌면 경로에 다시 맞춘다. */
     fitPadding?: FitPadding;
+    /** 경로가 바뀌면 경로 전체가 보이게 맞출지. 안내 중에는 내 위치를 따라가므로 끈다. */
+    fitRoute?: boolean;
+    /** 지도 가운데에 계속 둘 위치 (안내 중 내 위치) */
+    follow?: LngLat | null;
     onMapClick?: (position: LngLat) => void;
+    /** 사용자가 지도를 끌기 시작할 때 */
+    onDragStart?: () => void;
     /** 지도 이동·확대가 끝날 때마다 화면 중심을 알린다. */
     onCenterChange?: (center: LngLat) => void;
 };
@@ -81,7 +89,7 @@ type MapViewProps = {
 /** 지도 이벤트를 붙이고, 지도나 handler 가 바뀌면 뗀다. */
 function useMapEvent(
     map: kakao.maps.Map | null,
-    type: 'click' | 'idle',
+    type: 'click' | 'idle' | 'dragstart',
     handler:
         | ((event: kakao.maps.event.MouseEvent) => void)
         | (() => void)
@@ -158,6 +166,7 @@ function useRouteLine(
     start: LngLat | null | undefined,
     goal: LngLat | null | undefined,
     padding: FitPadding,
+    fit: boolean,
 ) {
     useEffect(() => {
         if (!map || !path || path.length < 2) {
@@ -185,19 +194,39 @@ function useRouteLine(
         ];
         lines.forEach((line) => line.setMap(map));
 
-        const bounds = new kakao.maps.LatLngBounds();
-        [...path, ...gaps.flat()].forEach((point) =>
-            bounds.extend(toLatLng(point)),
-        );
-        map.setBounds(
-            bounds,
-            padding.top,
-            padding.right,
-            padding.bottom,
-            padding.left,
-        );
+        if (fit) {
+            const bounds = new kakao.maps.LatLngBounds();
+            [...path, ...gaps.flat()].forEach((point) =>
+                bounds.extend(toLatLng(point)),
+            );
+            map.setBounds(
+                bounds,
+                padding.top,
+                padding.right,
+                padding.bottom,
+                padding.left,
+            );
+        }
         return () => lines.forEach((line) => line.setMap(null));
-    }, [map, path, start, goal, padding]);
+    }, [map, path, start, goal, padding, fit]);
+}
+
+/** position 을 지도 가운데에 계속 둔다. 따라가기를 시작할 때 걷기 좋게 확대한다. */
+function useFollow(
+    map: kakao.maps.Map | null,
+    position: LngLat | null | undefined,
+) {
+    const following = Boolean(position);
+    useEffect(() => {
+        if (map && following && map.getLevel() > FOLLOW_LEVEL) {
+            map.setLevel(FOLLOW_LEVEL);
+        }
+    }, [map, following]);
+    useEffect(() => {
+        if (map && position) {
+            map.panTo(toLatLng(position));
+        }
+    }, [map, position]);
 }
 
 /** 경로 선 안에 진행 방향 화살표를 그린다. 확대 수준이 바뀌면 화면 간격에 맞춰 다시 놓는다. */
@@ -250,8 +279,11 @@ export default function MapView({
     path,
     myLocation,
     fitPadding = DEFAULT_FIT_PADDING,
+    fitRoute = true,
+    follow,
     onMapClick,
     onCenterChange,
+    onDragStart,
 }: MapViewProps) {
     const containerRef = useRef<HTMLDivElement>(null);
     const mapRef = useRef<kakao.maps.Map | null>(null);
@@ -309,6 +341,7 @@ export default function MapView({
 
     useMapEvent(map, 'click', handleClick);
     useMapEvent(map, 'idle', handleIdle);
+    useMapEvent(map, 'dragstart', onDragStart);
     useEffect(() => {
         const container = containerRef.current;
         if (!map || !container) {
@@ -320,7 +353,8 @@ export default function MapView({
         return () => observer.disconnect();
     }, [map]);
 
-    useRouteLine(map, path, start, goal, fitPadding);
+    useRouteLine(map, path, start, goal, fitPadding, fitRoute);
+    useFollow(map, follow);
     useRouteArrows(map, path);
     useMyLocation(map, myLocation);
     usePin(map, start, '출발', 'start');

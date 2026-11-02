@@ -4,6 +4,8 @@ import { getCurrentPosition, type LocationFix } from '../lib/geolocation';
 
 type MyLocationControlProps = {
     onLocate: (fix: LocationFix) => void;
+    /** 위치를 찾는 방법. 안내 중에는 이미 받은 위치를 바로 쓴다. */
+    locate?: () => Promise<LocationFix>;
 };
 
 type LocateState =
@@ -14,13 +16,14 @@ type LocateState =
 /** 지도 위 '내 위치' 버튼. 찾으면 알리고, 못 찾으면 이유를 버튼 옆에 띄운다. */
 export default function MyLocationControl({
     onLocate,
+    locate: findLocation = getCurrentPosition,
 }: MyLocationControlProps) {
     const [locate, setLocate] = useState<LocateState>({ status: 'idle' });
     const locating = locate.status === 'locating';
 
     const handleClick = () => {
         setLocate({ status: 'locating' });
-        getCurrentPosition()
+        findLocation()
             .then((fix) => {
                 setLocate({ status: 'idle' });
                 onLocate(fix);
