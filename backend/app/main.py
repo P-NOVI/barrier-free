@@ -1,10 +1,13 @@
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text
+from sqlalchemy.exc import OperationalError
 
 from app.config import get_settings
+from app.deps import DbSessionDep
 from app.repositories.road_repository import load_graph
 from app.routers import congestion, places, routes
 
@@ -32,4 +35,21 @@ app.include_router(congestion.router, prefix="/api")
 
 @app.get("/health")
 def health() -> dict[str, str]:
+    return {"status": "ok"}
+
+
+@app.get("/health/db")
+def health_db(session: DbSessionDep) -> dict[str, str]:
+    try:
+        session.execute(text("select 1"))
+    except OperationalError as error:
+        # 오류 문구에 접속 정보가 섞일 수 있어 응답에 그대로 내보내지 않는다.
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "reason": "db_unavailable",
+                "message": "DB에 접속할 수 없습니다. "
+                "docker compose 로 DB가 켜져 있는지 확인하세요.",
+            },
+        ) from error
     return {"status": "ok"}

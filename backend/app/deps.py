@@ -4,8 +4,10 @@ from typing import Annotated
 
 import httpx
 from fastapi import Depends, HTTPException, status
+from sqlalchemy.orm import Session
 
 from app.config import Settings, get_settings
+from app.db import get_engine
 from app.repositories.road_repository import load_graph
 from app.repositories.sensor_repository import Sensor, load_sensors
 from app.services.congestion_service import Reading, TtlCache, create_sdot_client
@@ -88,3 +90,22 @@ def get_congestion_cache() -> TtlCache[list[Reading]]:
 
 
 CongestionCacheDep = Annotated[TtlCache[list[Reading]], Depends(get_congestion_cache)]
+
+
+def get_db_session(settings: SettingsDep) -> Iterator[Session]:
+    database_url = settings.database_url.get_secret_value()
+    if not database_url:
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "reason": "db_unavailable",
+                "message": "DB 접속 주소가 없습니다. backend/.env 의 "
+                "DATABASE_URL 을 확인하세요.",
+            },
+        )
+    engine = get_engine(database_url, settings.database_connect_timeout_s)
+    with Session(engine) as session:
+        yield session
+
+
+DbSessionDep = Annotated[Session, Depends(get_db_session)]
