@@ -19,8 +19,9 @@ venv/
 .pytest_cache/
 .ruff_cache/
 
-# 데이터 원본 / DB
+# 데이터 원본 / 중간 결과 / DB
 data/raw/
+data/interim/
 *.db
 
 # 로그

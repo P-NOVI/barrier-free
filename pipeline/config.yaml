@@ -14,3 +14,15 @@ dem:
   buffer_m: 500
   # 가장 가까운 등고선·표고점에서 이보다 먼 칸은 빈 값으로 둔다.
   max_gap_m: 500
+
+network:
+  # OSM(Nominatim) 지명. 범위를 줄이려면 구 이름 등으로 바꾼다.
+  place: Seoul, South Korea
+  output: data/interim/walk.graphml
+  # Overpass 응답 캐시. 다시 실행할 때 내려받기를 건너뛴다.
+  cache_folder: data/interim/osmnx_cache
+
+elevation:
+  output: data/interim/walk_elevation.graphml
+  # DEM 빈 칸 노드를 이웃 노드 평균으로 채우는 최대 반복 횟수
+  max_fill_passes: 50
