@@ -1,7 +1,7 @@
 from fastapi import APIRouter, HTTPException, status
 
 from app.deps import GraphDep, SettingsDep
-from app.schemas import RouteError, RouteRequest, RouteResponse
+from app.schemas import RouteError, RouteRequest, RouteResponse, TurnPoint
 from app.services.route_service import RouteFailure, RouteNotFoundError, find_route
 from core.profiles import PRESETS
 
@@ -58,6 +58,7 @@ def post_route(
         coordinates=route.coordinates,
         elevations=route.elevations,
         distances_m=route.distances_m,
+        turns=[TurnPoint(index=turn.index, angle=turn.angle) for turn in route.turns],
         start_gap_m=route.start_gap_m,
         goal_gap_m=route.goal_gap_m,
     )

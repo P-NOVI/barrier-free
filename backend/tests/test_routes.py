@@ -45,6 +45,37 @@ def test_route_between_grid_corners(sample_graph: Graph) -> None:
     assert body["distances_m"][-1] == pytest.approx(body["distance_m"])
 
 
+def bends(a: list[float], b: list[float], c: list[float]) -> bool:
+    """a → b → c 가 b 에서 방향을 바꾸는지"""
+    cross = (b[0] - a[0]) * (c[1] - b[1]) - (b[1] - a[1]) * (c[0] - b[0])
+    return abs(cross) > 1e-12
+
+
+@pytest.mark.usefixtures("use_graph")
+def test_route_turns_where_it_changes_road(sample_graph: Graph) -> None:
+    # 격자는 모서리 말고 모든 교차점이 갈림길이라, 방향을 바꾸는 곳마다 안내한다.
+    response = client.post(
+        "/api/route",
+        json={
+            "start": coordinate(sample_graph, 0),
+            "goal": coordinate(sample_graph, 55),
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    points = body["coordinates"]
+    corners = [
+        i
+        for i in range(1, len(points) - 1)
+        if bends(points[i - 1], points[i], points[i + 1])
+    ]
+    assert corners
+    assert [turn["index"] for turn in body["turns"]] == corners
+    for turn in body["turns"]:
+        assert abs(turn["angle"]) == pytest.approx(90, abs=1)
+
+
 @pytest.mark.usefixtures("use_graph")
 def test_wheelchair_route_has_no_steps_or_steep_grade(sample_graph: Graph) -> None:
     response = client.post(
