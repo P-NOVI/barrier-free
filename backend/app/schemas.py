@@ -1,8 +1,9 @@
 from datetime import datetime
 from typing import Annotated
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import AfterValidator, BaseModel, Field
 
+from app.models import ADDRESS_MAX_LENGTH, NAME_MAX_LENGTH, QUERY_MAX_LENGTH
 from core.profiles import DEFAULT_PRESET, PRESETS
 
 Longitude = Annotated[float, Field(ge=-180, le=180)]
@@ -10,20 +11,22 @@ Latitude = Annotated[float, Field(ge=-90, le=90)]
 Coordinate = tuple[Longitude, Latitude]
 
 
+def known_preset(value: str) -> str:
+    if value not in PRESETS:
+        raise ValueError(f"알 수 없는 프리셋입니다. 가능한 값: {', '.join(PRESETS)}")
+    return value
+
+
+PresetName = Annotated[
+    str, AfterValidator(known_preset), Field(description=", ".join(PRESETS))
+]
+
+
 class RouteRequest(BaseModel):
     start: Coordinate = Field(description="출발지 [경도, 위도]")
     goal: Coordinate = Field(description="도착지 [경도, 위도]")
     # 로그인 연동 전까지 요청으로 이동 조건 프리셋을 받는다.
-    preset: str = Field(default=DEFAULT_PRESET, description=", ".join(PRESETS))
-
-    @field_validator("preset")
-    @classmethod
-    def known_preset(cls, value: str) -> str:
-        if value not in PRESETS:
-            raise ValueError(
-                f"알 수 없는 프리셋입니다. 가능한 값: {', '.join(PRESETS)}"
-            )
-        return value
+    preset: PresetName = DEFAULT_PRESET
 
 
 class TurnPoint(BaseModel):
@@ -92,3 +95,52 @@ class SensorCongestionResponse(BaseModel):
 
 class CongestionResponse(BaseModel):
     sensors: list[SensorCongestionResponse]
+
+
+class SessionResponse(BaseModel):
+    is_guest: bool = Field(description="카카오·구글 계정이 연결되지 않았으면 true")
+    preset: str = Field(description="저장한 이동 조건 프리셋. 없으면 기본값")
+
+
+class PresetRequest(BaseModel):
+    preset: PresetName
+
+
+class SearchHistoryRequest(BaseModel):
+    query: str = Field(min_length=1, max_length=QUERY_MAX_LENGTH)
+    place_name: str | None = Field(
+        default=None,
+        max_length=NAME_MAX_LENGTH,
+        description="검색 결과에서 고른 장소 이름. 고르지 않았으면 null",
+    )
+    address: str | None = Field(default=None, max_length=ADDRESS_MAX_LENGTH)
+    position: Coordinate | None = Field(
+        default=None, description="고른 장소 [경도, 위도]"
+    )
+
+
+class SearchHistoryResponse(SearchHistoryRequest):
+    id: int
+    created_at: datetime
+
+
+class SearchHistoryListResponse(BaseModel):
+    searches: list[SearchHistoryResponse] = Field(description="최근 것부터")
+
+
+class RouteHistoryRequest(BaseModel):
+    start_name: str = Field(min_length=1, max_length=NAME_MAX_LENGTH)
+    start: Coordinate = Field(description="출발지 [경도, 위도]")
+    goal_name: str = Field(min_length=1, max_length=NAME_MAX_LENGTH)
+    goal: Coordinate = Field(description="도착지 [경도, 위도]")
+    preset: PresetName
+    distance_m: float = Field(ge=0)
+
+
+class RouteHistoryResponse(RouteHistoryRequest):
+    id: int
+    created_at: datetime
+
+
+class RouteHistoryListResponse(BaseModel):
+    routes: list[RouteHistoryResponse] = Field(description="최근 것부터")

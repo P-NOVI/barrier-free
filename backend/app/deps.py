@@ -1,15 +1,18 @@
 from collections.abc import Iterator
+from datetime import timedelta
 from functools import cache
 from typing import Annotated
 
 import httpx
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, Response, status
 from sqlalchemy.orm import Session
 
 from app.config import Settings, get_settings
 from app.db import get_engine
+from app.models import User
 from app.repositories.road_repository import load_graph
 from app.repositories.sensor_repository import Sensor, load_sensors
+from app.repositories.user_repository import create_guest, find_user_by_token
 from app.services.congestion_service import Reading, TtlCache, create_sdot_client
 from app.services.place_service import create_kakao_client
 from core.graph import Graph
@@ -109,3 +112,51 @@ def get_db_session(settings: SettingsDep) -> Iterator[Session]:
 
 
 DbSessionDep = Annotated[Session, Depends(get_db_session)]
+
+
+def set_token_cookie(response: Response, settings: Settings, token: str) -> None:
+    # 쓸 때마다 다시 줘서, 계속 쓰는 동안에는 브라우저에서 만료되지 않게 한다.
+    response.set_cookie(
+        settings.auth_cookie_name,
+        token,
+        max_age=int(timedelta(days=settings.token_idle_days).total_seconds()),
+        httponly=True,
+        secure=settings.auth_cookie_secure,
+        samesite="lax",
+    )
+
+
+def get_current_user(
+    request: Request, response: Response, session: DbSessionDep, settings: SettingsDep
+) -> User | None:
+    """쿠키 토큰의 사용자. 쿠키가 없거나 만료됐으면 None."""
+    token = request.cookies.get(settings.auth_cookie_name)
+    if not token:
+        return None
+    user = find_user_by_token(session, token, settings.token_idle_days)
+    if user is None:
+        return None
+    session.commit()
+    set_token_cookie(response, settings, token)
+    return user
+
+
+CurrentUserDep = Annotated[User | None, Depends(get_current_user)]
+
+
+def ensure_user(
+    user: CurrentUserDep,
+    response: Response,
+    session: DbSessionDep,
+    settings: SettingsDep,
+) -> User:
+    """쿠키 토큰의 사용자. 없으면 게스트를 만들고 토큰을 쿠키로 준다."""
+    if user is not None:
+        return user
+    user, token = create_guest(session)
+    session.commit()
+    set_token_cookie(response, settings, token)
+    return user
+
+
+UserDep = Annotated[User, Depends(ensure_user)]

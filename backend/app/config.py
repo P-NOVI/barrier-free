@@ -45,6 +45,10 @@ class Settings(BaseSettings):
     token_idle_days: int = 30
     # 사용자마다 검색·경로 이력을 최근 이만큼만 남긴다.
     history_keep: int = 50
+    # 게스트·회원 토큰을 담는 쿠키. 자바스크립트로 읽을 수 없게(HttpOnly) 준다.
+    auth_cookie_name: str = "bf_token"
+    # https 에서만 쿠키를 보낸다. 배포 환경에서는 AUTH_COOKIE_SECURE=true
+    auth_cookie_secure: bool = False
     # 지도에서 누른 곳의 이름
     # - place_on_spot 안 장소는 분류와 상관없이(가게도) 그 이름으로 부른다.
     #   가장 가까운 곳과 same_spot 안(같은 건물쯤)이면 지도에 이름이 보이는 곳을 쓴다.

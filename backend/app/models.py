@@ -5,6 +5,11 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db import Base
 
+# 요청 검사(app.schemas)에서도 같은 길이를 쓴다.
+QUERY_MAX_LENGTH = 100
+NAME_MAX_LENGTH = 200
+ADDRESS_MAX_LENGTH = 300
+
 
 def utc_now() -> datetime:
     return datetime.now(UTC)
@@ -79,9 +84,9 @@ class SearchHistory(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int] = user_id_column(index=True)
-    query: Mapped[str] = mapped_column(String(100))
-    place_name: Mapped[str | None] = mapped_column(String(200))
-    address: Mapped[str | None] = mapped_column(String(300))
+    query: Mapped[str] = mapped_column(String(QUERY_MAX_LENGTH))
+    place_name: Mapped[str | None] = mapped_column(String(NAME_MAX_LENGTH))
+    address: Mapped[str | None] = mapped_column(String(ADDRESS_MAX_LENGTH))
     lon: Mapped[float | None]
     lat: Mapped[float | None]
     created_at: Mapped[datetime] = created_at_column()
@@ -94,10 +99,10 @@ class RouteHistory(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     user_id: Mapped[int] = user_id_column(index=True)
-    start_name: Mapped[str] = mapped_column(String(200))
+    start_name: Mapped[str] = mapped_column(String(NAME_MAX_LENGTH))
     start_lon: Mapped[float]
     start_lat: Mapped[float]
-    goal_name: Mapped[str] = mapped_column(String(200))
+    goal_name: Mapped[str] = mapped_column(String(NAME_MAX_LENGTH))
     goal_lon: Mapped[float]
     goal_lat: Mapped[float]
     preset: Mapped[str] = mapped_column(String(40))

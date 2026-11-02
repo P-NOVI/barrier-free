@@ -21,7 +21,12 @@ def sample_graph() -> Graph:
 @pytest.fixture
 def db_session() -> Iterator[Session]:
     # 메모리 DB는 연결마다 따로 생기므로 연결 하나를 계속 쓴다.
-    engine = create_engine("sqlite://", poolclass=StaticPool)
+    # API 테스트에서는 FastAPI 가 다른 스레드에서 이 연결을 쓴다.
+    engine = create_engine(
+        "sqlite://",
+        poolclass=StaticPool,
+        connect_args={"check_same_thread": False},
+    )
     create_tables(engine)
     with Session(engine) as session:
         yield session

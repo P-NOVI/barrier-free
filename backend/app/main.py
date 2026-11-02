@@ -2,8 +2,9 @@ import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException, status
+from fastapi import FastAPI, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from sqlalchemy import text
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
@@ -13,9 +14,15 @@ from app.db import create_tables, get_engine
 from app.deps import DbSessionDep
 from app.repositories.road_repository import load_graph
 from app.repositories.user_repository import purge_inactive_guests
-from app.routers import congestion, places, routes
+from app.routers import congestion, me, places, routes
 
 logger = logging.getLogger(__name__)
+
+DB_UNAVAILABLE = {
+    "reason": "db_unavailable",
+    "message": "DB에 접속할 수 없습니다. "
+    "docker compose 로 DB가 켜져 있는지 확인하세요.",
+}
 
 
 def prepare_database(settings: Settings) -> None:
@@ -48,12 +55,24 @@ app = FastAPI(lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=get_settings().allowed_origins,
+    # 게스트·회원 토큰 쿠키를 주고받는다.
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 app.include_router(routes.router, prefix="/api")
 app.include_router(places.router, prefix="/api")
 app.include_router(congestion.router, prefix="/api")
+app.include_router(me.router, prefix="/api")
+
+
+@app.exception_handler(OperationalError)
+def db_unavailable(_: Request, __: OperationalError) -> JSONResponse:
+    # 오류 문구에 접속 정보가 섞일 수 있어 응답에 그대로 내보내지 않는다.
+    return JSONResponse(
+        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        content={"detail": DB_UNAVAILABLE},
+    )
 
 
 @app.get("/health")
@@ -68,11 +87,6 @@ def health_db(session: DbSessionDep) -> dict[str, str]:
     except OperationalError as error:
         # 오류 문구에 접속 정보가 섞일 수 있어 응답에 그대로 내보내지 않는다.
         raise HTTPException(
-            status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail={
-                "reason": "db_unavailable",
-                "message": "DB에 접속할 수 없습니다. "
-                "docker compose 로 DB가 켜져 있는지 확인하세요.",
-            },
+            status.HTTP_503_SERVICE_UNAVAILABLE, detail=DB_UNAVAILABLE
         ) from error
     return {"status": "ok"}
