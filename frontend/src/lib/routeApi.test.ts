@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { fetchRoute, RouteError, type RouteRequest } from './routeApi';
+import { ApiError } from './apiClient';
+import { fetchRoute, type RouteRequest } from './routeApi';
 
 const BASE_URL = 'http://api.test';
 const REQUEST: RouteRequest = {
@@ -55,7 +56,7 @@ describe('fetchRoute', () => {
         const error = await fetchRoute(REQUEST, { baseUrl: BASE_URL }).catch(
             (reason: unknown) => reason,
         );
-        expect(error).toBeInstanceOf(RouteError);
+        expect(error).toBeInstanceOf(ApiError);
         expect(error).toMatchObject({
             reason: 'no_path',
             message: '이동 조건에 맞는 경로가 없습니다.',
