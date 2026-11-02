@@ -49,6 +49,26 @@ class Settings(BaseSettings):
     auth_cookie_name: str = "bf_token"
     # https 에서만 쿠키를 보낸다. 배포 환경에서는 AUTH_COOKIE_SECURE=true
     auth_cookie_secure: bool = False
+    # 카카오·구글 로그인. 키는 backend/.env 에만 둔다.
+    # 카카오 client_id 는 kakao_rest_api_key 를 쓴다.
+    kakao_client_secret: SecretStr = SecretStr("")
+    kakao_auth_base_url: str = "https://kauth.kakao.com"
+    kakao_user_url: str = "https://kapi.kakao.com/v2/user/me"
+    google_client_id: str = ""
+    google_client_secret: SecretStr = SecretStr("")
+    google_authorize_url: str = "https://accounts.google.com/o/oauth2/v2/auth"
+    google_token_url: str = "https://oauth2.googleapis.com/token"
+    google_user_url: str = "https://openidconnect.googleapis.com/v1/userinfo"
+    oauth_timeout_s: float = 5.0
+    # 카카오·구글 콘솔에 등록한 Redirect URI 의 앞부분.
+    # 실제 주소는 {이 값}/api/auth/{kakao|google}/callback
+    # 쿠키는 포트를 구분하지 않으므로 화면(localhost:5173)과 호스트 이름만 같으면 된다.
+    oauth_redirect_base_url: str = "http://localhost:8000"
+    # 로그인을 마치고 돌아갈 화면 주소
+    frontend_url: str = "http://localhost:5173"
+    # 로그인 위조를 막는 state 값을 담는 쿠키. 로그인을 마칠 때까지만 둔다.
+    oauth_state_cookie_name: str = "bf_oauth_state"
+    oauth_state_ttl_s: int = 600
     # 지도에서 누른 곳의 이름
     # - place_on_spot 안 장소는 분류와 상관없이(가게도) 그 이름으로 부른다.
     #   가장 가까운 곳과 same_spot 안(같은 건물쯤)이면 지도에 이름이 보이는 곳을 쓴다.

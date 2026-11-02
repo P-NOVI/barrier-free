@@ -71,6 +71,15 @@ def is_guest(session: Session, user_id: int) -> bool:
     return not session.scalar(select(exists().where(SocialAccount.user_id == user_id)))
 
 
+def linked_providers(session: Session, user_id: int) -> list[str]:
+    """연결된 소셜 계정(kakao·google). 게스트면 빈 목록."""
+    return sorted(
+        session.scalars(
+            select(SocialAccount.provider).where(SocialAccount.user_id == user_id)
+        )
+    )
+
+
 def sign_in_with_social(
     session: Session,
     current_user_id: int | None,
