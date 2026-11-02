@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import MapView, { type FitPadding } from './components/MapView';
 import MyLocationControl from './components/MyLocationControl';
@@ -11,6 +11,7 @@ import { useNavigation } from './hooks/useNavigation';
 import { useRoute } from './hooks/useRoute';
 import { useVoiceGuidance } from './hooks/useVoiceGuidance';
 import { useWakeLock } from './hooks/useWakeLock';
+import { type Elevator, elevatorName, fetchElevators } from './lib/elevators';
 import type { LocationFix } from './lib/geolocation';
 import { type LngLat, SEOUL_CITY_HALL } from './lib/kakaoMap';
 import { findAddress } from './lib/placeApi';
@@ -61,6 +62,9 @@ export default function App() {
     // 음성 안내. 음성 기능이 없는 브라우저에서는 끈다.
     const speechSupported = canSpeak();
     const [voice, setVoice] = useState(speechSupported);
+    const [elevators, setElevators] = useState<Elevator[]>([]);
+    const [elevatorError, setElevatorError] = useState<string | null>(null);
+    const [showElevators, setShowElevators] = useState(false);
     const start = endpoints.start?.position ?? null;
     const goal = endpoints.goal?.position ?? null;
     const route = useRoute(start, goal, preset);
@@ -96,13 +100,41 @@ export default function App() {
     // 마지막으로 누른 곳. 응답을 기다리는 사이 다른 곳을 눌렀는지 구분한다(배열 자체로 비교).
     const latestClick = useRef<LngLat | null>(null);
 
-    const handleMapClick = useCallback((position: LngLat) => {
+    useEffect(() => {
+        let cancelled = false;
+        fetchElevators()
+            .then((data) => {
+                if (!cancelled) {
+                    setElevators(data);
+                }
+            })
+            .catch((reason: unknown) => {
+                if (!cancelled) {
+                    setElevatorError(
+                        reason instanceof Error
+                            ? reason.message
+                            : String(reason),
+                    );
+                }
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, []);
+
+    // name 을 주면 찾은 이름 대신 그 이름을 쓴다(엘리베이터). 주소는 position 으로 찾는다.
+    const pickPlace = useCallback((position: LngLat, name?: string) => {
         // 새로 누르면 이전 카드는 닫고, 이름·주소가 오면 그때 카드를 띄운다.
         latestClick.current = position;
         setPicked(null);
         const show = (found: { name: string; address: string } | null) => {
             if (latestClick.current === position) {
-                setPicked(toPickedPlace(position, found));
+                setPicked(
+                    toPickedPlace(
+                        position,
+                        name ? { name, address: found?.address ?? '' } : found,
+                    ),
+                );
             }
         };
         findAddress(position)
@@ -117,6 +149,17 @@ export default function App() {
             // 못 찾아도 카드는 띄워서 "주소를 찾지 못했어요"를 알린다.
             .catch(() => show(null));
     }, []);
+
+    const handleMapClick = useCallback(
+        (position: LngLat) => pickPlace(position),
+        [pickPlace],
+    );
+
+    const handleElevatorClick = useCallback(
+        (elevator: Elevator) =>
+            pickPlace(elevator.position, elevatorName(elevator)),
+        [pickPlace],
+    );
 
     const handleSelect = useCallback(
         (role: EndpointRole, endpoint: Endpoint) => {
@@ -230,6 +273,7 @@ export default function App() {
                     )
                 }
                 path={shownRoute?.coordinates ?? null}
+                elevators={showElevators ? elevators : undefined}
                 fitPadding={wide ? FIT_PADDING.wide : FIT_PADDING.narrow}
                 fitRoute={!navigating}
                 follow={
@@ -239,6 +283,7 @@ export default function App() {
                 }
                 // 안내 중에는 지도를 눌러도 출발·도착을 바꾸지 않는다.
                 onMapClick={navigating ? undefined : handleMapClick}
+                onElevatorClick={navigating ? undefined : handleElevatorClick}
                 onCenterChange={setMapCenter}
                 onDragStart={stopFollowing}
                 myLocation={navigationFix ?? myLocation}
@@ -251,6 +296,19 @@ export default function App() {
                         : undefined
                 }
             />
+            <button
+                type="button"
+                className="map-toggle"
+                aria-pressed={showElevators}
+                onClick={() => setShowElevators((shown) => !shown)}
+            >
+                엘리베이터
+            </button>
+            {elevatorError && (
+                <p role="alert" className="map-view__error">
+                    {elevatorError}
+                </p>
+            )}
         </div>
     );
 }

@@ -57,6 +57,40 @@ body,
     text-decoration: none;
 }
 
+/* 좁은 화면: 검색창 아래 왼쪽 */
+.map-toggle {
+    position: absolute;
+    top: 130px;
+    left: 12px;
+    z-index: 15;
+    padding: 8px 14px;
+    font-size: 14px;
+    color: var(--text);
+    background: var(--overlay-bg);
+    border: 1px solid var(--text);
+    border-radius: 6px;
+    cursor: pointer;
+}
+
+/* 켜짐 색은 카카오맵 기본 마커의 파란색과 같다 */
+.map-toggle[aria-pressed='true'] {
+    color: #fff;
+    background: #238cfa;
+    border-color: #238cfa;
+}
+
+/* OpenStreetMap 출처 표기 왼쪽 */
+.map-view__source {
+    position: absolute;
+    right: 176px;
+    bottom: 4px;
+    z-index: 10;
+    padding: 0 4px;
+    font-size: 11px;
+    color: var(--text);
+    background: var(--overlay-bg);
+}
+
 .map-view__error {
     position: absolute;
     top: 12px;
@@ -623,5 +657,11 @@ body,
     .my-location-control {
         top: auto;
         bottom: 32px;
+    }
+
+    /* 패널 카드 오른쪽 위 */
+    .map-toggle {
+        top: 12px;
+        left: calc(var(--side-panel-width) + 24px);
     }
 }
