@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Annotated
+from typing import Annotated, Literal
 
 from pydantic import AfterValidator, BaseModel, Field
 
@@ -108,6 +108,20 @@ class SensorCongestionResponse(BaseModel):
 
 class CongestionResponse(BaseModel):
     sensors: list[SensorCongestionResponse]
+
+
+class WeatherResponse(BaseModel):
+    source: Literal["observation", "ultra_short_forecast", "short_forecast"] = Field(
+        description="observation 은 현재 관측, 나머지는 예보"
+    )
+    time: datetime = Field(description="날씨가 해당하는 정시(한국 시간)")
+    temp_c: float = Field(description="기온(℃)")
+    rain_mm: float = Field(
+        description="그 시간의 강수량(mm). '1mm 미만'은 0.5, 범위는 가운데 값"
+    )
+    precipitation: Literal["none", "rain", "sleet", "snow", "shower"] = Field(
+        description="강수 형태. none 은 비·눈 없음"
+    )
 
 
 class SessionResponse(BaseModel):
