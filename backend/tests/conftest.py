@@ -7,10 +7,21 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
+from app import deps
 from app.db import create_tables
+from core.entrance import NO_ENTRANCES
 from core.graph import Graph, build_graph
 
 SAMPLE_GRAPH = Path(__file__).resolve().parents[2] / "data" / "sample" / "graph.json"
+
+
+@pytest.fixture(autouse=True)
+def no_real_entrances(monkeypatch: pytest.MonkeyPatch) -> None:
+    """data/processed/entrances.json.gz 의 실제 건물이 테스트 좌표에 걸리지 않게 한다.
+
+    출입구를 쓰는 테스트는 get_entrances 를 따로 덮어쓴다.
+    """
+    monkeypatch.setattr(deps, "load_entrances", lambda path: NO_ENTRANCES)
 
 
 @pytest.fixture(scope="session")

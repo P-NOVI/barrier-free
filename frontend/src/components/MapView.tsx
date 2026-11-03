@@ -92,6 +92,9 @@ type MapViewProps = {
     /** picked 위치 위에 띄울 카드. 아래 꼬리가 그 위치를 가리킨다. */
     popup?: ReactNode;
     path?: LngLat[] | null;
+    /** 경로가 건물 출입구에서 시작·끝나면 그 출입구. 점선이 출입구를 거쳐 간다. */
+    startEntrance?: LngLat | null;
+    goalEntrance?: LngLat | null;
     /** 마커로 보여 줄 지하철역 엘리베이터 */
     elevators?: Elevator[];
     /** 내 위치. 파란 점과 오차 반경 원으로 그린다. */
@@ -333,6 +336,8 @@ function useRouteLine(
     path: LngLat[] | null | undefined,
     start: LngLat | null | undefined,
     goal: LngLat | null | undefined,
+    startEntrance: LngLat | null | undefined,
+    goalEntrance: LngLat | null | undefined,
     padding: FitPadding,
     fit: boolean,
 ) {
@@ -341,8 +346,16 @@ function useRouteLine(
             return;
         }
         const gaps = [
-            start && [start, path[0]],
-            goal && [path[path.length - 1], goal],
+            start && [
+                start,
+                ...(startEntrance ? [startEntrance] : []),
+                path[0],
+            ],
+            goal && [
+                path[path.length - 1],
+                ...(goalEntrance ? [goalEntrance] : []),
+                goal,
+            ],
         ].filter((gap): gap is LngLat[] => Boolean(gap));
         const lines = [
             ...[ROUTE_OUTLINE, ROUTE_LINE].map(
@@ -376,7 +389,7 @@ function useRouteLine(
             );
         }
         return () => lines.forEach((line) => line.setMap(null));
-    }, [map, path, start, goal, padding, fit]);
+    }, [map, path, start, goal, startEntrance, goalEntrance, padding, fit]);
 }
 
 /** position 을 지도 가운데에 계속 둔다. 따라가기를 시작할 때 걷기 좋게 확대한다. */
@@ -447,6 +460,8 @@ export default function MapView({
     picked,
     popup,
     path,
+    startEntrance,
+    goalEntrance,
     elevators = NO_ELEVATORS,
     myLocation,
     congestion,
@@ -526,7 +541,16 @@ export default function MapView({
         return () => observer.disconnect();
     }, [map]);
 
-    useRouteLine(map, path, start, goal, fitPadding, fitRoute);
+    useRouteLine(
+        map,
+        path,
+        start,
+        goal,
+        startEntrance,
+        goalEntrance,
+        fitPadding,
+        fitRoute,
+    );
     useFollow(map, follow);
     useRouteArrows(map, path);
     useCongestionPins(map, congestion);

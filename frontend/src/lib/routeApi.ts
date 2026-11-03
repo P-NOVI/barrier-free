@@ -29,9 +29,12 @@ export type RouteResponse = {
     distances_m: number[];
     /** 갈림길에서 다른 길로 꺾어 들어가는 곳. 출발점에서 가까운 순서 */
     turns: TurnPoint[];
-    /** 요청한 출발 좌표에서 경로 시작점까지 거리 */
+    /** 요청한 출발 좌표(출입구를 거치면 그 출입구)에서 경로 시작점까지 거리 */
     start_gap_m: number;
     goal_gap_m: number;
+    /** 출발지가 건물·시설 안이라 거친 출입구. 아니면 null */
+    start_entrance: LngLat | null;
+    goal_entrance: LngLat | null;
 };
 
 export function fetchRoute(

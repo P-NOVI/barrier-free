@@ -55,3 +55,20 @@ sdot_history:
   report: interim/sdot/history_report.json
   # 저장소 기준. 위치를 모르는 센서 코드를 보고서에 남기는 데 쓴다.
   sensors: data/processed/sdot_sensors.json
+
+# 07 단계. 05 단계처럼 run_all.py 에 넣지 않고 따로 실행한다.
+entrances:
+  overpass_url: https://overpass-api.de/api/interpreter
+  # OSM 행정구역 이름(admin_level 4)
+  area_name: 서울특별시
+  timeout_s: 300
+  # Overpass 는 User-Agent 가 없는 요청을 거절한다.
+  user_agent: barrier-free-pipeline (https://github.com/P-NOVI/barrier-free)
+  # 이 태그 중 하나가 있는 닫힌 way·multipolygon 만 영역으로 쓴다.
+  # 공항(aeroway)처럼 아주 넓은 영역은 넣지 않는다. 터미널 건물이 따로 있다.
+  area_keys: [building, amenity, leisure, tourism, historic, landuse, shop, healthcare, office]
+  # 길안내에 쓰지 않는 출입구 (entrance=*, access=* 값)
+  excluded_entrances: [emergency, service]
+  excluded_access: [private, "no"]
+  # 저장소 기준. backend/app/config.py 의 기본 출입구 경로와 같아야 한다.
+  output: data/processed/entrances.json.gz

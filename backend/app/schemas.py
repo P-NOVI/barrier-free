@@ -47,8 +47,18 @@ class RouteResponse(BaseModel):
     turns: list[TurnPoint] = Field(
         description="갈림길에서 다른 길로 꺾어 들어가는 곳. 출발점에서 가까운 순서"
     )
-    start_gap_m: float = Field(description="요청한 출발 좌표에서 경로 시작점까지 거리")
-    goal_gap_m: float = Field(description="요청한 도착 좌표에서 경로 끝점까지 거리")
+    start_gap_m: float = Field(
+        description="요청한 출발 좌표(또는 거친 출입구)에서 경로 시작점까지 거리"
+    )
+    goal_gap_m: float = Field(
+        description="요청한 도착 좌표(또는 거친 출입구)에서 경로 끝점까지 거리"
+    )
+    start_entrance: Coordinate | None = Field(
+        default=None, description="출발지가 건물·시설 안이라 거친 출입구 [경도, 위도]"
+    )
+    goal_entrance: Coordinate | None = Field(
+        default=None, description="도착지가 건물·시설 안이라 거친 출입구 [경도, 위도]"
+    )
 
 
 class RouteError(BaseModel):

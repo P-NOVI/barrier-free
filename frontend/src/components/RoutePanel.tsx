@@ -28,12 +28,16 @@ function guide(endpoints: Endpoints): string | null {
 
 function gapNotices(route: RouteResponse): string[] {
     const notices = [];
-    if (route.start_gap_m >= GAP_NOTICE_M) {
+    if (route.start_entrance) {
+        notices.push('출발지 건물 출입구 앞 길부터 안내합니다.');
+    } else if (route.start_gap_m >= GAP_NOTICE_M) {
         notices.push(
             `출발지에서 ${formatDistance(route.start_gap_m)} 떨어진 길부터 안내합니다.`,
         );
     }
-    if (route.goal_gap_m >= GAP_NOTICE_M) {
+    if (route.goal_entrance) {
+        notices.push('도착지 건물 출입구 앞 길까지 안내합니다.');
+    } else if (route.goal_gap_m >= GAP_NOTICE_M) {
         notices.push(
             `도착지 ${formatDistance(route.goal_gap_m)} 앞 길까지 안내합니다.`,
         );

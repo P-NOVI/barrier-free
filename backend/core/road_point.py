@@ -23,8 +23,12 @@ class RoadPoint:
     # 길 처음(u)부터 지점까지 온 비율(0~1)
     share: float
     position: LngLat
-    # 찍은 좌표에서 지점까지 거리(m)
+    # 찍은 좌표(출입구를 거치면 그 출입구)에서 지점까지 거리(m)
     gap_m: float
+    # 건물·시설 출입구를 거치는 후보면 그 출입구 위치 (core/entrance.py)
+    entrance: LngLat | None = None
+    # 찍은 좌표에서 출입구까지 영역 안을 걷는 직선거리(m). 출입구가 없으면 0
+    inside_m: float = 0.0
 
 
 def nearby_road_points(

@@ -3,15 +3,18 @@
 찍은 위치에서 가장 가까운 길이 계단·급경사이거나 그런 길로 둘러싸여 있으면, 근처에
 갈 수 있는 길이 있어도 경로가 없다. 그래서 반경 안을 지나는 길 중 이동 조건으로
 지나갈 수 있고, 출발·도착이 같은 묶음에 들어가는 길 위 지점을 후보로 고른다.
+찍은 위치가 건물·시설 안이면 그 출입구 앞 길 위 지점도 후보로 더한다.
 """
 
 from dataclasses import dataclass, replace
 from enum import StrEnum
 
 from core.cost import is_passable
+from core.entrance import NO_ENTRANCES, EntranceIndex
 from core.graph import Arc, Graph
 from core.profiles import Profile
 from core.road_point import RoadPoint, nearby_road_points
+from core.snap import LngLat, distance_m
 
 # 사용자가 경사 한계를 바꾸면 조건 조합이 늘어나므로 캐시 크기를 제한한다.
 MAX_CACHED_PROFILES = 32
@@ -28,7 +31,8 @@ class EndpointFailure(StrEnum):
 
 @dataclass(frozen=True)
 class Endpoints:
-    # 출발·도착 후보 지점. 가까운 순서. 어느 후보를 쓸지는 경로 탐색이 정한다.
+    # 출발·도착 후보 지점. 기준점(찍은 곳, 출입구)마다 가까운 순서로 이어 붙인다.
+    # 어느 후보를 쓸지는 경로 탐색이 정한다.
     starts: list[RoadPoint]
     goals: list[RoadPoint]
 
@@ -73,34 +77,64 @@ def component_labels(graph: Graph, profile: Profile) -> list[int]:
 
 def pick_endpoints(
     graph: Graph,
-    start: tuple[float, float],
-    goal: tuple[float, float],
+    start: LngLat,
+    goal: LngLat,
     profile: Profile,
     max_distance_m: float,
+    entrances: EntranceIndex = NO_ENTRANCES,
 ) -> Endpoints | EndpointFailure:
     """반경 안을 지나는 길 중 출발·도착이 같은 연결 요소에 있는 후보 지점을 고른다.
 
     이동 조건으로 지나갈 수 없는 길(휠체어의 계단 등)에는 붙이지 않는다.
     """
-    starts = nearby_road_points(graph, *start, max_distance_m)
-    if not starts:
+    starts = anchored_road_points(graph, start, profile, max_distance_m, entrances)
+    if not any(starts):
         return EndpointFailure.START_OFF_NETWORK
-    goals = nearby_road_points(graph, *goal, max_distance_m)
-    if not goals:
+    goals = anchored_road_points(graph, goal, profile, max_distance_m, entrances)
+    if not any(goals):
         return EndpointFailure.GOAL_OFF_NETWORK
 
     labels = component_labels(graph, profile)
     # 지나갈 수 있는 길은 양 끝이 같은 묶음이라 시작 노드의 묶음을 쓴다.
-    starts = [point for point in starts if passable_either_way(point.edge, profile)]
-    goals = [point for point in goals if passable_either_way(point.edge, profile)]
-    shared = {labels[p.edge.source] for p in starts} & {
-        labels[p.edge.source] for p in goals
+    starts = [
+        [point for point in group if passable_either_way(point.edge, profile)]
+        for group in starts
+    ]
+    goals = [
+        [point for point in group if passable_either_way(point.edge, profile)]
+        for group in goals
+    ]
+    shared = {labels[p.edge.source] for group in starts for p in group} & {
+        labels[p.edge.source] for group in goals for p in group
     }
     if not shared:
         return EndpointFailure.NOT_CONNECTED
     return Endpoints(
-        candidates(starts, shared, labels), candidates(goals, shared, labels)
+        [p for group in starts for p in candidates(group, shared, labels)],
+        [p for group in goals for p in candidates(group, shared, labels)],
     )
+
+
+def anchored_road_points(
+    graph: Graph,
+    point: LngLat,
+    profile: Profile,
+    max_distance_m: float,
+    entrances: EntranceIndex,
+) -> list[list[RoadPoint]]:
+    """기준점마다 반경 안 길 위 지점들. 첫 묶음은 찍은 곳, 나머지는 출입구 기준이다."""
+    groups = [nearby_road_points(graph, *point, max_distance_m)]
+    for entrance in entrances.entrances_at(*point, profile.needs_wheelchair_access):
+        inside_m = distance_m(*point, *entrance.position)
+        groups.append(
+            [
+                replace(road_point, entrance=entrance.position, inside_m=inside_m)
+                for road_point in nearby_road_points(
+                    graph, *entrance.position, max_distance_m
+                )
+            ]
+        )
+    return groups
 
 
 def candidates(
@@ -108,5 +142,7 @@ def candidates(
 ) -> list[RoadPoint]:
     """shared 묶음의 지점 중 가장 가까운 지점보다 CANDIDATE_SLACK_M 안쪽인 것."""
     usable = [point for point in points if labels[point.edge.source] in shared]
+    if not usable:
+        return []
     limit = usable[0].gap_m + CANDIDATE_SLACK_M
     return [point for point in usable if point.gap_m <= limit]

@@ -298,6 +298,8 @@ export default function App() {
                     )
                 }
                 path={shownRoute?.coordinates ?? null}
+                startEntrance={shownRoute?.start_entrance}
+                goalEntrance={shownRoute?.goal_entrance}
                 elevators={showElevators ? elevators : undefined}
                 fitPadding={wide ? FIT_PADDING.wide : FIT_PADDING.narrow}
                 fitRoute={!navigating}
