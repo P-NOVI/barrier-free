@@ -10,6 +10,7 @@ from dataclasses import dataclass, replace
 from itertools import accumulate, pairwise
 
 from core.graph import Arc, Graph, Node, shape
+from core.site import WallCrossing
 from core.snap import LngLat, distance_m, project
 
 # 길 끝에서 이 거리(m) 안이면 길을 나누지 않고 끝 노드를 쓴다.
@@ -29,8 +30,8 @@ class RoadPoint:
     entrance: LngLat | None = None
     # 찍은 좌표에서 출입구까지 영역 안을 걷는 직선거리(m). 출입구가 없으면 0
     inside_m: float = 0.0
-    # 찍은 좌표를 감싸지 않는 시설 안 길이면 True. 점선이 담장을 넘는다 (core/site.py)
-    walled_off: bool = False
+    # 점선이 찍은 좌표를 감싸지 않는 시설의 담장을 넘는지 (core/site.py)
+    wall: WallCrossing = WallCrossing.NONE
 
 
 def nearby_road_points(
