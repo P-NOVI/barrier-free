@@ -53,7 +53,7 @@ def ring_size(ring: Sequence[LngLat]) -> float:
     return abs(sum(x1 * y2 - x2 * y1 for (x1, y1), (x2, y2) in pairwise(ring))) / 2
 
 
-class EntranceIndex:
+class AreaIndex:
     """영역 격자 색인. 영역의 경계 상자가 걸친 칸마다 영역을 넣어 둔다."""
 
     __slots__ = ("_areas", "_cell", "_cells")
@@ -76,19 +76,27 @@ class EntranceIndex:
     def _key(self, degrees: float) -> int:
         return math.floor(degrees / self._cell)
 
-    def area_at(self, lon: float, lat: float) -> Area | None:
-        """점을 감싸는 영역 중 가장 작은 것. 캠퍼스 안 건물이면 건물을 고른다."""
-        found = None
+    def areas_at(self, lon: float, lat: float) -> list[Area]:
+        """점을 감싸는 영역 모두."""
+        found = []
         for index in self._cells.get((self._key(lon), self._key(lat)), []):
             area = self._areas[index]
             min_lon, min_lat, max_lon, max_lat = area.bounds
             if not (min_lon <= lon <= max_lon and min_lat <= lat <= max_lat):
                 continue
-            if found is not None and area.size >= found.size:
-                continue
             if any(contains(ring, lon, lat) for ring in area.rings):
-                found = area
+                found.append(area)
         return found
+
+    def area_at(self, lon: float, lat: float) -> Area | None:
+        """점을 감싸는 영역 중 가장 작은 것. 캠퍼스 안 건물이면 건물을 고른다."""
+        return min(self.areas_at(lon, lat), key=lambda area: area.size, default=None)
+
+
+class EntranceIndex(AreaIndex):
+    """출입구가 붙은 건물·시설 영역 색인."""
+
+    __slots__ = ()
 
     def entrances_at(
         self, lon: float, lat: float, needs_wheelchair_access: bool
@@ -112,9 +120,10 @@ def build_area(data: dict[str, Any]) -> Area:
     points = [point for ring in rings for point in ring]
     return Area(
         rings=rings,
+        # 시설 영역(core/site.py)은 출입구가 없다.
         entrances=tuple(
             Entrance((e["lon"], e["lat"]), e.get("wheelchair"))
-            for e in data["entrances"]
+            for e in data.get("entrances", [])
         ),
         bounds=(
             min(lon for lon, _ in points),

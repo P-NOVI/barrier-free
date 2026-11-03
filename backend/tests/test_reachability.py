@@ -11,6 +11,7 @@ from core.reachability import (
     component_labels,
     pick_endpoints,
 )
+from core.site import build_site_index
 
 ORIGIN = (126.9779, 37.5663)
 M_PER_DEG_LAT = 111_195.0
@@ -154,3 +155,31 @@ def test_candidates_include_roads_a_little_farther() -> None:
     assert isinstance(picked, Endpoints)
     assert [point.edge.edge_id for point in picked.starts] == [0, 1, 2]
     assert [point.edge.edge_id for point in picked.goals] == [2]
+
+
+def test_candidates_keep_open_road_beyond_walled_road() -> None:
+    # 도착(0, 0) 북쪽 10m 길은 담장 너머 시설 안, 남쪽 80m 길은 시설 밖이다.
+    #   ┌───────────────────┐ 시설 (북 5m ~ 100m)
+    #   0 ───── 0번 길 ───── 1  (북 10m)
+    #   └─┼─────────────────┘
+    #     │2번 길     ×도착
+    #   2 ───── 1번 길 ───── 3  (남 80m)
+    points = [at(-100, 10), at(100, 10), at(-100, -80), at(100, -80)]
+    graph = make_graph(
+        points, [edge(0, 0, 1, 200), edge(1, 2, 3, 200), edge(2, 0, 2, 90)]
+    )
+    ring = [at(-200, 5), at(200, 5), at(200, 100), at(-200, 100), at(-200, 5)]
+    sites = build_site_index({"sites": [{"rings": [ring]}]})
+
+    plain = pick_endpoints(graph, points[2], at(0, 0), GENERAL, 200)
+    walled = pick_endpoints(graph, points[2], at(0, 0), GENERAL, 200, sites=sites)
+
+    assert isinstance(plain, Endpoints)
+    assert isinstance(walled, Endpoints)
+    # 시설을 모르면 가장 가까운 북쪽 길에서 50m 안쪽만 남는다.
+    assert [point.edge.edge_id for point in plain.goals] == [0]
+    assert [(p.edge.edge_id, p.walled_off) for p in walled.goals] == [
+        (0, True),
+        (1, False),
+        (2, False),
+    ]

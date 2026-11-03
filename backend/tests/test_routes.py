@@ -6,10 +6,11 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.config import Settings, get_settings
-from app.deps import get_entrances, get_graph
+from app.deps import get_entrances, get_graph, get_sites
 from app.main import app
 from core.entrance import build_entrance_index
 from core.graph import Graph, build_graph
+from core.site import build_site_index
 from core.slope import MODERATE_MAX_GRADE
 
 client = TestClient(app)
@@ -372,3 +373,38 @@ def test_wheelchair_does_not_use_entrance_marked_no() -> None:
 
     assert body["start_entrance"] is None
     assert body["coordinates"][0] == pytest.approx(meters(0, 40), abs=1e-6)
+
+
+def post_route_with_sites(
+    graph: Graph, sites: list[dict], start: list[float], goal: list[float]
+) -> dict:
+    app.dependency_overrides[get_graph] = lambda: graph
+    app.dependency_overrides[get_sites] = lambda: build_site_index({"sites": sites})
+    try:
+        response = client.post("/api/route", json={"start": start, "goal": goal})
+    finally:
+        app.dependency_overrides.clear()
+    assert response.status_code == 200
+    return response.json()
+
+
+def test_goal_outside_site_is_not_reached_over_its_wall() -> None:
+    """도착(0, 0)은 캠퍼스 밖이다. 캠퍼스 안 길(북 50m)이 가깝고 경로도 짧다.
+
+    시설을 모르면 캠퍼스 안 길에서 끝나 점선이 담장을 넘는다.
+    0 ───────── 캠퍼스 안 길 ───────── 1   (북 50m)
+    │      ┌ 캠퍼스 담장 (북 20m) ┐
+    │                         × 도착
+    2 ─────────── 바깥 길 ───────────── 3   (남 70m)
+    """
+    points = [meters(-300, 50), meters(0, 50), meters(-300, -70), meters(100, -70)]
+    graph = flat_graph(points, [(0, 1, 300.0), (0, 2, 120.0), (2, 3, 400.0)])
+    ring = [meters(-400, 20), meters(100, 20), meters(100, 200), meters(-400, 200)]
+    campus = {"rings": [[*ring, ring[0]]]}
+
+    without = post_route_with_sites(graph, [], points[0], meters(0, 0))
+    body = post_route_with_sites(graph, [campus], points[0], meters(0, 0))
+
+    assert without["coordinates"][-1] == pytest.approx(meters(0, 50), abs=1e-6)
+    assert body["coordinates"][-1] == pytest.approx(meters(0, -70), abs=1e-6)
+    assert body["goal_gap_m"] == pytest.approx(70, abs=0.1)

@@ -16,6 +16,8 @@ class Settings(BaseSettings):
     graph_path: Path = REPO_ROOT / "data" / "processed" / "graph.json.gz"
     # pipeline/steps/07_export_entrances.py 가 만드는 파일. 없으면 출입구 없이 찾는다.
     entrances_path: Path = REPO_ROOT / "data" / "processed" / "entrances.json.gz"
+    # pipeline/steps/08_export_sites.py 가 만드는 파일. 없으면 담장을 보지 않고 찾는다.
+    sites_path: Path = REPO_ROOT / "data" / "processed" / "sites.json.gz"
     # 출발·도착 좌표가 도로망에서 이보다 멀면 경로를 찾지 않는다.
     max_snap_distance_m: float = 200.0
     allowed_origins: list[str] = ["http://localhost:5173"]

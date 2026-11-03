@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from app.config import Settings, get_settings
 from app.db import create_tables, get_engine
 from app.deps import DbSessionDep
-from app.repositories.road_repository import load_entrances, load_graph
+from app.repositories.road_repository import load_entrances, load_graph, load_sites
 from app.repositories.user_repository import purge_inactive_guests
 from app.routers import auth, congestion, me, places, routes
 
@@ -48,6 +48,7 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     if settings.graph_path.exists():
         load_graph(settings.graph_path)
     load_entrances(settings.entrances_path)
+    load_sites(settings.sites_path)
     prepare_database(settings)
     yield
 

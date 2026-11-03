@@ -2,7 +2,7 @@
 # - raw/…, interim/… : 데이터 폴더 (pipeline/.env 의 DATA_DIR, 없으면 저장소 data/)
 # - data/processed/… : 저장소 루트 (서버가 읽고 Git 에 커밋)
 
-# 03 단계(건물 윤곽)와 07 단계(출입구)가 OSM 데이터를 받는 곳
+# 03 단계(건물 윤곽), 07 단계(출입구), 08 단계(시설 영역)가 OSM 데이터를 받는 곳
 overpass:
   url: https://overpass-api.de/api/interpreter
   # OSM 행정구역 이름(admin_level 4)
@@ -90,3 +90,17 @@ entrances:
   excluded_access: [private, "no"]
   # 저장소 기준. backend/app/config.py 의 기본 출입구 경로와 같아야 한다.
   output: data/processed/entrances.json.gz
+
+# 08 단계. 05 단계처럼 run_all.py 에 넣지 않고 따로 실행한다.
+sites:
+  timeout_s: 300
+  # 담장으로 둘러싸여 문으로만 드나드는 시설. 태그 조합 중 하나에 맞으면 쓴다.
+  # 값은 Overpass 정규식이다.
+  # 이름 없는 주거지역(landuse=residential)은 동네 전체를 덮어 공공 도로까지 들어가므로 뺀다.
+  filters:
+    - {amenity: "^(university|college|school|kindergarten|hospital|prison)$"}
+    - {landuse: "^military$"}
+    - {landuse: "^residential$", residential: "^apartments$"}
+    - {landuse: "^residential$", name: "아파트"}
+  # 저장소 기준. backend/app/config.py 의 기본 시설 영역 경로와 같아야 한다.
+  output: data/processed/sites.json.gz

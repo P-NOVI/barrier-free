@@ -11,6 +11,7 @@ from app import deps
 from app.db import create_tables
 from core.entrance import NO_ENTRANCES
 from core.graph import Graph, build_graph
+from core.site import NO_SITES
 
 SAMPLE_GRAPH = Path(__file__).resolve().parents[2] / "data" / "sample" / "graph.json"
 
@@ -22,6 +23,7 @@ def no_real_entrances(monkeypatch: pytest.MonkeyPatch) -> None:
     출입구를 쓰는 테스트는 get_entrances 를 따로 덮어쓴다.
     """
     monkeypatch.setattr(deps, "load_entrances", lambda path: NO_ENTRANCES)
+    monkeypatch.setattr(deps, "load_sites", lambda path: NO_SITES)
 
 
 @pytest.fixture(scope="session")
