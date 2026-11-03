@@ -8,6 +8,8 @@ import httpx
 
 from app.config import Settings
 from app.repositories.sensor_repository import Sensor
+from core.congestion import edge_congestion
+from core.graph import Graph
 
 SERVICE_NAME = "sDoTPeople"
 OK_CODE = "INFO-000"
@@ -72,6 +74,38 @@ def read_congestion(
     readings = latest_readings(rows, sensors)
     cache.set(readings)
     return readings
+
+
+def road_congestion(
+    graph: Graph,
+    sensors: Mapping[int, Sensor],
+    settings: Settings,
+    readings_cache: TtlCache[list[Reading]],
+    cache: TtlCache[dict[int, float]],
+    transport: httpx.BaseTransport | None = None,
+) -> dict[int, float]:
+    """경로 탐색에 쓰는 길별 혼잡도. edge_id → 0~1.
+
+    클라이언트는 만드는 데 오래 걸려서 cache 가 비었을 때만 만든다. S-DoT 가
+    실패하면 빈 값(혼잡 없음)도 캐시해, 장애 동안 경로 요청마다 API 를 기다리지
+    않게 한다.
+    """
+    levels = cache.get()
+    if levels is not None:
+        return levels
+    try:
+        with create_sdot_client(settings, transport) as client:
+            readings = read_congestion(client, sensors, settings, readings_cache)
+    except CongestionError:
+        readings = []
+    levels = edge_congestion(
+        graph,
+        [(reading.sensor.position, reading.visitor_count) for reading in readings],
+        settings.congestion_full_count,
+        settings.congestion_radius_m,
+    )
+    cache.set(levels)
+    return levels
 
 
 def request_rows(client: httpx.Client, page_size: int) -> list[dict[str, Any]]:

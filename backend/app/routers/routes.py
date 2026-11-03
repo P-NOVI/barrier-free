@@ -1,6 +1,12 @@
 from fastapi import APIRouter, HTTPException, status
 
-from app.deps import EntrancesDep, GraphDep, SettingsDep, SitesDep
+from app.deps import (
+    EntrancesDep,
+    GraphDep,
+    RoadCongestionDep,
+    SettingsDep,
+    SitesDep,
+)
 from app.schemas import RouteError, RouteRequest, RouteResponse, TurnPoint
 from app.services.route_service import RouteFailure, RouteNotFoundError, find_route
 from core.profiles import PRESETS
@@ -35,6 +41,7 @@ def post_route(
     graph: GraphDep,
     entrances: EntrancesDep,
     sites: SitesDep,
+    congestion: RoadCongestionDep,
     settings: SettingsDep,
 ) -> RouteResponse:
     try:
@@ -46,6 +53,7 @@ def post_route(
             settings.max_snap_distance_m,
             entrances,
             sites,
+            congestion,
         )
     except RouteNotFoundError as error:
         raise HTTPException(

@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
 from app import deps
+from app.config import get_settings
 from app.db import create_tables
 from core.entrance import NO_ENTRANCES
 from core.graph import Graph, build_graph
@@ -24,6 +25,16 @@ def no_real_entrances(monkeypatch: pytest.MonkeyPatch) -> None:
     """
     monkeypatch.setattr(deps, "load_entrances", lambda path: NO_ENTRANCES)
     monkeypatch.setattr(deps, "load_sites", lambda path: NO_SITES)
+
+
+@pytest.fixture(autouse=True)
+def no_real_sdot_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    """backend/.env 의 S-DoT 키를 비워, 경로 요청이 실제 API를 부르지 않게 한다.
+
+    혼잡도를 쓰는 테스트는 get_road_congestion 을 따로 덮어쓴다.
+    """
+    monkeypatch.setenv("SDOT_API_KEY", "")
+    get_settings.cache_clear()
 
 
 @pytest.fixture(scope="session")
