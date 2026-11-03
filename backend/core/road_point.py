@@ -29,6 +29,8 @@ class RoadPoint:
     entrance: LngLat | None = None
     # 찍은 좌표에서 출입구까지 영역 안을 걷는 직선거리(m). 출입구가 없으면 0
     inside_m: float = 0.0
+    # 찍은 좌표를 감싸지 않는 시설 안 길이면 True. 점선이 담장을 넘는다 (core/site.py)
+    walled_off: bool = False
 
 
 def nearby_road_points(

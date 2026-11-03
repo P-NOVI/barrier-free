@@ -15,13 +15,15 @@ from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
-from common import CONFIG_PATH, fetch_overpass, load_config, repo_path
-
-COORD_DIGITS = 6  # 약 0.1m
-# 닫힌 고리의 최소 점 수(처음 점이 끝에 한 번 더 온다)
-MIN_RING_POINTS = 4
-
-LngLat = tuple[float, float]
+from common import (
+    CONFIG_PATH,
+    fetch_overpass,
+    load_config,
+    outer_rings,
+    outer_ways,
+    point,
+    repo_path,
+)
 
 
 def build_query(area_name: str, timeout_s: int) -> str:
@@ -34,36 +36,6 @@ rel(bw.ways)["type"="multipolygon"]->.relations;
 .ways out body geom;
 .relations out body geom;
 """
-
-
-def point(node: dict[str, Any]) -> LngLat:
-    return (round(node["lon"], COORD_DIGITS), round(node["lat"], COORD_DIGITS))
-
-
-def join_rings(segments: Iterable[list[LngLat]]) -> list[list[LngLat]]:
-    """multipolygon 의 outer way 조각들을 끝점끼리 이어 닫힌 고리로 만든다.
-
-    닫히지 않는 조각(데이터 오류, 범위 밖에서 잘린 것)은 버린다.
-    """
-    pending = [list(segment) for segment in segments if len(segment) >= 2]
-    rings = []
-    while pending:
-        ring = pending.pop()
-        while ring[0] != ring[-1]:
-            for i, segment in enumerate(pending):
-                if segment[0] == ring[-1]:
-                    ring += segment[1:]
-                elif segment[-1] == ring[-1]:
-                    ring += segment[-2::-1]
-                else:
-                    continue
-                pending.pop(i)
-                break
-            else:
-                break
-        if ring[0] == ring[-1] and len(ring) >= MIN_RING_POINTS:
-            rings.append(ring)
-    return rings
 
 
 def usable_entrance(node: dict[str, Any], config: dict[str, Any]) -> bool:
@@ -105,22 +77,12 @@ def build_areas(
         if not is_area(element.get("tags", {}), config["area_keys"]):
             continue
         if element["type"] == "way":
-            ring = [point(g) for g in element["geometry"]]
-            rings = [ring] if ring[0] == ring[-1] else []
             found = entrances_on([element["id"]])
         elif element["type"] == "relation":
-            outers = [
-                m
-                for m in element["members"]
-                if m["type"] == "way" and m["role"] == "outer"
-            ]
-            rings = join_rings(
-                [point(g) for g in m["geometry"]] for m in outers if m.get("geometry")
-            )
-            found = entrances_on(m["ref"] for m in outers)
+            found = entrances_on(m["ref"] for m in outer_ways(element))
         else:
             continue
-        rings = [ring for ring in rings if len(ring) >= MIN_RING_POINTS]
+        rings = outer_rings(element)
         if rings and found:
             areas.append({"rings": rings, "entrances": found})
     return areas

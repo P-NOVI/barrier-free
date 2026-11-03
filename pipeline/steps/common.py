@@ -1,4 +1,4 @@
-"""pipeline 단계 공통: 설정 읽기와 데이터 경로.
+"""pipeline 단계 공통: 설정 읽기, 데이터 경로, Overpass 요청과 영역 고리.
 
 데이터 경로는 pipeline/.env 의 DATA_DIR(Google Drive 공유 폴더 등) 기준이고,
 없으면 저장소의 data/ 를 쓴다. 서버가 읽는 결과(data/processed)는 저장소 기준이다.
@@ -10,6 +10,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
@@ -22,6 +23,11 @@ CONFIG_PATH = PIPELINE_DIR / "config.yaml"
 ENV_PATH = PIPELINE_DIR / ".env"
 # Overpass 가 붐비거나 잠깐 멈췄을 때 돌려주는 상태 코드. 기다렸다 다시 보낸다.
 OVERPASS_BUSY = {429, 502, 503, 504}
+COORD_DIGITS = 6  # 약 0.1m
+# 닫힌 고리의 최소 점 수(처음 점이 끝에 한 번 더 온다)
+MIN_RING_POINTS = 4
+
+LngLat = tuple[float, float]
 
 load_dotenv(ENV_PATH)
 
@@ -65,6 +71,59 @@ def fetch_overpass(config: dict[str, Any], query: str, timeout_s: int) -> dict:
     if not data.get("elements"):
         raise SystemExit("Overpass 응답이 비었습니다. 지역 이름과 서버를 확인하세요.")
     return data
+
+
+def point(node: dict[str, Any]) -> LngLat:
+    return (round(node["lon"], COORD_DIGITS), round(node["lat"], COORD_DIGITS))
+
+
+def join_rings(segments: Iterable[list[LngLat]]) -> list[list[LngLat]]:
+    """multipolygon 의 outer way 조각들을 끝점끼리 이어 닫힌 고리로 만든다.
+
+    닫히지 않는 조각(데이터 오류, 범위 밖에서 잘린 것)은 버린다.
+    """
+    pending = [list(segment) for segment in segments if len(segment) >= 2]
+    rings = []
+    while pending:
+        ring = pending.pop()
+        while ring[0] != ring[-1]:
+            for i, segment in enumerate(pending):
+                if segment[0] == ring[-1]:
+                    ring += segment[1:]
+                elif segment[-1] == ring[-1]:
+                    ring += segment[-2::-1]
+                else:
+                    continue
+                pending.pop(i)
+                break
+            else:
+                break
+        if ring[0] == ring[-1] and len(ring) >= MIN_RING_POINTS:
+            rings.append(ring)
+    return rings
+
+
+def outer_ways(element: dict[str, Any]) -> list[dict[str, Any]]:
+    """multipolygon relation 의 outer way 멤버."""
+    return [
+        m for m in element["members"] if m["type"] == "way" and m["role"] == "outer"
+    ]
+
+
+def outer_rings(element: dict[str, Any]) -> list[list[LngLat]]:
+    """Overpass(out geom) 닫힌 way 나 multipolygon 의 바깥 고리. 안뜰은 뺀다."""
+    if element["type"] == "way":
+        ring = [point(g) for g in element.get("geometry", [])]
+        rings = [ring] if ring and ring[0] == ring[-1] else []
+    elif element["type"] == "relation":
+        rings = join_rings(
+            [point(g) for g in m["geometry"]]
+            for m in outer_ways(element)
+            if m.get("geometry")
+        )
+    else:
+        return []
+    return [ring for ring in rings if len(ring) >= MIN_RING_POINTS]
 
 
 def require_files(*paths: Path) -> None:

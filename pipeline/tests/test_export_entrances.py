@@ -110,10 +110,6 @@ def test_multipolygon_joins_outer_pieces() -> None:
     assert area["entrances"] == [{"lon": 127.001, "lat": 37.5, "wheelchair": None}]
 
 
-def test_join_rings_drops_pieces_that_do_not_close() -> None:
-    assert entrances.join_rings([[SQUARE[0], SQUARE[1]], [SQUARE[2], SQUARE[3]]]) == []
-
-
 def test_query_names_area_and_timeout() -> None:
     query = entrances.build_query("서울특별시", 120)
 

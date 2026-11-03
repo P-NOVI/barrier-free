@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from app.config import Settings, get_settings
 from app.db import get_engine
 from app.models import User
-from app.repositories.road_repository import load_entrances, load_graph
+from app.repositories.road_repository import load_entrances, load_graph, load_sites
 from app.repositories.sensor_repository import Sensor, load_sensors
 from app.repositories.user_repository import create_guest, find_user_by_token
 from app.services.congestion_service import Reading, TtlCache, create_sdot_client
@@ -18,6 +18,7 @@ from app.services.oauth_service import create_oauth_client
 from app.services.place_service import create_kakao_client
 from core.entrance import EntranceIndex
 from core.graph import Graph
+from core.site import SiteIndex
 
 SettingsDep = Annotated[Settings, Depends(get_settings)]
 
@@ -43,6 +44,13 @@ def get_entrances(settings: SettingsDep) -> EntranceIndex:
 
 
 EntrancesDep = Annotated[EntranceIndex, Depends(get_entrances)]
+
+
+def get_sites(settings: SettingsDep) -> SiteIndex:
+    return load_sites(settings.sites_path)
+
+
+SitesDep = Annotated[SiteIndex, Depends(get_sites)]
 
 
 def get_kakao_client(settings: SettingsDep) -> Iterator[httpx.Client]:
