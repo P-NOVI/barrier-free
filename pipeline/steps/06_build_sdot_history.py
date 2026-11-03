@@ -10,9 +10,11 @@
 - 인코딩은 파일마다 감지한다(대부분 cp949, 일부 UTF-8).
 - 구형(2022-12-26 주)과 신형 열 구성을 같은 형식으로 바꾼다. 구형에는 지역·자치구·
   행정동이 없어서 같은 센서의 가장 이른 신형 값으로 채운다.
-- 시리얼 열이 없는 파일은 센서를 알 수 없어서 건너뛰고 보고서에 남긴다.
+- 시리얼·방문자수 열이 없는 파일은 쓸 수 없어서 건너뛰고 보고서에 남긴다.
 - (센서 코드, 측정 시각)이 같은 행은 하나만 남긴다. 값이 다르면 보고서에 개수를 남기고
+  등록 시각(신형 등록일, 구형 등록일자)이 늦은 값을 쓴다. 등록 시각이 같거나 없으면
   뒤에 읽은 값을 쓴다.
+- 행이 천만 개가 넘어서, 파일을 읽을 때마다 바로 Arrow 표로 바꿔 메모리를 줄인다.
 그래프(00~04 단계)와 관계가 없어서 run_all.py 에 넣지 않고 따로 실행한다.
 """
 
@@ -25,8 +27,8 @@ from collections import Counter
 from dataclasses import dataclass, field
 from datetime import date, datetime, timedelta
 from pathlib import Path
-from typing import Any
 
+import numpy as np
 import pyarrow as pa
 import pyarrow.compute as pc
 import pyarrow.parquet as pq
@@ -36,6 +38,7 @@ from common import CONFIG_PATH, data_path, load_config, repo_path, require_files
 SERIAL_COLUMN = "시리얼"
 TIME_COLUMNS = ("측정시간", "날짜")
 COUNT_COLUMN = "방문자수"
+REGISTERED_COLUMNS = ("등록일", "등록일자")
 REGION_COLUMNS = {"region": "지역", "district": "자치구", "dong": "행정동"}
 TIME_FORMAT = "%Y-%m-%d_%H:%M:%S"
 # 구형 파일의 시각: 202212261100
@@ -54,6 +57,9 @@ SCHEMA = pa.schema(
         ("source_file", pa.string()),
     ]
 )
+# 중복을 고르는 데만 쓰고 결과 파일에는 넣지 않는다.
+REGISTERED_FIELD = pa.field("registered_at", pa.timestamp("s"))
+ROW_FIELD = "_row"
 
 
 @dataclass
@@ -66,9 +72,23 @@ class WeekFile:
     counts: list[int] = field(default_factory=list)
     # 열이 없는 구형 파일은 None
     places: list[tuple[str, str, str] | None] = field(default_factory=list)
+    # 등록 시각을 읽지 못하면 None
+    registered: list[datetime | None] = field(default_factory=list)
     bad_rows: int = 0
     total_rows: int = 0
     skip_reason: str | None = None
+
+
+@dataclass
+class WeekInfo:
+    """보고서에 남길 주간 CSV 요약. 행은 Arrow 표로 옮기고 버린다."""
+
+    name: str
+    skip_reason: str | None
+    total_rows: int
+    bad_rows: int
+    rows: int
+    sensors: int
 
 
 def detect_encoding(raw: bytes) -> str:
@@ -92,6 +112,14 @@ def parse_time(text: str) -> datetime:
     return datetime.strptime(text, TIME_FORMAT)
 
 
+def parse_registered(text: str) -> datetime | None:
+    """등록 시각(2024-01-01 00:08:00). 읽지 못해도 행은 쓰고 None 으로 둔다."""
+    try:
+        return datetime.fromisoformat(text.strip()).replace(tzinfo=None)
+    except ValueError:
+        return None
+
+
 def read_week_file(path: Path) -> WeekFile:
     raw = path.read_bytes()
     lines = raw.decode(detect_encoding(raw)).splitlines()
@@ -106,15 +134,22 @@ def read_week_file(path: Path) -> WeekFile:
     if SERIAL_COLUMN not in header or time_column is None:
         week.skip_reason = f"{SERIAL_COLUMN} 열이 없음"
         return week
+    if COUNT_COLUMN not in header:
+        week.skip_reason = f"{COUNT_COLUMN} 열이 없음"
+        return week
     serial_i, time_i = header.index(SERIAL_COLUMN), header.index(time_column)
     count_i = header.index(COUNT_COLUMN)
+    registered_i = next(
+        (header.index(name) for name in REGISTERED_COLUMNS if name in header), None
+    )
     place_i = [
         header.index(name) if name in header else None
         for name in REGION_COLUMNS.values()
     ]
     has_places = all(i is not None for i in place_i)
-    # 주마다 측정 시각 문자열이 되풀이되므로 해석 결과를 재사용한다.
+    # 주마다 측정·등록 시각 문자열이 되풀이되므로 해석 결과를 재사용한다.
     parsed: dict[str, datetime] = {}
+    parsed_registered: dict[str, datetime | None] = {}
     for row in rows:
         try:
             code = int(row[serial_i])
@@ -130,11 +165,46 @@ def read_week_file(path: Path) -> WeekFile:
         except (ValueError, IndexError):
             week.bad_rows += 1
             continue
+        stamp = (
+            row[registered_i]
+            if registered_i is not None and registered_i < len(row)
+            else ""
+        )
+        if stamp not in parsed_registered:
+            parsed_registered[stamp] = parse_registered(stamp)
         week.codes.append(code)
         week.times.append(parsed[text])
         week.counts.append(count)
         week.places.append(place)
+        week.registered.append(parsed_registered[stamp])
     return week
+
+
+def week_table(week: WeekFile) -> pa.Table:
+    """읽은 주를 Arrow 표로 바꾼다. 구형의 빈 지역은 build_table 에서 채운다."""
+    columns = {
+        "sensor_code": week.codes,
+        "measured_at": week.times,
+        "visitor_count": week.counts,
+        **{
+            key: [place[i] if place else None for place in week.places]
+            for i, key in enumerate(REGION_COLUMNS)
+        },
+        "source_file": [week.name] * len(week.codes),
+        REGISTERED_FIELD.name: week.registered,
+    }
+    return pa.table(columns, schema=SCHEMA.append(REGISTERED_FIELD))
+
+
+def week_info(week: WeekFile) -> WeekInfo:
+    return WeekInfo(
+        name=week.name,
+        skip_reason=week.skip_reason,
+        total_rows=week.total_rows,
+        bad_rows=week.bad_rows,
+        rows=len(week.codes),
+        sensors=len(set(week.codes)),
+    )
 
 
 def missing_weeks(names: list[str]) -> list[str]:
@@ -153,40 +223,57 @@ def missing_weeks(names: list[str]) -> list[str]:
     return missing
 
 
-def build_table(weeks: list[WeekFile]) -> tuple[pa.Table, dict[str, int]]:
-    """읽은 주들을 하나로 합쳐 중복을 없애고 측정 시각 순으로 정렬한다."""
-    # 구형 파일의 지역은 같은 센서의 가장 이른 신형 값으로 채운다.
-    first_place: dict[int, tuple[str, str, str]] = {}
-    for week in weeks:
-        for code, place in zip(week.codes, week.places):
-            if place is not None and code not in first_place:
-                first_place[code] = place
+def fill_places(table: pa.Table) -> pa.Table:
+    """지역이 빈 행(구형)은 같은 센서에서 가장 먼저 읽은 지역 값으로 채운다."""
+    known = table.filter(pc.is_valid(table["region"]))
+    first_rows = known.group_by("sensor_code", use_threads=False).aggregate(
+        [(ROW_FIELD, "min")]
+    )
+    first = table.take(first_rows[f"{ROW_FIELD}_min"]).select(
+        ["sensor_code", *REGION_COLUMNS]
+    )
+    joined = table.join(first, keys="sensor_code", right_suffix="_first")
+    for key in REGION_COLUMNS:
+        filled = pc.coalesce(joined[key], joined[f"{key}_first"])
+        joined = joined.set_column(joined.schema.get_field_index(key), key, filled)
+    return joined.drop_columns([f"{key}_first" for key in REGION_COLUMNS])
 
-    columns: dict[str, list[Any]] = {name: [] for name in SCHEMA.names}
-    for week in weeks:
-        places = [
-            place or first_place.get(code)
-            for code, place in zip(week.codes, week.places)
-        ]
-        columns["sensor_code"] += week.codes
-        columns["measured_at"] += week.times
-        columns["visitor_count"] += week.counts
-        for i, key in enumerate(REGION_COLUMNS):
-            columns[key] += [place[i] if place else None for place in places]
-        columns["source_file"] += [week.name] * len(week.codes)
-    table = pa.table(columns, schema=SCHEMA)
 
+def build_table(tables: list[pa.Table]) -> tuple[pa.Table, dict[str, int]]:
+    """주별 표를 하나로 합쳐 중복을 없애고 측정 시각 순으로 정렬한다."""
+    work_schema = SCHEMA.append(REGISTERED_FIELD)
+    table = pa.concat_tables(tables) if tables else work_schema.empty_table()
     rows = table.num_rows
-    indexed = table.append_column("_row", pa.array(range(rows), type=pa.int64()))
-    groups = indexed.group_by(["sensor_code", "measured_at"], use_threads=False)
+    if rows == 0:
+        stats = {"rows_before_dedupe": 0, "duplicates_removed": 0}
+        return table.select(SCHEMA.names), {**stats, "conflicting_duplicates": 0}
+    table = fill_places(
+        table.append_column(ROW_FIELD, pa.array(np.arange(rows, dtype=np.int64)))
+    )
+
+    # 등록 시각이 늦을수록, 같으면 뒤에 읽을수록 뒤 순번을 준다.
+    # 그룹마다 순번이 가장 큰 행을 남긴다.
+    order = pc.sort_indices(
+        table,
+        sort_keys=[
+            (REGISTERED_FIELD.name, "ascending", "at_start"),
+            (ROW_FIELD, "ascending", "at_end"),
+        ],
+    )
+    ranked = table.take(order).append_column(
+        "_rank", pa.array(np.arange(rows, dtype=np.int64))
+    )
+    groups = ranked.group_by(["sensor_code", "measured_at"], use_threads=False)
     unique = groups.aggregate(
-        [("_row", "max"), ("visitor_count", "min"), ("visitor_count", "max")]
+        [("_rank", "max"), ("visitor_count", "min"), ("visitor_count", "max")]
     )
     conflicts = pc.sum(
         pc.not_equal(unique["visitor_count_min"], unique["visitor_count_max"])
     ).as_py()
-    deduped = table.take(unique["_row_max"]).sort_by(
-        [("measured_at", "ascending"), ("sensor_code", "ascending")]
+    deduped = (
+        ranked.take(unique["_rank_max"])
+        .select(SCHEMA.names)
+        .sort_by([("measured_at", "ascending"), ("sensor_code", "ascending")])
     )
     stats = {
         "rows_before_dedupe": rows,
@@ -210,14 +297,24 @@ def main() -> None:
     files = sorted(source.glob("S-DoT_WALK_*.csv"))
     if not files:
         raise SystemExit(f"주간 CSV(S-DoT_WALK_*.csv)가 없습니다: {source}")
-    weeks = []
+    weeks: list[WeekInfo] = []
+    tables: list[pa.Table] = []
     for i, path in enumerate(files, 1):
-        weeks.append(read_week_file(path))
+        week = read_week_file(path)
+        if week.skip_reason is None:
+            tables.append(week_table(week))
+        weeks.append(week_info(week))
         print(f"\r읽는 중 {i}/{len(files)}", end="", flush=True)
     print()
 
     used = [week for week in weeks if week.skip_reason is None]
-    table, stats = build_table(used)
+    table, stats = build_table(tables)
+    counts = Counter(w.skip_reason for w in weeks if w.skip_reason)
+    if table.num_rows == 0:
+        # 기존 결과를 빈 파일로 덮지 않는다.
+        raise SystemExit(
+            f"쓸 수 있는 행이 없습니다. 건너뛴 파일: {dict(counts) or '없음'}"
+        )
     output.parent.mkdir(parents=True, exist_ok=True)
     pq.write_table(table, output, compression=PARQUET_COMPRESSION)
 
@@ -225,7 +322,7 @@ def main() -> None:
         sensor["code"]
         for sensor in json.loads(sensors_path.read_text(encoding="utf-8"))["sensors"]
     }
-    codes = set(table["sensor_code"].to_pylist())
+    codes = set(pc.unique(table["sensor_code"]).to_pylist())
     times = table["measured_at"]
     report = {
         "files_total": len(files),
@@ -243,10 +340,7 @@ def main() -> None:
         "sensors_without_location": sorted(codes - known),
         "first_measured_at": pc.min(times).as_py().isoformat(),
         "last_measured_at": pc.max(times).as_py().isoformat(),
-        "weeks": [
-            {"name": w.name, "rows": len(w.codes), "sensors": len(set(w.codes))}
-            for w in used
-        ],
+        "weeks": [{"name": w.name, "rows": w.rows, "sensors": w.sensors} for w in used],
         "zero_visitor_share": round(
             pc.sum(pc.equal(table["visitor_count"], 0)).as_py() / table.num_rows, 4
         ),
@@ -254,7 +348,6 @@ def main() -> None:
     report_path.write_text(
         json.dumps(report, ensure_ascii=False, indent=1) + "\n", encoding="utf-8"
     )
-    counts = Counter(w.skip_reason for w in weeks if w.skip_reason)
     print(
         f"행 {table.num_rows:,}, 센서 {len(codes)}개, 파일 {len(used)}/{len(files)} "
         f"(건너뜀 {dict(counts) or '없음'}), 중복 제거 {stats['duplicates_removed']:,} "

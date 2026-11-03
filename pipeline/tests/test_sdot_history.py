@@ -19,8 +19,14 @@ def load_step(filename: str):
 history = load_step("06_build_sdot_history.py")
 
 
-def new_row(serial: str, time: str, count: str, place=("parks", "Gu", "Dong")) -> str:
-    fields = ["SDOT001", serial, time, *place, count, "2024-01-01 00:08:00"]
+def new_row(
+    serial: str,
+    time: str,
+    count: str,
+    place=("parks", "Gu", "Dong"),
+    registered: str = "2024-01-01 00:08:00",
+) -> str:
+    fields = ["SDOT001", serial, time, *place, count, registered]
     return ",".join(f'"{field}"' for field in fields)
 
 
@@ -34,6 +40,12 @@ def write_week(
 ) -> Path:
     path.write_text("\n".join([header, *rows]) + "\n", encoding=encoding)
     return path
+
+
+def build(*paths: Path):
+    return history.build_table(
+        [history.week_table(history.read_week_file(path)) for path in paths]
+    )
 
 
 def test_reads_cp949_and_utf8_the_same(tmp_path: Path) -> None:
@@ -61,6 +73,7 @@ def test_reads_old_format(tmp_path: Path) -> None:
     assert week.times == [datetime(2022, 12, 26, 11, 0)]
     assert week.counts == [150]
     assert week.places == [None]
+    assert week.registered == [datetime(2022, 12, 26, 11, 3, 39)]
 
 
 def test_skips_file_without_serial(tmp_path: Path) -> None:
@@ -113,9 +126,7 @@ def test_build_table_dedupes_and_sorts(tmp_path: Path) -> None:
         [new_row("00000003032", "2024-11-17_23:50:00", "11")],
     )
 
-    table, stats = history.build_table(
-        [history.read_week_file(first), history.read_week_file(second)]
-    )
+    table, stats = build(first, second)
 
     assert stats == {
         "rows_before_dedupe": 5,
@@ -137,9 +148,64 @@ def test_build_table_dedupes_and_sorts(tmp_path: Path) -> None:
         (3032, datetime(2024, 11, 17, 23, 50)),
         (3032, datetime(2024, 11, 18, 0, 10)),
     ]
-    # 값이 다른 중복은 뒤에 읽은 값을 쓴다.
+    # 등록 시각이 같은 중복은 뒤에 읽은 값을 쓴다.
     assert rows[1]["visitor_count"] == 11
     assert rows[1]["source_file"] == "w2.csv"
+
+
+def test_build_table_keeps_latest_registration(tmp_path: Path) -> None:
+    week = write_week(
+        tmp_path / "w1.csv",
+        NEW_HEADER,
+        [
+            new_row(
+                "00000003032",
+                "2024-11-18_00:10:00",
+                "99",
+                registered="2024-11-19 03:00:00",
+            ),
+            new_row(
+                "00000003032",
+                "2024-11-18_00:10:00",
+                "11",
+                registered="2024-11-18 00:18:00",
+            ),
+            new_row("00000003022", "2024-11-18_00:10:00", "7", registered=""),
+            new_row(
+                "00000003022",
+                "2024-11-18_00:10:00",
+                "8",
+                registered="2024-11-18 00:18:00",
+            ),
+        ],
+    )
+
+    table, stats = build(week)
+
+    counts = {r["sensor_code"]: r["visitor_count"] for r in table.to_pylist()}
+    # 늦게 등록된 값을 쓰고, 등록 시각이 없는 행은 있는 행보다 앞선 것으로 본다.
+    assert counts == {3032: 99, 3022: 8}
+    assert stats["conflicting_duplicates"] == 2
+
+
+def test_skips_file_without_count(tmp_path: Path) -> None:
+    path = write_week(
+        tmp_path / "nocount.csv",
+        "모델번호,시리얼,측정시간,지역,자치구,행정동,등록일",
+        ['"SDOT001","00000003032","2024-01-01_00:00:00","p","G","D","2024-01-01"'],
+    )
+
+    week = history.read_week_file(path)
+
+    assert week.skip_reason is not None
+    assert week.codes == []
+
+
+def test_build_table_of_nothing_is_empty() -> None:
+    table, stats = history.build_table([])
+
+    assert table.num_rows == 0
+    assert stats["duplicates_removed"] == 0
 
 
 def test_build_table_fills_places_of_old_format(tmp_path: Path) -> None:
@@ -154,9 +220,7 @@ def test_build_table_fills_places_of_old_format(tmp_path: Path) -> None:
         [new_row("00000004015", "2023-01-02_00:00:00", "7", ("시장", "구", "동"))],
     )
 
-    table, _ = history.build_table(
-        [history.read_week_file(old), history.read_week_file(new)]
-    )
+    table, _ = build(old, new)
 
     by_code = {(r["sensor_code"], r["measured_at"].year): r for r in table.to_pylist()}
     assert by_code[(4015, 2022)]["region"] == "시장"
