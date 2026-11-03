@@ -515,11 +515,29 @@ body,
     background: var(--error-bg);
 }
 
+.route-panel__headline {
+    display: flex;
+    align-items: baseline;
+    margin: 12px 0 0;
+    font-weight: 700;
+}
+
+.route-panel__duration {
+    font-size: 24px;
+}
+
+.route-panel__distance {
+    margin-left: 10px;
+    padding-left: 10px;
+    border-left: 1px solid var(--border);
+    font-size: 18px;
+}
+
 .route-panel__summary {
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(3, 1fr);
     gap: 4px;
-    margin: 12px 0 0;
+    margin: 8px 0 0;
 }
 
 .route-panel__summary dt {

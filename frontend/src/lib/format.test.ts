@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest';
 
-import { formatClock, formatDistance, formatGrade } from './format';
+import {
+    formatClock,
+    formatDistance,
+    formatDuration,
+    formatGrade,
+} from './format';
 
 describe('formatDistance', () => {
     it('1km 미만은 m 정수로', () => {
@@ -11,6 +16,23 @@ describe('formatDistance', () => {
     it('1km 이상은 km 소수 둘째 자리로', () => {
         expect(formatDistance(1000)).toBe('1.00km');
         expect(formatDistance(1616.6)).toBe('1.62km');
+    });
+});
+
+describe('formatDuration', () => {
+    it('분 단위로 반올림한다', () => {
+        expect(formatDuration(338)).toBe('6분');
+        expect(formatDuration(3569)).toBe('59분');
+    });
+
+    it('1분 미만은 1분으로', () => {
+        expect(formatDuration(0)).toBe('1분');
+        expect(formatDuration(20)).toBe('1분');
+    });
+
+    it('60분 이상은 시간과 분으로', () => {
+        expect(formatDuration(3600)).toBe('1시간');
+        expect(formatDuration(5100)).toBe('1시간 25분');
     });
 });
 

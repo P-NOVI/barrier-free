@@ -57,6 +57,8 @@ class RouteTurn:
 @dataclass(frozen=True)
 class Route:
     summary: PathSummary
+    # 이동 조건의 평균 속도로 경로 거리를 가는 예상 시간(초)
+    duration_s: float
     # 길 모양대로 따라가는 지점. 노드 사이 중간 지점도 들어 있다.
     coordinates: list[LngLat]
     elevations: list[float]
@@ -116,8 +118,10 @@ def find_route(
     node_indices = list(
         accumulate((len(arc.geometry) + 1 for arc in path.arcs), initial=0)
     )
+    summary = summarize(graph, path)
     return Route(
-        summary=summarize(graph, path),
+        summary=summary,
+        duration_s=summary.distance_m / profile.speed_mps,
         coordinates=coordinates,
         elevations=elevations,
         distances_m=distances,

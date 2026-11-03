@@ -1,5 +1,5 @@
 import type { RouteState } from '../hooks/useRoute';
-import { formatDistance, formatGrade } from '../lib/format';
+import { formatDistance, formatDuration, formatGrade } from '../lib/format';
 import { isPresetId, PRESETS, type PresetId } from '../lib/presets';
 import type { Endpoints } from '../lib/selection';
 import type { RouteResponse } from '../lib/routeApi';
@@ -48,11 +48,15 @@ function gapNotices(route: RouteResponse): string[] {
 function RouteSummary({ route }: { route: RouteResponse }) {
     return (
         <>
+            <p className="route-panel__headline">
+                <span className="route-panel__duration">
+                    {formatDuration(route.duration_s)}
+                </span>
+                <span className="route-panel__distance">
+                    {formatDistance(route.distance_m)}
+                </span>
+            </p>
             <dl className="route-panel__summary">
-                <div>
-                    <dt>거리</dt>
-                    <dd>{formatDistance(route.distance_m)}</dd>
-                </div>
                 <div>
                     <dt>최대 경사</dt>
                     <dd>{formatGrade(route.max_grade)}</dd>
