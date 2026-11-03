@@ -4,7 +4,12 @@
 없으면 저장소의 data/ 를 쓴다. 서버가 읽는 결과(data/processed)는 저장소 기준이다.
 """
 
+import json
 import os
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
 from pathlib import Path
 from typing import Any
 
@@ -15,6 +20,8 @@ PIPELINE_DIR = Path(__file__).resolve().parents[1]
 REPO_ROOT = PIPELINE_DIR.parent
 CONFIG_PATH = PIPELINE_DIR / "config.yaml"
 ENV_PATH = PIPELINE_DIR / ".env"
+# Overpass 가 붐비거나 잠깐 멈췄을 때 돌려주는 상태 코드. 기다렸다 다시 보낸다.
+OVERPASS_BUSY = {429, 502, 503, 504}
 
 load_dotenv(ENV_PATH)
 
@@ -37,6 +44,27 @@ def data_path(relative: str) -> Path:
 def repo_path(relative: str) -> Path:
     """config.yaml 의 저장소 경로(data/processed/…) → 실제 경로."""
     return REPO_ROOT / relative
+
+
+def fetch_overpass(config: dict[str, Any], query: str, timeout_s: int) -> dict:
+    """config.yaml 의 overpass 항목으로 Overpass API 에 query 를 보낸다."""
+    body = urllib.parse.urlencode({"data": query}).encode()
+    request = urllib.request.Request(
+        config["url"], data=body, headers={"User-Agent": config["user_agent"]}
+    )
+    for attempt in range(1, config["attempts"] + 1):
+        try:
+            with urllib.request.urlopen(request, timeout=timeout_s) as response:
+                data = json.load(response)
+            break
+        except urllib.error.HTTPError as error:
+            if error.code not in OVERPASS_BUSY or attempt == config["attempts"]:
+                raise
+            print(f"Overpass {error.code}, 다시 보냄 ({attempt})", flush=True)
+            time.sleep(config["retry_wait_s"])
+    if not data.get("elements"):
+        raise SystemExit("Overpass 응답이 비었습니다. 지역 이름과 서버를 확인하세요.")
+    return data
 
 
 def require_files(*paths: Path) -> None:

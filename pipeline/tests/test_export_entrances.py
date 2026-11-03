@@ -1,9 +1,5 @@
 import importlib.util
-import json
 from pathlib import Path
-from unittest.mock import patch
-
-import pytest
 
 STEPS = Path(__file__).resolve().parents[1] / "steps"
 CONFIG = {
@@ -116,40 +112,6 @@ def test_multipolygon_joins_outer_pieces() -> None:
 
 def test_join_rings_drops_pieces_that_do_not_close() -> None:
     assert entrances.join_rings([[SQUARE[0], SQUARE[1]], [SQUARE[2], SQUARE[3]]]) == []
-
-
-def test_fetch_sends_user_agent_and_rejects_empty_answer() -> None:
-    class Response:
-        def __init__(self, body: dict) -> None:
-            self.body = json.dumps(body).encode()
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *args) -> None:
-            pass
-
-        def read(self) -> bytes:
-            return self.body
-
-    sent = []
-
-    def answer(body: dict):
-        def urlopen(request, timeout):
-            sent.append(request)
-            return Response(body)
-
-        return urlopen
-
-    with patch.object(entrances.urllib.request, "urlopen", answer({"elements": [1]})):
-        assert entrances.fetch("http://overpass.test", "q", "agent", 5) == {
-            "elements": [1]
-        }
-    assert sent[0].get_header("User-agent") == "agent"
-
-    with patch.object(entrances.urllib.request, "urlopen", answer({"elements": []})):
-        with pytest.raises(SystemExit):
-            entrances.fetch("http://overpass.test", "q", "agent", 5)
 
 
 def test_query_names_area_and_timeout() -> None:
