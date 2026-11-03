@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from app.config import Settings, get_settings
 from app.db import create_tables, get_engine
 from app.deps import DbSessionDep
-from app.repositories.road_repository import load_graph
+from app.repositories.road_repository import load_entrances, load_graph
 from app.repositories.user_repository import purge_inactive_guests
 from app.routers import auth, congestion, me, places, routes
 
@@ -47,6 +47,7 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
     # 첫 경로 요청이 느리지 않도록 서버 시작 때 그래프를 한 번 읽어 둔다.
     if settings.graph_path.exists():
         load_graph(settings.graph_path)
+    load_entrances(settings.entrances_path)
     prepare_database(settings)
     yield
 

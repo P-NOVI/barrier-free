@@ -6,8 +6,9 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.config import Settings, get_settings
-from app.deps import get_graph
+from app.deps import get_entrances, get_graph
 from app.main import app
+from core.entrance import build_entrance_index
 from core.graph import Graph, build_graph
 from core.slope import MODERATE_MAX_GRADE
 
@@ -297,3 +298,77 @@ def test_missing_graph_file(tmp_path: Path) -> None:
 
     assert response.status_code == 503
     assert response.json()["detail"]["reason"] == "graph_unavailable"
+
+
+def building_graph() -> tuple[Graph, dict]:
+    """건물 가운데(0, 0) 북쪽 40m 에 뒷길, 남쪽 70m 에 앞길, 남쪽 벽(0, -55)에 출입구.
+
+    두 길에서 도착(×)까지 거리는 같다. 출입구가 없으면 가까운 뒷길에서 시작한다.
+         ───────────────┐ 뒷길 (북 40m)
+        ┌─────┐         │
+        │  ●  │         × 도착
+        └──┬──┘         │
+           출입구        │
+         ───────────────┘ 앞길 (남 70m)
+    """
+    points = [meters(-100, 40), meters(100, 40), meters(-100, -70), meters(100, -70)]
+    graph = flat_graph(points, [(0, 1, 200.0), (2, 3, 200.0), (3, 1, 110.0)])
+    area = {
+        "rings": [[meters(-30, -55), meters(30, -55), meters(30, 20), meters(-30, 20)]],
+        "entrances": [{"lon": meters(0, -55)[0], "lat": meters(0, -55)[1]}],
+    }
+    area["rings"][0].append(area["rings"][0][0])
+    return graph, area
+
+
+def post_route_with_entrances(
+    graph: Graph, areas: list[dict], start: list[float], goal: list[float], **extra
+) -> dict:
+    app.dependency_overrides[get_graph] = lambda: graph
+    app.dependency_overrides[get_entrances] = lambda: build_entrance_index(
+        {"areas": areas}
+    )
+    try:
+        response = client.post(
+            "/api/route", json={"start": start, "goal": goal, **extra}
+        )
+    finally:
+        app.dependency_overrides.clear()
+    assert response.status_code == 200
+    return response.json()
+
+
+def test_start_inside_building_leaves_by_its_entrance() -> None:
+    graph, area = building_graph()
+    goal = meters(100, -15)
+
+    without = post_route_with_entrances(graph, [], meters(0, 0), goal)
+    body = post_route_with_entrances(graph, [area], meters(0, 0), goal)
+
+    assert without["coordinates"][0] == pytest.approx(meters(0, 40), abs=1e-6)
+    assert without["start_entrance"] is None
+    assert body["coordinates"][0] == pytest.approx(meters(0, -70), abs=1e-6)
+    assert body["start_entrance"] == pytest.approx(meters(0, -55))
+    assert body["start_gap_m"] == pytest.approx(15, abs=0.1)
+    assert body["goal_entrance"] is None
+
+
+def test_goal_inside_building_is_reached_at_its_entrance() -> None:
+    graph, area = building_graph()
+
+    body = post_route_with_entrances(graph, [area], meters(100, -15), meters(0, 0))
+
+    assert body["coordinates"][-1] == pytest.approx(meters(0, -70), abs=1e-6)
+    assert body["goal_entrance"] == pytest.approx(meters(0, -55))
+
+
+def test_wheelchair_does_not_use_entrance_marked_no() -> None:
+    graph, area = building_graph()
+    area["entrances"][0]["wheelchair"] = "no"
+
+    body = post_route_with_entrances(
+        graph, [area], meters(0, 0), meters(100, -15), preset="manual_wheelchair"
+    )
+
+    assert body["start_entrance"] is None
+    assert body["coordinates"][0] == pytest.approx(meters(0, 40), abs=1e-6)

@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, status
 
-from app.deps import GraphDep, SettingsDep
+from app.deps import EntrancesDep, GraphDep, SettingsDep
 from app.schemas import RouteError, RouteRequest, RouteResponse, TurnPoint
 from app.services.route_service import RouteFailure, RouteNotFoundError, find_route
 from core.profiles import PRESETS
@@ -31,7 +31,10 @@ def failure_message(reason: RouteFailure, max_snap_distance_m: float) -> str:
     responses={404: {"model": RouteError}, 422: {"model": RouteError}},
 )
 def post_route(
-    request: RouteRequest, graph: GraphDep, settings: SettingsDep
+    request: RouteRequest,
+    graph: GraphDep,
+    entrances: EntrancesDep,
+    settings: SettingsDep,
 ) -> RouteResponse:
     try:
         route = find_route(
@@ -40,6 +43,7 @@ def post_route(
             request.goal,
             PRESETS[request.preset],
             settings.max_snap_distance_m,
+            entrances,
         )
     except RouteNotFoundError as error:
         raise HTTPException(
@@ -61,4 +65,6 @@ def post_route(
         turns=[TurnPoint(index=turn.index, angle=turn.angle) for turn in route.turns],
         start_gap_m=route.start_gap_m,
         goal_gap_m=route.goal_gap_m,
+        start_entrance=route.start_entrance,
+        goal_entrance=route.goal_entrance,
     )
