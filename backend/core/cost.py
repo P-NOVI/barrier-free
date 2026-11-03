@@ -1,6 +1,6 @@
 import math
 
-from core.graph import Arc
+from core.graph import Arc, Trail
 from core.profiles import CONGESTION_WEIGHTS, Profile
 from core.slope import GradeLevel, grade_level
 
@@ -10,6 +10,12 @@ SLOPE_FACTORS: dict[GradeLevel, float] = {
     GradeLevel.MODERATE: 1.5,
     GradeLevel.HARD: 3.0,
 }
+# 1/12 보다 가파른 구간을 더 나눈 배율 (이 경사 초과, 배율). 가파른 것부터 본다.
+# 일반 보행은 경사 상한이 없어서, 이게 없으면 30% 산길도 9% 오르막과 비용이 같다.
+# 초안 값이다.
+STEEP_FACTORS: tuple[tuple[float, float], ...] = ((0.25, 10.0), (0.15, 5.0))
+# 등산로 배율. 경사·계단 배율에 곱한다. 초안 값이다.
+TRAIL_FACTORS: dict[Trail, float] = {Trail.HIKING: 2.0, Trail.MOUNTAIN: 10.0}
 
 
 def is_passable(arc: Arc, profile: Profile) -> bool:
@@ -27,17 +33,27 @@ def is_passable(arc: Arc, profile: Profile) -> bool:
     return profile.max_grade is None or abs(arc.grade) <= profile.max_grade
 
 
-def arc_cost(arc: Arc, profile: Profile, congestion: float = 0.0) -> float:
-    """구간 비용 = 길이 × (계단 배율 또는 경사 배율) × 혼잡 배율.
+def slope_factor(grade: float) -> float:
+    steepness = abs(grade)
+    for min_grade, factor in STEEP_FACTORS:
+        if steepness > min_grade:
+            return factor
+    return SLOPE_FACTORS[grade_level(grade)]
 
-    지나갈 수 없으면 inf.
+
+def arc_cost(arc: Arc, profile: Profile, congestion: float = 0.0) -> float:
+    """구간 비용 = 길이 × 경사·계단 배율 × 등산로 배율 × 혼잡 배율.
+
+    계단은 계단 배율과 그 경사의 배율 중 큰 값을 쓴다. 계단 배율이 1 인 일반 보행이
+    산 계단으로 능선을 넘지 않게 한다. 지나갈 수 없으면 inf.
     """
     if not is_passable(arc, profile):
         return math.inf
-    factor = (
-        profile.stair_factor if arc.steps else SLOPE_FACTORS[grade_level(arc.grade)]
-    )
+    factor = slope_factor(arc.grade)
+    if arc.steps:
+        factor = max(factor, profile.stair_factor)
+    trail_factor = TRAIL_FACTORS[arc.trail] if arc.trail else 1.0
     congestion_factor = (
         1 + CONGESTION_WEIGHTS[profile.congestion_tolerance] * congestion
     )
-    return arc.length * factor * congestion_factor
+    return arc.length * factor * trail_factor * congestion_factor
