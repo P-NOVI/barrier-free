@@ -78,11 +78,11 @@ def read_congestion(
 
 def road_congestion(
     graph: Graph,
-    open_client: Callable[[], httpx.Client],
     sensors: Mapping[int, Sensor],
     settings: Settings,
     readings_cache: TtlCache[list[Reading]],
     cache: TtlCache[dict[int, float]],
+    transport: httpx.BaseTransport | None = None,
 ) -> dict[int, float]:
     """경로 탐색에 쓰는 길별 혼잡도. edge_id → 0~1.
 
@@ -94,7 +94,7 @@ def road_congestion(
     if levels is not None:
         return levels
     try:
-        with open_client() as client:
+        with create_sdot_client(settings, transport) as client:
             readings = read_congestion(client, sensors, settings, readings_cache)
     except CongestionError:
         readings = []

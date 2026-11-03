@@ -143,9 +143,7 @@ def get_road_congestion(
         sensors = load_sensors(settings.sensors_path)
     except FileNotFoundError:
         return {}
-    return road_congestion(
-        graph, lambda: create_sdot_client(settings), sensors, settings, readings, cache
-    )
+    return road_congestion(graph, sensors, settings, readings, cache)
 
 
 RoadCongestionDep = Annotated[dict[int, float], Depends(get_road_congestion)]

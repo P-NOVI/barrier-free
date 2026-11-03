@@ -4,16 +4,12 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 
+from app import deps
 from app.config import Settings
 from app.deps import get_graph, get_road_congestion
 from app.main import app
 from app.repositories.sensor_repository import Sensor
-from app.services.congestion_service import (
-    Reading,
-    TtlCache,
-    create_sdot_client,
-    road_congestion,
-)
+from app.services.congestion_service import Reading, TtlCache, road_congestion
 from core.congestion import congestion_level, edge_congestion
 from core.graph import Graph
 
@@ -34,7 +30,7 @@ def position(graph: Graph, node: int) -> tuple[float, float]:
 
 
 def edges_at(graph: Graph, node: int) -> set[int]:
-    return {e.edge_id for e in graph.edges if node in (e.source, e.target)}
+    return {arc.edge_id for arc in graph.adjacency[node]}
 
 
 def test_congestion_level_reaches_one_at_full_count() -> None:
@@ -94,11 +90,11 @@ def read_levels(
 
     levels = road_congestion(
         graph,
-        lambda: create_sdot_client(SETTINGS, httpx.MockTransport(record)),
         {3032: Sensor(3032, position(graph, 0), "센서 주소")},
         SETTINGS,
         TtlCache[list[Reading]](60.0),
         cache,
+        httpx.MockTransport(record),
     )
     return levels, received
 
@@ -134,7 +130,15 @@ def test_road_congestion_is_empty_and_cached_when_sdot_fails(
     assert again == []
 
 
-def test_no_sdot_key_means_no_congestion(sample_graph: Graph) -> None:
+def test_no_sdot_key_means_no_congestion(
+    sample_graph: Graph, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def call_sdot(*args: object) -> dict[int, float]:
+        pytest.fail("S-DoT 키가 없는데 S-DoT 를 불렀다")
+
+    monkeypatch.setattr(deps, "load_sensors", lambda path: {})
+    monkeypatch.setattr(deps, "road_congestion", call_sdot)
+
     levels = get_road_congestion(
         sample_graph,
         Settings(sdot_api_key=""),
