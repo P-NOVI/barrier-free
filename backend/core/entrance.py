@@ -88,6 +88,29 @@ class AreaIndex:
                 found.append(area)
         return found
 
+    def areas_touching(
+        self, min_lon: float, min_lat: float, max_lon: float, max_lat: float
+    ) -> list[Area]:
+        """경계 상자가 주어진 상자와 겹치는 영역 모두."""
+        indices = {
+            index
+            for x in range(self._key(min_lon), self._key(max_lon) + 1)
+            for y in range(self._key(min_lat), self._key(max_lat) + 1)
+            for index in self._cells.get((x, y), [])
+        }
+        found = []
+        for index in sorted(indices):
+            area = self._areas[index]
+            west, south, east, north = area.bounds
+            if (
+                west <= max_lon
+                and min_lon <= east
+                and south <= max_lat
+                and min_lat <= north
+            ):
+                found.append(area)
+        return found
+
     def area_at(self, lon: float, lat: float) -> Area | None:
         """점을 감싸는 영역 중 가장 작은 것. 캠퍼스 안 건물이면 건물을 고른다."""
         return min(self.areas_at(lon, lat), key=lambda area: area.size, default=None)

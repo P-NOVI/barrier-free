@@ -20,8 +20,9 @@ GAP_COST_FACTOR = 3.0
 # 건물·시설 안에서 출입구까지는 실제로 걸어 나가는 거리라 길과 같게 센다.
 # 그래서 건물 가운데에서 가장 가까운 뒷길보다 출입구 앞 길을 고르기 쉽다.
 INSIDE_COST_FACTOR = 1.0
-# 찍은 곳을 감싸지 않는 시설 안 길까지는 담장을 넘어야 해서 GAP_COST_FACTOR 대신 쓴다.
-# 시설 밖 길로 돌아가는 경로가 이만큼 길지 않으면 그쪽을 고른다.
+# 점선이 다른 시설을 가로지르거나 그 안에서 끝나는 후보에 GAP_COST_FACTOR 대신 쓴다.
+# 가로지르기만 하면 시설을 돌아서 갈 수 있어 막지 않는다. 시설 안에서 끝나는 후보는
+# 반경 안 길이 모두 그럴 때만 남는다(core/reachability.py).
 WALLED_GAP_COST_FACTOR = 10.0
 
 
@@ -127,7 +128,7 @@ def find_route(
 
 def approach_cost(point: RoadPoint) -> float:
     """찍은 곳에서 길 위 지점까지 오는 비용(m 환산)."""
-    gap_factor = WALLED_GAP_COST_FACTOR if point.walled_off else GAP_COST_FACTOR
+    gap_factor = WALLED_GAP_COST_FACTOR if point.wall else GAP_COST_FACTOR
     return point.inside_m * INSIDE_COST_FACTOR + point.gap_m * gap_factor
 
 

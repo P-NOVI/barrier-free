@@ -408,3 +408,36 @@ def test_goal_outside_site_is_not_reached_over_its_wall() -> None:
     assert without["coordinates"][-1] == pytest.approx(meters(0, 50), abs=1e-6)
     assert body["coordinates"][-1] == pytest.approx(meters(0, -70), abs=1e-6)
     assert body["goal_gap_m"] == pytest.approx(70, abs=0.1)
+
+
+def square_ring(west: float, south: float, east: float, north: float) -> dict:
+    ring = [meters(west, south), meters(east, south), meters(east, north)]
+    ring += [meters(west, north), meters(west, south)]
+    return {"rings": [ring]}
+
+
+def test_goal_between_sites_never_ends_inside_neighbor_site() -> None:
+    """도착(0, 0)은 길이 없는 단지 안이다. 서쪽은 캠퍼스, 동쪽은 학교다.
+
+    서쪽 캠퍼스 안 길(80m)은 담장을 넘어야 닿고 경로도 짧다. 동쪽 바깥 길(130m)로
+    가는 점선은 학교를 가로지르지만, 학교를 돌아서 갈 수 있어 이쪽에서 끝낸다.
+    0 ────────────────────────────── 2   (북 200m)
+    │ ┌캠퍼스┐ ┌단지┐ ┌학교┐ │
+    │         ×도착
+    1                                3   (남 200m)
+    서 80m                          동 130m
+    """
+    points = [meters(-80, 200), meters(-80, -200), meters(130, 200), meters(130, -200)]
+    graph = flat_graph(points, [(0, 1, 400.0), (0, 2, 210.0), (2, 3, 400.0)])
+    sites = [
+        square_ring(-400, -300, -50, 150),
+        square_ring(-30, -30, 30, 30),
+        square_ring(40, -100, 100, 100),
+    ]
+
+    without = post_route_with_sites(graph, [], points[0], meters(0, 0))
+    body = post_route_with_sites(graph, sites, points[0], meters(0, 0))
+
+    assert without["coordinates"][-1] == pytest.approx(meters(-80, 0), abs=1e-6)
+    assert body["coordinates"][-1] == pytest.approx(meters(130, 0), abs=1e-6)
+    assert body["goal_gap_m"] == pytest.approx(130, abs=0.1)
