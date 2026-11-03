@@ -37,6 +37,11 @@ class Settings(BaseSettings):
     sdot_page_size: int = 1000
     # 센서는 10분마다 측정한다. 이 시간 안에는 API를 다시 부르지 않는다.
     sdot_cache_ttl_s: float = 60.0
+    # 경로 탐색의 길별 혼잡도(core/congestion.py). 10분 유동인구가 이 값 이상이면 1.
+    # 초안 값이다. 2026-11-03 10~15시 S-DoT 3,000행의 95% 지점(296명)에 맞췄다.
+    congestion_full_count: float = 300.0
+    # 센서에서 이 거리 안을 지나는 길에 그 센서의 혼잡도를 붙인다. 초안 값이다.
+    congestion_radius_m: float = 50.0
     # PostgreSQL 접속 주소. 비밀번호가 들어 있으므로 backend/.env 에만 둔다.
     # 형식: postgresql+psycopg://barrierfree:<비밀번호>@localhost:5432/barrierfree
     database_url: SecretStr = SecretStr("")

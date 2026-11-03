@@ -1,3 +1,4 @@
+from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import StrEnum
 from itertools import accumulate, pairwise
@@ -80,8 +81,12 @@ def find_route(
     max_snap_distance_m: float,
     entrances: EntranceIndex = NO_ENTRANCES,
     sites: SiteIndex = NO_SITES,
+    congestion: Mapping[int, float] | None = None,
 ) -> Route:
-    """이동 조건으로 이어진 길 위 출발·도착 지점을 골라 추천 경로를 찾는다."""
+    """이동 조건으로 이어진 길 위 출발·도착 지점을 골라 추천 경로를 찾는다.
+
+    congestion 은 edge_id → 혼잡도(0~1)다(core/congestion.py).
+    """
     endpoints = pick_endpoints(
         graph, start, goal, profile, max_snap_distance_m, entrances, sites
     )
@@ -101,6 +106,7 @@ def find_route(
         {node: approach_cost(point) for node, point in goals.items()},
         goal,
         profile,
+        congestion,
     )
     if path is None:
         raise RouteNotFoundError(RouteFailure.NO_PATH)

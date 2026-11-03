@@ -13,7 +13,12 @@ from app.models import User
 from app.repositories.road_repository import load_entrances, load_graph, load_sites
 from app.repositories.sensor_repository import Sensor, load_sensors
 from app.repositories.user_repository import create_guest, find_user_by_token
-from app.services.congestion_service import Reading, TtlCache, create_sdot_client
+from app.services.congestion_service import (
+    Reading,
+    TtlCache,
+    create_sdot_client,
+    road_congestion,
+)
 from app.services.oauth_service import create_oauth_client
 from app.services.place_service import create_kakao_client
 from core.entrance import EntranceIndex
@@ -110,6 +115,40 @@ def get_congestion_cache() -> TtlCache[list[Reading]]:
 
 
 CongestionCacheDep = Annotated[TtlCache[list[Reading]], Depends(get_congestion_cache)]
+
+
+@cache
+def get_road_congestion_cache() -> TtlCache[dict[int, float]]:
+    return TtlCache(get_settings().sdot_cache_ttl_s)
+
+
+RoadCongestionCacheDep = Annotated[
+    TtlCache[dict[int, float]], Depends(get_road_congestion_cache)
+]
+
+
+def get_road_congestion(
+    graph: GraphDep,
+    settings: SettingsDep,
+    readings: CongestionCacheDep,
+    cache: RoadCongestionCacheDep,
+) -> dict[int, float]:
+    """경로 탐색에 쓰는 길별 혼잡도(0~1).
+
+    S-DoT 키나 센서 위치 파일이 없으면 비워서, 경로는 혼잡 없이 찾는다.
+    """
+    if not settings.sdot_api_key.get_secret_value():
+        return {}
+    try:
+        sensors = load_sensors(settings.sensors_path)
+    except FileNotFoundError:
+        return {}
+    return road_congestion(
+        graph, lambda: create_sdot_client(settings), sensors, settings, readings, cache
+    )
+
+
+RoadCongestionDep = Annotated[dict[int, float], Depends(get_road_congestion)]
 
 
 def get_db_session(settings: SettingsDep) -> Iterator[Session]:

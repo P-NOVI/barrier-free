@@ -1,0 +1,172 @@
+from collections.abc import Callable
+
+import httpx
+import pytest
+from fastapi.testclient import TestClient
+
+from app.config import Settings
+from app.deps import get_graph, get_road_congestion
+from app.main import app
+from app.repositories.sensor_repository import Sensor
+from app.services.congestion_service import (
+    Reading,
+    TtlCache,
+    create_sdot_client,
+    road_congestion,
+)
+from core.congestion import congestion_level, edge_congestion
+from core.graph import Graph
+
+client = TestClient(app)
+
+# 격자 길 간격(50m)보다 훨씬 좁아서 센서가 놓인 노드에 닿은 길만 걸린다.
+RADIUS_M = 1.0
+FULL_COUNT = 300.0
+SETTINGS = Settings(
+    sdot_api_key="test-key",
+    congestion_full_count=FULL_COUNT,
+    congestion_radius_m=RADIUS_M,
+)
+
+
+def position(graph: Graph, node: int) -> tuple[float, float]:
+    return graph.nodes[node].lon, graph.nodes[node].lat
+
+
+def edges_at(graph: Graph, node: int) -> set[int]:
+    return {e.edge_id for e in graph.edges if node in (e.source, e.target)}
+
+
+def test_congestion_level_reaches_one_at_full_count() -> None:
+    assert congestion_level(0, FULL_COUNT) == 0
+    assert congestion_level(150, FULL_COUNT) == pytest.approx(0.5)
+    assert congestion_level(900, FULL_COUNT) == 1
+
+
+def test_roads_near_sensor_get_its_congestion(sample_graph: Graph) -> None:
+    levels = edge_congestion(
+        sample_graph,
+        [(position(sample_graph, 0), 150), (position(sample_graph, 99), 0)],
+        FULL_COUNT,
+        RADIUS_M,
+    )
+
+    assert levels == dict.fromkeys(edges_at(sample_graph, 0), pytest.approx(0.5))
+
+
+def test_road_between_two_sensors_gets_larger_congestion(sample_graph: Graph) -> None:
+    levels = edge_congestion(
+        sample_graph,
+        [(position(sample_graph, 0), 150), (position(sample_graph, 1), 300)],
+        FULL_COUNT,
+        RADIUS_M,
+    )
+    (shared,) = edges_at(sample_graph, 0) & edges_at(sample_graph, 1)
+
+    assert levels[shared] == 1
+    assert set(levels) == edges_at(sample_graph, 0) | edges_at(sample_graph, 1)
+
+
+def sdot_response(*rows: dict) -> httpx.Response:
+    result = {"CODE": "INFO-000", "MESSAGE": "정상 처리되었습니다"}
+    body = {"sDoTPeople": {"RESULT": result, "row": list(rows)}}
+    return httpx.Response(200, json=body)
+
+
+def row(serial: str, count: str) -> dict:
+    return {
+        "SERIAL": serial,
+        "SENSING_TIME": "2026-11-03_14:48:00",
+        "VISITOR_COUNT": count,
+    }
+
+
+def read_levels(
+    graph: Graph,
+    handler: Callable[[httpx.Request], httpx.Response],
+    cache: TtlCache[dict[int, float]],
+) -> tuple[dict[int, float], list[httpx.Request]]:
+    received: list[httpx.Request] = []
+
+    def record(request: httpx.Request) -> httpx.Response:
+        received.append(request)
+        return handler(request)
+
+    levels = road_congestion(
+        graph,
+        lambda: create_sdot_client(SETTINGS, httpx.MockTransport(record)),
+        {3032: Sensor(3032, position(graph, 0), "센서 주소")},
+        SETTINGS,
+        TtlCache[list[Reading]](60.0),
+        cache,
+    )
+    return levels, received
+
+
+def test_road_congestion_comes_from_sdot_and_is_cached(sample_graph: Graph) -> None:
+    cache = TtlCache[dict[int, float]](60.0)
+    first, received = read_levels(
+        sample_graph, lambda _: sdot_response(row("3032", "300")), cache
+    )
+    second, again = read_levels(
+        sample_graph, lambda _: sdot_response(row("3032", "0")), cache
+    )
+
+    assert first == dict.fromkeys(edges_at(sample_graph, 0), 1.0)
+    assert len(received) == 1
+    assert second == first
+    assert again == []
+
+
+def test_road_congestion_is_empty_and_cached_when_sdot_fails(
+    sample_graph: Graph,
+) -> None:
+    cache = TtlCache[dict[int, float]](60.0)
+
+    def fail(_: httpx.Request) -> httpx.Response:
+        return httpx.Response(500)
+
+    levels, received = read_levels(sample_graph, fail, cache)
+    _, again = read_levels(sample_graph, fail, cache)
+
+    assert levels == {}
+    assert len(received) == 1
+    assert again == []
+
+
+def test_no_sdot_key_means_no_congestion(sample_graph: Graph) -> None:
+    levels = get_road_congestion(
+        sample_graph,
+        Settings(sdot_api_key=""),
+        TtlCache[list[Reading]](60.0),
+        TtlCache[dict[int, float]](60.0),
+    )
+
+    assert levels == {}
+
+
+def route_via(graph: Graph, congestion: dict[int, float]) -> list[list[float]]:
+    app.dependency_overrides[get_graph] = lambda: graph
+    app.dependency_overrides[get_road_congestion] = lambda: congestion
+    try:
+        response = client.post(
+            "/api/route",
+            json={"start": position(graph, 0), "goal": position(graph, 11)},
+        )
+    finally:
+        app.dependency_overrides.clear()
+    assert response.status_code == 200
+    return response.json()["coordinates"]
+
+
+@pytest.mark.parametrize(("crowded", "detour"), [(1, 10), (10, 1)])
+def test_route_avoids_crowded_road(
+    sample_graph: Graph, crowded: int, detour: int
+) -> None:
+    # 0 → 11 은 1 을 거치거나 10 을 거치는 같은 길이(100m) 두 갈래다.
+    congestion = dict.fromkeys(edges_at(sample_graph, crowded), 1.0)
+
+    coordinates = route_via(sample_graph, congestion)
+
+    assert list(position(sample_graph, detour)) in coordinates
+    assert list(position(sample_graph, crowded)) not in coordinates

@@ -26,6 +26,15 @@ def no_real_entrances(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(deps, "load_sites", lambda path: NO_SITES)
 
 
+@pytest.fixture(autouse=True)
+def no_real_congestion(monkeypatch: pytest.MonkeyPatch) -> None:
+    """경로 요청이 backend/.env 의 S-DoT 키로 실제 API를 부르지 않게 한다.
+
+    혼잡도를 쓰는 테스트는 get_road_congestion 을 따로 덮어쓴다.
+    """
+    monkeypatch.setattr(deps, "road_congestion", lambda *args: {})
+
+
 @pytest.fixture(scope="session")
 def sample_graph() -> Graph:
     return build_graph(json.loads(SAMPLE_GRAPH.read_text(encoding="utf-8")))
