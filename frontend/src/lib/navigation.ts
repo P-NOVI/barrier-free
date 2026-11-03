@@ -57,7 +57,10 @@ export function distanceM(a: LngLat, b: LngLat): number {
 }
 
 /** origin 기준 동쪽·북쪽 m */
-function toLocal([lng, lat]: LngLat, [lng0, lat0]: LngLat): [number, number] {
+export function toLocal(
+    [lng, lat]: LngLat,
+    [lng0, lat0]: LngLat,
+): [number, number] {
     const cos = Math.cos((lat0 * Math.PI) / 180);
     return [
         (lng - lng0) * METERS_PER_DEGREE * cos,
