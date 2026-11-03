@@ -14,6 +14,7 @@
   hiking: sac_scale=hiking, 비포장 path·track, tracktype grade3 이상
   태그 없는 산길은 경사 배율로 피한다.
 건물 윤곽은 처음 한 번 Overpass 에서 받아 interim/ 에 저장해 둔다.
+multipolygon 멤버가 없는 예전 캐시(out tags 로 받은 것)는 다시 받는다.
 """
 
 import argparse
@@ -126,11 +127,17 @@ def trail_level(data: Mapping[str, Any]) -> str | None:
 
 
 def building_query(area_name: str, timeout_s: int) -> str:
+    """way 는 태그와 좌표만, relation 은 고리를 이을 멤버 좌표까지 받는다.
+
+    out tags 는 relation 멤버를 주지 않는다. way 까지 out body 로 받으면 노드 번호가
+    붙어 캐시만 커진다.
+    """
     return f"""[out:json][timeout:{timeout_s}];
 area["name"="{area_name}"]["admin_level"="4"]->.target;
-(way["building"](area.target);
- relation["building"]["type"="multipolygon"](area.target););
+way["building"](area.target);
 out tags geom;
+relation["building"]["type"="multipolygon"](area.target);
+out body geom;
 """
 
 
@@ -230,17 +237,26 @@ def is_through_building(
     )
 
 
+def has_members(elements: list[dict[str, Any]]) -> bool:
+    """relation 마다 멤버가 있는지. 예전 쿼리(out tags)로 받은 캐시는 없다."""
+    return all("members" in e for e in elements if e["type"] == "relation")
+
+
 def load_buildings(path: Path, overpass: dict[str, Any], timeout_s: int) -> list:
-    """저장해 둔 건물 윤곽 응답. 없으면 Overpass 에서 받아 저장한다."""
-    if not path.exists():
-        print("건물 윤곽 받는 중 (Overpass)", flush=True)
-        query = building_query(overpass["area_name"], timeout_s)
-        data = fetch_overpass(overpass, query, timeout_s)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        with gzip.open(path, "wt", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, separators=(",", ":"))
-    with gzip.open(path, "rt", encoding="utf-8") as f:
-        return json.load(f)["elements"]
+    """저장해 둔 건물 윤곽 응답. 없거나 relation 멤버가 빠졌으면 새로 받는다."""
+    if path.exists():
+        with gzip.open(path, "rt", encoding="utf-8") as f:
+            elements = json.load(f)["elements"]
+        if has_members(elements):
+            return elements
+        print("건물 윤곽 캐시에 multipolygon 멤버가 없어 다시 받습니다.", flush=True)
+    print("건물 윤곽 받는 중 (Overpass)", flush=True)
+    query = building_query(overpass["area_name"], timeout_s)
+    data = fetch_overpass(overpass, query, timeout_s)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with gzip.open(path, "wt", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, separators=(",", ":"))
+    return data["elements"]
 
 
 def edge_line(graph: Any, u: Any, v: Any, data: Mapping[str, Any]) -> LineString:
