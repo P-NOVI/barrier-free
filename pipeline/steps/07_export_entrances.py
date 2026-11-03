@@ -11,13 +11,11 @@
 import argparse
 import gzip
 import json
-import urllib.parse
-import urllib.request
 from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
-from common import CONFIG_PATH, load_config, repo_path
+from common import CONFIG_PATH, fetch_overpass, load_config, repo_path
 
 COORD_DIGITS = 6  # 약 0.1m
 # 닫힌 고리의 최소 점 수(처음 점이 끝에 한 번 더 온다)
@@ -36,18 +34,6 @@ rel(bw.ways)["type"="multipolygon"]->.relations;
 .ways out body geom;
 .relations out body geom;
 """
-
-
-def fetch(url: str, query: str, user_agent: str, timeout_s: int) -> dict[str, Any]:
-    body = urllib.parse.urlencode({"data": query}).encode()
-    request = urllib.request.Request(url, data=body, headers={"User-Agent": user_agent})
-    with urllib.request.urlopen(request, timeout=timeout_s) as response:
-        data = json.load(response)
-    if not data.get("elements"):
-        raise SystemExit(
-            "Overpass 응답에 출입구가 없습니다. 지역 이름과 서버를 확인하세요."
-        )
-    return data
 
 
 def point(node: dict[str, Any]) -> LngLat:
@@ -143,13 +129,12 @@ def build_areas(
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", type=Path, default=CONFIG_PATH)
-    config = load_config(parser.parse_args().config)["entrances"]
+    settings = load_config(parser.parse_args().config)
+    overpass, config = settings["overpass"], settings["entrances"]
     output = repo_path(config["output"])
 
-    query = build_query(config["area_name"], config["timeout_s"])
-    data = fetch(
-        config["overpass_url"], query, config["user_agent"], config["timeout_s"]
-    )
+    query = build_query(overpass["area_name"], config["timeout_s"])
+    data = fetch_overpass(overpass, query, config["timeout_s"])
     areas = build_areas(data["elements"], config)
     output.parent.mkdir(parents=True, exist_ok=True)
     with gzip.open(output, "wt", encoding="utf-8") as f:
