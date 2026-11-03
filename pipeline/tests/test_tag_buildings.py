@@ -148,3 +148,26 @@ def test_load_buildings_downloads_once_and_reuses_file(tmp_path: Path) -> None:
     assert fetch.call_count == 1
     assert 'area["name"="서울특별시"]' in fetch.call_args.args[1]
     assert first == second == answer["elements"]
+
+
+def test_building_query_asks_relation_members() -> None:
+    lines = tag_barriers.building_query("서울특별시", 60).splitlines()
+
+    relation = lines.index('relation["building"]["type"="multipolygon"](area.target);')
+    assert lines[relation + 1] == "out body geom;"
+
+
+def test_load_buildings_downloads_again_when_relations_lack_members(
+    tmp_path: Path,
+) -> None:
+    path = tmp_path / "buildings.json.gz"
+    overpass = {"url": "http://overpass.test", "area_name": "서울특별시"}
+    stale = {"elements": [{"type": "relation", "id": 1, "tags": {"building": "yes"}}]}
+    fresh = {"elements": [{"type": "relation", "id": 1, "members": []}]}
+
+    with patch.object(tag_barriers, "fetch_overpass", side_effect=[stale, fresh]):
+        tag_barriers.load_buildings(path, overpass, 60)
+        reloaded = tag_barriers.load_buildings(path, overpass, 60)
+        again = tag_barriers.load_buildings(path, overpass, 60)
+
+    assert reloaded == again == fresh["elements"]
