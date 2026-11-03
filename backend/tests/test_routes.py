@@ -10,6 +10,7 @@ from app.deps import get_entrances, get_graph, get_sites
 from app.main import app
 from core.entrance import build_entrance_index
 from core.graph import Graph, build_graph
+from core.profiles import PRESETS
 from core.site import build_site_index
 from core.slope import MODERATE_MAX_GRADE
 
@@ -94,6 +95,25 @@ def test_wheelchair_route_has_no_steps_or_steep_grade(sample_graph: Graph) -> No
     body = response.json()
     assert body["steps_count"] == 0
     assert body["max_grade"] <= MODERATE_MAX_GRADE
+
+
+@pytest.mark.usefixtures("use_graph")
+@pytest.mark.parametrize("preset", PRESETS)
+def test_duration_is_distance_at_preset_speed(sample_graph: Graph, preset: str) -> None:
+    response = client.post(
+        "/api/route",
+        json={
+            "start": coordinate(sample_graph, 0),
+            "goal": coordinate(sample_graph, len(sample_graph.nodes) - 1),
+            "preset": preset,
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["duration_s"] == pytest.approx(
+        body["distance_m"] / PRESETS[preset].speed_mps
+    )
 
 
 @pytest.mark.usefixtures("use_graph")

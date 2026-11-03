@@ -33,6 +33,9 @@ class Profile:
     stair_factor: float
     needs_wheelchair_access: bool
     congestion_tolerance: CongestionTolerance
+    # 평균 이동 속도(m/s). 연구에서 관측된 이동 조건별 평균값이다.
+    # 소요시간은 경로 거리를 이 값으로 나눠 구한다.
+    speed_mps: float
 
 
 PRESETS: dict[str, Profile] = {
@@ -43,6 +46,7 @@ PRESETS: dict[str, Profile] = {
         stair_factor=STAIR_FACTOR_NONE,
         needs_wheelchair_access=True,
         congestion_tolerance=CongestionTolerance.AVOID,
+        speed_mps=0.64,
     ),
     "power_wheelchair": Profile(
         max_grade=POWER_WHEELCHAIR_MAX_GRADE,
@@ -51,6 +55,7 @@ PRESETS: dict[str, Profile] = {
         stair_factor=STAIR_FACTOR_NONE,
         needs_wheelchair_access=True,
         congestion_tolerance=CongestionTolerance.AVOID,
+        speed_mps=0.70,
     ),
     "stroller": Profile(
         max_grade=MODERATE_MAX_GRADE,
@@ -59,6 +64,7 @@ PRESETS: dict[str, Profile] = {
         stair_factor=STAIR_FACTOR_NONE,
         needs_wheelchair_access=True,
         congestion_tolerance=CongestionTolerance.NORMAL,
+        speed_mps=1.12,
     ),
     "crutches": Profile(
         max_grade=POWER_WHEELCHAIR_MAX_GRADE,
@@ -67,6 +73,7 @@ PRESETS: dict[str, Profile] = {
         stair_factor=STAIR_FACTOR_HIGH,
         needs_wheelchair_access=False,
         congestion_tolerance=CongestionTolerance.AVOID,
+        speed_mps=0.76,
     ),
     "elderly": Profile(
         max_grade=POWER_WHEELCHAIR_MAX_GRADE,
@@ -75,6 +82,7 @@ PRESETS: dict[str, Profile] = {
         stair_factor=STAIR_FACTOR_MEDIUM,
         needs_wheelchair_access=False,
         congestion_tolerance=CongestionTolerance.NORMAL,
+        speed_mps=1.12,
     ),
     "general": Profile(
         max_grade=None,
@@ -83,6 +91,7 @@ PRESETS: dict[str, Profile] = {
         stair_factor=STAIR_FACTOR_NONE,
         needs_wheelchair_access=False,
         congestion_tolerance=CongestionTolerance.NORMAL,
+        speed_mps=1.28,
     ),
 }
 

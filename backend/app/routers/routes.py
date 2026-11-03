@@ -66,6 +66,7 @@ def post_route(
     summary = route.summary
     return RouteResponse(
         distance_m=summary.distance_m,
+        duration_s=route.duration_s,
         max_grade=summary.max_grade,
         ascent_m=summary.ascent_m,
         steps_count=summary.steps_count,

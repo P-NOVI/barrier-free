@@ -38,6 +38,9 @@ class TurnPoint(BaseModel):
 
 class RouteResponse(BaseModel):
     distance_m: float
+    duration_s: float = Field(
+        description="이동 조건의 평균 속도로 distance_m 을 가는 예상 시간(초)"
+    )
     max_grade: float = Field(description="계단을 뺀 구간 중 가장 가파른 |경사| (비율)")
     ascent_m: float = Field(description="오르막 고도 합")
     steps_count: int

@@ -20,6 +20,8 @@ export type TurnPoint = {
 
 export type RouteResponse = {
     distance_m: number;
+    /** 이동 조건의 평균 속도로 distance_m 을 가는 예상 시간(초) */
+    duration_s: number;
     /** 계단을 뺀 구간 중 가장 가파른 |경사| (비율) */
     max_grade: number;
     ascent_m: number;

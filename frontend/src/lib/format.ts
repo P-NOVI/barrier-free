@@ -1,4 +1,6 @@
 const METERS_PER_KM = 1000;
+const SECONDS_PER_MINUTE = 60;
+const MINUTES_PER_HOUR = 60;
 
 /** 1km 미만은 m 정수, 이상은 km 소수 둘째 자리 */
 export function formatDistance(meters: number): string {
@@ -6,6 +8,17 @@ export function formatDistance(meters: number): string {
         return `${Math.round(meters)}m`;
     }
     return `${(meters / METERS_PER_KM).toFixed(2)}km`;
+}
+
+/** 분 단위로 반올림한다. 1분 미만은 1분, 60분 이상은 시간과 분 */
+export function formatDuration(seconds: number): string {
+    const minutes = Math.max(1, Math.round(seconds / SECONDS_PER_MINUTE));
+    if (minutes < MINUTES_PER_HOUR) {
+        return `${minutes}분`;
+    }
+    const hours = Math.floor(minutes / MINUTES_PER_HOUR);
+    const rest = minutes % MINUTES_PER_HOUR;
+    return rest === 0 ? `${hours}시간` : `${hours}시간 ${rest}분`;
 }
 
 /** 경사 비율(0.049)을 백분율(4.9%)로 */
