@@ -3,8 +3,8 @@ from dataclasses import replace
 
 import pytest
 
-from core.cost import SLOPE_FACTORS, arc_cost
-from core.graph import Arc
+from core.cost import SLOPE_FACTORS, STEEP_FACTORS, TRAIL_FACTORS, arc_cost
+from core.graph import Arc, Trail
 from core.profiles import CONGESTION_WEIGHTS, PRESETS, CongestionTolerance
 from core.slope import GradeLevel
 
@@ -34,6 +34,43 @@ def test_slope_factor_by_grade_level() -> None:
     )
 
 
+@pytest.mark.parametrize(
+    ("grade", "factor"),
+    [
+        (0.12, SLOPE_FACTORS[GradeLevel.HARD]),
+        (0.15, SLOPE_FACTORS[GradeLevel.HARD]),
+        (0.2, STEEP_FACTORS[1][1]),
+        (-0.2, STEEP_FACTORS[1][1]),
+        (0.3, STEEP_FACTORS[0][1]),
+    ],
+)
+def test_steeper_grades_cost_more_for_general(grade: float, factor: float) -> None:
+    arc = replace(FLAT, grade=grade)
+    assert arc_cost(arc, PRESETS["general"]) == pytest.approx(LENGTH * factor)
+
+
+def test_steep_factors_grow_with_grade() -> None:
+    factors = [factor for _, factor in reversed(STEEP_FACTORS)]
+    assert SLOPE_FACTORS[GradeLevel.HARD] < factors[0] < factors[1]
+
+
+@pytest.mark.parametrize("trail", list(Trail))
+def test_trail_factor_multiplies_slope_and_stairs(trail: Trail) -> None:
+    profile = PRESETS["general"]
+    steep = replace(FLAT, grade=0.2, trail=trail)
+    stairs = replace(STAIRS_UP, grade=0.0, trail=trail)
+    assert arc_cost(steep, profile) == pytest.approx(
+        LENGTH * STEEP_FACTORS[1][1] * TRAIL_FACTORS[trail]
+    )
+    assert arc_cost(stairs, profile) == pytest.approx(
+        LENGTH * profile.stair_factor * TRAIL_FACTORS[trail]
+    )
+
+
+def test_mountain_trail_costs_more_than_hiking_trail() -> None:
+    assert 1 < TRAIL_FACTORS[Trail.HIKING] < TRAIL_FACTORS[Trail.MOUNTAIN]
+
+
 @pytest.mark.parametrize("grade", [0.09, -0.09])
 def test_grade_over_limit_is_impassable_both_directions(grade: float) -> None:
     arc = replace(FLAT, grade=grade)
@@ -50,9 +87,15 @@ def test_stairs_impassable_for_wheeled_presets(preset: str) -> None:
 
 
 @pytest.mark.parametrize("preset", ["crutches", "elderly", "general"])
-def test_stairs_use_stair_factor_instead_of_grade(preset: str) -> None:
+def test_stairs_use_larger_of_stair_and_slope_factor(preset: str) -> None:
     profile = PRESETS[preset]
-    assert arc_cost(STAIRS_UP, profile) == LENGTH * profile.stair_factor
+    gentle = replace(STAIRS_UP, grade=0.05)
+    assert arc_cost(gentle, profile) == LENGTH * max(
+        profile.stair_factor, SLOPE_FACTORS[GradeLevel.MODERATE]
+    )
+    assert arc_cost(STAIRS_UP, profile) == LENGTH * max(
+        profile.stair_factor, STEEP_FACTORS[0][1]
+    )
 
 
 def test_stairs_direction_follows_grade_sign() -> None:

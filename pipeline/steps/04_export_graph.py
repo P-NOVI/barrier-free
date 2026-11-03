@@ -3,9 +3,11 @@
 실행: pipeline/ 에서 uv run python steps/04_export_graph.py
 형식은 backend/core/graph.py 의 build_graph 입력과 같다.
 - nodes: [{lon, lat, elevation}], 노드 번호는 배열 순서
-- edges: [{id, u, v, length, grade, steps, ramp, wheelchair_ok, walk_ok, geometry?}]
+- edges: [{id, u, v, length, grade, steps, ramp, wheelchair_ok, walk_ok, geometry?,
+  trail?}]
   같은 길의 양방향 구간은 하나만 남기고, grade 는 u → v 방향 값이다.
   geometry 는 u → v 사이 중간 지점 [[lon, lat]]. 곧은 구간이면 없다.
+  trail 은 등산로 단계(hiking, mountain). 등산로가 아니면 없다.
 """
 
 import argparse
@@ -70,6 +72,8 @@ def export_graph(graph: nx.MultiDiGraph) -> dict[str, list[dict[str, Any]]]:
         }
         if inner := inner_points(graph.nodes[u], data):
             edge["geometry"] = inner
+        if trail := data.get("trail"):
+            edge["trail"] = trail
         edges.append(edge)
     return {"nodes": nodes, "edges": edges}
 

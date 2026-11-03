@@ -12,7 +12,7 @@ import osmnx as ox
 
 from common import CONFIG_PATH, data_path, load_config
 
-# 03 단계(계단·경사로·통행 가능 여부) 판정에 쓰는 태그. osmnx 기본 태그에 더한다.
+# 03 단계(계단·경사로·통행 가능 여부·등산로) 판정에 쓰는 태그. osmnx 기본 태그에 더한다.
 EXTRA_WAY_TAGS = [
     "foot",
     "wheelchair",
@@ -22,6 +22,10 @@ EXTRA_WAY_TAGS = [
     "step_count",
     "surface",
     "sidewalk",
+    "sac_scale",
+    "trail_visibility",
+    "smoothness",
+    "tracktype",
 ]
 
 

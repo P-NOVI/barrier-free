@@ -9,6 +9,10 @@
 - walk_ok: foot 가 허용이면 true, 아니면 access=no · private 일 때 false.
   through_building 이면 false
 - wheelchair_ok: 계단 · wheelchair=no · walk_ok=false 이면 false
+- trail: 등산로 단계. 막지 않고 백엔드가 비용 배율을 곱한다(backend/core/cost.py).
+  mountain: sac_scale 이 mountain_hiking 이상, 길이 잘 안 보이거나 노면이 아주 나쁨
+  hiking: sac_scale=hiking, 비포장 path·track, tracktype grade3 이상
+  태그 없는 산길은 경사 배율로 피한다.
 건물 윤곽은 처음 한 번 Overpass 에서 받아 interim/ 에 저장해 둔다.
 """
 
@@ -17,6 +21,7 @@ import gzip
 import json
 import math
 import time
+from collections import Counter
 from collections.abc import Iterable, Mapping
 from pathlib import Path
 from typing import Any
@@ -38,6 +43,36 @@ PEDESTRIAN_WAYS = {"footway", "pedestrian", "path", "steps", "corridor"}
 BUILDING_PASSAGE = "building_passage"
 # 닫힌 고리의 최소 점 수(처음 점이 끝에 한 번 더 온다)
 MIN_RING_POINTS = 4
+
+# 등산로 단계. backend/core/graph.py 의 Trail 값과 같아야 한다.
+TRAIL_HIKING = "hiking"
+TRAIL_MOUNTAIN = "mountain"
+MOUNTAIN_SAC_SCALES = {
+    "mountain_hiking",
+    "demanding_mountain_hiking",
+    "alpine_hiking",
+    "demanding_alpine_hiking",
+    "difficult_alpine_hiking",
+}
+BAD_VISIBILITY = {"bad", "horrible", "no"}
+BAD_SMOOTHNESS = {"very_bad", "horrible", "very_horrible", "impassable"}
+TRAIL_WAYS = {"path", "track"}
+UNPAVED_SURFACES = {
+    "unpaved",
+    "compacted",
+    "fine_gravel",
+    "gravel",
+    "pebblestone",
+    "rock",
+    "dirt",
+    "earth",
+    "ground",
+    "grass",
+    "mud",
+    "sand",
+    "woodchips",
+}
+ROUGH_TRACKS = {"grade3", "grade4", "grade5"}
 
 
 def tag_values(data: Mapping[str, Any], tag: str) -> set[str]:
@@ -68,6 +103,26 @@ def barrier_tags(
         "walk_ok": walk_ok,
         "wheelchair_ok": wheelchair_ok,
     }
+
+
+def trail_level(data: Mapping[str, Any]) -> str | None:
+    """등산로 단계. 등산로가 아니면 None."""
+    if (
+        tag_values(data, "sac_scale") & MOUNTAIN_SAC_SCALES
+        or tag_values(data, "trail_visibility") & BAD_VISIBILITY
+        or tag_values(data, "smoothness") & BAD_SMOOTHNESS
+    ):
+        return TRAIL_MOUNTAIN
+    unpaved_trail = tag_values(data, "highway") & TRAIL_WAYS and (
+        tag_values(data, "surface") & UNPAVED_SURFACES
+    )
+    if (
+        "hiking" in tag_values(data, "sac_scale")
+        or unpaved_trail
+        or tag_values(data, "tracktype") & ROUGH_TRACKS
+    ):
+        return TRAIL_HIKING
+    return None
 
 
 def building_query(area_name: str, timeout_s: int) -> str:
@@ -217,6 +272,7 @@ def main() -> None:
     graph = ox.load_graphml(source)
     keys = ("steps", "ramp", "through_building", "walk_ok", "wheelchair_ok")
     counts = dict.fromkeys(keys, 0)
+    trails: Counter[str] = Counter()
     for u, v, data in graph.edges(data=True):
         length_m, inside_m = buildings.measure(edge_line(graph, u, v, data))
         tags = barrier_tags(
@@ -225,12 +281,15 @@ def main() -> None:
         data.update(tags)
         for key, value in tags.items():
             counts[key] += value
+        if trail := trail_level(data):
+            data["trail"] = trail
+            trails[trail] += 1
     ox.save_graphml(graph, output)
 
     total = graph.number_of_edges()
     print(
         f"edges {total}: steps {counts['steps']}, ramp {counts['ramp']}, "
-        f"through_building {counts['through_building']}, "
+        f"through_building {counts['through_building']}, trail {dict(trails)}, "
         f"walk_ok=false {total - counts['walk_ok']}, "
         f"wheelchair_ok=false {total - counts['wheelchair_ok']}",
         flush=True,

@@ -48,6 +48,31 @@ def test_barrier_tags(tags: dict, expected: tuple[bool, bool, bool, bool]) -> No
     ) == expected
 
 
+@pytest.mark.parametrize(
+    ("tags", "expected"),
+    [
+        ({"highway": "footway"}, None),
+        ({"highway": "footway", "surface": "dirt"}, None),
+        ({"highway": "path", "surface": "asphalt"}, None),
+        # 노면 태그가 없는 path 는 경사 배율에 맡긴다
+        ({"highway": "path"}, None),
+        ({"highway": "path", "surface": "ground"}, "hiking"),
+        ({"highway": ["path", "steps"], "surface": "compacted"}, "hiking"),
+        ({"highway": "track", "tracktype": "grade4"}, "hiking"),
+        ({"highway": "path", "sac_scale": "hiking"}, "hiking"),
+        ({"highway": "path", "sac_scale": "mountain_hiking"}, "mountain"),
+        (
+            {"highway": "path", "surface": "ground", "trail_visibility": "bad"},
+            "mountain",
+        ),
+        ({"highway": "footway", "smoothness": "impassable"}, "mountain"),
+        ({"highway": "footway", "smoothness": "bad"}, None),
+    ],
+)
+def test_trail_level(tags: dict, expected: str | None) -> None:
+    assert tag_barriers.trail_level(tags) == expected
+
+
 def edge_data(osmid: int, length: float, grade: float, **flags: bool) -> dict:
     return {
         "osmid": osmid,
@@ -118,6 +143,19 @@ def test_export_keeps_inner_points_from_u_to_v() -> None:
     # 중간 지점이 없거나 모양 정보가 없는 구간에는 geometry 가 없다
     assert "geometry" not in edges[1]
     assert "geometry" not in edges[2]
+
+
+def test_export_keeps_trail_only_on_trails() -> None:
+    graph = nx.MultiDiGraph()
+    graph.add_node(1, x=126.99, y=37.534, elevation=30.0)
+    graph.add_node(2, x=126.991, y=37.535, elevation=60.0)
+    graph.add_edge(1, 2, trail="mountain", **edge_data(1, 120.0, 0.25))
+    graph.add_edge(1, 2, **edge_data(2, 150.0, 0.2))
+
+    edges = export_graph.export_graph(graph)["edges"]
+
+    assert edges[0]["trail"] == "mountain"
+    assert "trail" not in edges[1]
 
 
 def test_export_matches_backend_graph_format() -> None:

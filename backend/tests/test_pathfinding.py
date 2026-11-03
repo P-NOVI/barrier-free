@@ -4,7 +4,7 @@ from itertools import pairwise
 
 import pytest
 
-from core.cost import SLOPE_FACTORS, is_passable
+from core.cost import SLOPE_FACTORS, STEEP_FACTORS, TRAIL_FACTORS, is_passable
 from core.graph import Graph, build_graph
 from core.pathfinding import find_path, find_path_between, summarize
 from core.profiles import CONGESTION_WEIGHTS, PRESETS, CongestionTolerance
@@ -34,9 +34,9 @@ def edge(
     }
 
 
-# 0 → 3 으로 가는 두 갈래: 위쪽(0-1-3)은 짧은 계단, 아래쪽(0-2-3)은 긴 평지
+# 0 → 3 으로 가는 두 갈래: 위쪽(0-1-3)은 짧고 완만한 계단, 아래쪽(0-2-3)은 긴 평지
 STAIRS_OR_DETOUR = [
-    edge(0, 0, 1, 50, 0.3, steps=True),
+    edge(0, 0, 1, 50, 0.05, steps=True),
     edge(1, 1, 3, 50),
     edge(2, 0, 2, 100),
     edge(3, 2, 3, 100),
@@ -55,6 +55,14 @@ def test_general_takes_shorter_stairs() -> None:
     path = find_path(graph, 0, 3, PRESETS["general"])
     assert path is not None
     assert path.nodes == [0, 1, 3]
+
+
+def test_general_goes_around_steep_stairs() -> None:
+    # 같은 계단이 산 계단처럼 가파르면 일반 보행도 평지로 돌아간다
+    steep = [{**STAIRS_OR_DETOUR[0], "grade": 0.3}, *STAIRS_OR_DETOUR[1:]]
+    path = find_path(make_graph(4, steep), 0, 3, PRESETS["general"])
+    assert path is not None
+    assert path.nodes == [0, 2, 3]
 
 
 def test_grade_over_limit_is_avoided() -> None:
@@ -151,9 +159,34 @@ def test_summarize_distance_grade_ascent_steps() -> None:
     assert summary.steps_count == 1
 
 
+# 0 → 3 으로 가는 두 갈래: 위쪽(0-1-3)은 짧은 험한 산길, 아래쪽(0-2-3)은 세 배 긴 평지
+TRAIL_OR_DETOUR = [
+    {**edge(0, 0, 1, 50, 0.3), "trail": "mountain"},
+    edge(1, 1, 3, 50),
+    edge(2, 0, 2, 150),
+    edge(3, 2, 3, 150),
+]
+
+
+def test_general_goes_around_mountain_trail() -> None:
+    graph = make_graph(4, TRAIL_OR_DETOUR)
+    path = find_path(graph, 0, 3, PRESETS["general"])
+    assert path is not None
+    assert path.nodes == [0, 2, 3]
+
+
+def test_general_takes_mountain_trail_when_it_is_the_only_way() -> None:
+    graph = make_graph(4, TRAIL_OR_DETOUR[:2])
+    path = find_path(graph, 0, 3, PRESETS["general"])
+    assert path is not None
+    assert path.nodes == [0, 1, 3]
+
+
 def test_cost_factors_keep_heuristic_admissible() -> None:
     # A* 가 최적 경로를 보장하려면 모든 배율이 1 이상이어야 한다.
     assert min(SLOPE_FACTORS.values()) >= 1
+    assert min(factor for _, factor in STEEP_FACTORS) >= 1
+    assert min(TRAIL_FACTORS.values()) >= 1
     assert min(profile.stair_factor for profile in PRESETS.values()) >= 1
     assert min(CONGESTION_WEIGHTS.values()) >= 0
 

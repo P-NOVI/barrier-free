@@ -1,5 +1,6 @@
 from collections.abc import Sequence
 from dataclasses import dataclass, field, replace
+from enum import StrEnum
 from typing import Any
 
 from core.snap import EdgeIndex, LngLat, NodeIndex
@@ -11,6 +12,15 @@ class Node:
     lon: float
     lat: float
     elevation: float
+
+
+class Trail(StrEnum):
+    """등산로 단계 (pipeline/steps/03_tag_barriers.py 가 OSM 태그로 정한다)."""
+
+    # 쉬운 등산로·비포장 산책로 (sac_scale=hiking, 비포장 path·track)
+    HIKING = "hiking"
+    # 험한 산길 (sac_scale=mountain_hiking 이상, 길이 잘 안 보이거나 노면이 아주 나쁨)
+    MOUNTAIN = "mountain"
 
 
 @dataclass(frozen=True, slots=True)
@@ -30,6 +40,8 @@ class Arc:
     walk_ok: bool
     # source → target 사이 길 모양의 중간 지점 (경도, 위도). 곧은 구간이면 비어 있다.
     geometry: tuple[tuple[float, float], ...] = ()
+    # 등산로면 그 단계. 일반 길이면 None
+    trail: Trail | None = None
 
 
 @dataclass(frozen=True)
@@ -68,6 +80,7 @@ def build_graph(data: dict[str, Any]) -> Graph:
             wheelchair_ok=edge["wheelchair_ok"],
             walk_ok=edge["walk_ok"],
             geometry=tuple((lon, lat) for lon, lat in edge.get("geometry", ())),
+            trail=Trail(edge["trail"]) if "trail" in edge else None,
         )
         backward = replace(
             forward,
