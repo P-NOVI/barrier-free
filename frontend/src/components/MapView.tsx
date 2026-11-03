@@ -14,6 +14,7 @@ import {
     toLngLat,
 } from '../lib/kakaoMap';
 import { arrowsAlong } from '../lib/routeArrows';
+import { smoothJogs } from '../lib/routeShape';
 
 // 카카오맵 확대 수준. 숫자가 작을수록 확대 (1~14)
 const DEFAULT_LEVEL = 4;
@@ -541,9 +542,11 @@ export default function MapView({
         return () => observer.disconnect();
     }, [map]);
 
+    // 선과 화살표만 다듬은 모양으로 그린다. 안내는 원래 좌표로 계산한다(lib/routeShape.ts).
+    const routeShape = useMemo(() => path && smoothJogs(path), [path]);
     useRouteLine(
         map,
-        path,
+        routeShape,
         start,
         goal,
         startEntrance,
@@ -552,7 +555,7 @@ export default function MapView({
         fitRoute,
     );
     useFollow(map, follow);
-    useRouteArrows(map, path);
+    useRouteArrows(map, routeShape);
     useCongestionPins(map, congestion);
     useMyLocation(map, myLocation);
     useElevatorMarkers(map, elevators, onElevatorClick);
