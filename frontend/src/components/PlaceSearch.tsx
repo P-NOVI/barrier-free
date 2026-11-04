@@ -18,7 +18,7 @@ import {
 } from '../lib/historyApi';
 import type { LngLat } from '../lib/kakaoMap';
 import type { Place } from '../lib/placeApi';
-import { PRESETS } from '../lib/presets';
+import { presetLabel } from '../lib/presets';
 import {
     CURRENT_LOCATION_LABEL,
     type Endpoint,
@@ -106,10 +106,6 @@ export function SearchResults({
 // 목록을 눌러도 입력창 포커스가 남아 목록이 닫히지 않게 한다.
 function keepFocus(event: MouseEvent) {
     event.preventDefault();
-}
-
-function presetLabel(id: string): string {
-    return PRESETS.find((preset) => preset.id === id)?.label ?? id;
 }
 
 function RecentItem({

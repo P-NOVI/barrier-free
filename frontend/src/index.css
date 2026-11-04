@@ -13,6 +13,7 @@
     --my-location: #1a73e8;
     --route-arrow: rgba(255, 255, 255, 0.6);
     --saved-place: #0070dd;
+    --icon-bg: #bdc1c6;
     /* 카카오 로그인 버튼 색(카카오 디자인 가이드) */
     --kakao-yellow: #fee500;
     --kakao-label: rgba(0, 0, 0, 0.85);
@@ -241,38 +242,99 @@ body,
     box-shadow: var(--panel-shadow);
 }
 
-/* 저장 탭 */
-.saved-panel,
+/* 로그인·로그아웃 */
 .account-panel {
     display: flex;
     flex-direction: column;
     gap: 12px;
 }
 
-.saved-panel__title {
-    margin: 0 0 4px;
+.account-panel__status,
+.my-tab__status {
+    margin: 0;
     font-size: 14px;
+    color: var(--muted);
 }
 
-.saved-panel__list {
+.account-panel__error,
+.my-tab__error {
+    margin: 0;
+    padding: 6px 8px;
+    border-radius: 8px;
+    font-size: 13px;
+    color: var(--error-text);
+    background: var(--error-bg);
+}
+
+/* My 탭: 위에 즐겨찾기·내 장소·내 경로 탭, 좁은 화면은 맨 아래 계정 */
+.my-tab__tabs {
+    display: flex;
+    border-bottom: 1px solid var(--border);
+}
+
+.my-tab__tab {
+    flex: 1;
+    min-height: 44px;
+    padding: 0;
+    border: 0;
+    border-bottom: 3px solid transparent;
+    font: inherit;
+    color: var(--muted);
+    background: none;
+    cursor: pointer;
+}
+
+.my-tab__tab[aria-selected='true'] {
+    border-bottom-color: var(--brand);
+    font-weight: 600;
+    color: var(--brand);
+}
+
+.my-tab__panel {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding-top: 8px;
+}
+
+.my-tab__heading {
+    margin: 12px 0 0;
+    font-size: 13px;
+    font-weight: 400;
+    color: var(--muted);
+}
+
+.my-tab__account {
+    margin-top: 16px;
+    padding-top: 4px;
+    border-top: 1px solid var(--border);
+}
+
+.my-tab__account .my-tab__heading {
+    margin-bottom: 8px;
+}
+
+/* My 탭 목록: 동그란 아이콘, 이름, 작은 글씨 설명 */
+.my-list {
     margin: 0;
     padding: 0;
     list-style: none;
 }
 
-.saved-panel__place {
+.my-list__row {
     display: flex;
     align-items: center;
     border-bottom: 1px solid var(--border);
 }
 
-.saved-panel__pick {
+.my-list__pick {
     display: flex;
     flex: 1;
-    flex-direction: column;
+    align-items: center;
+    gap: 12px;
     min-width: 0;
-    min-height: 48px;
-    padding: 4px 0;
+    min-height: 64px;
+    padding: 8px 0;
     border: 0;
     font: inherit;
     text-align: left;
@@ -281,23 +343,50 @@ body,
     cursor: pointer;
 }
 
-.saved-panel__name {
+.my-list__icon {
+    display: grid;
+    flex: none;
+    place-items: center;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    color: #fff;
+    background: var(--icon-bg);
+}
+
+.my-list__icon svg {
+    width: 22px;
+    height: 22px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.my-list__text {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.my-list__title {
     font-weight: 600;
 }
 
-.saved-panel__name,
-.saved-panel__detail {
+.my-list__title,
+.my-list__detail {
     overflow: hidden;
     white-space: nowrap;
     text-overflow: ellipsis;
 }
 
-.saved-panel__detail {
+.my-list__detail {
     font-size: 13px;
     color: var(--muted);
 }
 
-.saved-panel__delete {
+.my-list__delete {
     flex: none;
     width: 44px;
     height: 44px;
@@ -309,33 +398,49 @@ body,
     cursor: pointer;
 }
 
-.saved-panel__status,
-.account-panel__status {
-    margin: 0;
-    font-size: 14px;
-    color: var(--muted);
-}
-
-.saved-panel__error,
-.account-panel__error {
-    margin: 0;
-    padding: 6px 8px;
-    border-radius: 8px;
-    font-size: 13px;
-    color: var(--error-text);
-    background: var(--error-bg);
-}
-
-/* My 탭: 즐겨찾기·내 장소, 좁은 화면은 그 아래 계정 */
-.my-tab {
+/* 내 장소로 등록할 장소 찾기 */
+.my-register {
     display: flex;
     flex-direction: column;
-    gap: 16px;
+    gap: 8px;
 }
 
-.my-tab__account {
-    padding-top: 12px;
-    border-top: 1px solid var(--border);
+.my-register__header {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.my-register__back {
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    border: 0;
+    font-size: 28px;
+    line-height: 1;
+    color: var(--text);
+    background: none;
+    cursor: pointer;
+}
+
+.my-register__title {
+    margin: 0;
+    font-size: 16px;
+}
+
+.my-register__input {
+    box-sizing: border-box;
+    width: 100%;
+    min-height: 44px;
+    padding: 0 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font: inherit;
+}
+
+.my-register__input:focus {
+    border-color: var(--brand);
+    outline: none;
 }
 
 .account-panel__button {
@@ -501,6 +606,41 @@ body,
     align-items: baseline;
     margin: 12px 0 0;
     font-weight: 700;
+}
+
+/* 내 경로 저장 별: 흰 별, 저장하면 파란 별 */
+.route-panel__save {
+    display: grid;
+    flex: none;
+    place-items: center;
+    align-self: center;
+    width: 40px;
+    height: 40px;
+    margin-left: auto;
+    padding: 0;
+    border: 1px solid var(--border);
+    border-radius: 50%;
+    color: var(--muted);
+    background: var(--bg);
+    cursor: pointer;
+}
+
+.route-panel__save svg {
+    width: 22px;
+    height: 22px;
+    fill: #fff;
+    stroke: currentColor;
+    stroke-width: 1.6;
+    stroke-linejoin: round;
+}
+
+.route-panel__save[aria-pressed='true'] {
+    border-color: var(--saved-place);
+    color: var(--saved-place);
+}
+
+.route-panel__save[aria-pressed='true'] svg {
+    fill: currentColor;
 }
 
 .route-panel__duration {

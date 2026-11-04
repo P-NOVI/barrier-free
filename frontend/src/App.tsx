@@ -12,24 +12,29 @@ import AccountPanel from './components/AccountPanel';
 import BottomSheet from './components/BottomSheet';
 import MapView, { type FitPadding } from './components/MapView';
 import MenuBar from './components/MenuBar';
+import MyTab from './components/MyTab';
 import MyLocationControl from './components/MyLocationControl';
 import NavigationPanel from './components/NavigationPanel';
 import PlaceInfoCard from './components/PlaceInfoCard';
 import PlaceSearch from './components/PlaceSearch';
 import RoutePanel from './components/RoutePanel';
-import SavedPanel from './components/SavedPanel';
 import TopSearch from './components/TopSearch';
 import { useMediaQuery } from './hooks/useMediaQuery';
 import { useNavigation } from './hooks/useNavigation';
 import { useRoute } from './hooks/useRoute';
 import { useRouteHistory } from './hooks/useRouteHistory';
 import { useSavedPlaces } from './hooks/useSavedPlaces';
+import { useSavedRoutes } from './hooks/useSavedRoutes';
 import { useVoiceGuidance } from './hooks/useVoiceGuidance';
 import { useWakeLock } from './hooks/useWakeLock';
 import { takeLoginFailure } from './lib/authApi';
 import { type Elevator, fetchElevators } from './lib/elevators';
 import type { LocationFix } from './lib/geolocation';
-import { type RouteHistory, routeEndpoints } from './lib/historyApi';
+import {
+    type RouteHistory,
+    routeEndpoints,
+    toRouteEntry,
+} from './lib/historyApi';
 import { type LngLat, SEOUL_CITY_HALL } from './lib/kakaoMap';
 import { findAddress } from './lib/placeApi';
 import { DEFAULT_PRESET, isPresetId, type PresetId } from './lib/presets';
@@ -38,6 +43,7 @@ import {
     type SavedPlace,
     toSavedPlaceRequest,
 } from './lib/savedPlacesApi';
+import { findSavedRoute } from './lib/savedRoutesApi';
 import {
     CURRENT_LOCATION_LABEL,
     type Endpoint,
@@ -74,7 +80,6 @@ const FIT_PADDING: Record<'wide' | 'narrow', FitPadding> = {
 };
 const SHEET_TITLES: Record<Exclude<Tab, 'search'>, string> = {
     route: '길찾기',
-    saved: '저장',
     my: 'My',
 };
 const LOGIN_FAILED_MESSAGE = '로그인하지 못했어요. 다시 시도해 주세요.';
@@ -111,6 +116,8 @@ export default function App() {
     const [elevatorError, setElevatorError] = useState<string | null>(null);
     // 즐겨찾기·내 장소. 지도에 별 아이콘으로 보인다.
     const savedPlaces = useSavedPlaces();
+    // 즐겨찾기한 경로(내 경로)
+    const savedRoutes = useSavedRoutes();
     // 계단을 못 쓰는 이동 조건이면 역인 출발·도착을 그 역 엘리베이터로 바꿔 경로를 찾는다.
     const elevatorRoute = useMemo(
         () => toElevatorEndpoints(endpoints, preset, elevators),
@@ -206,7 +213,7 @@ export default function App() {
         });
     }, []);
 
-    // 저장 탭에서 고르면 지도를 그 장소로 옮기고, 카드가 보이게 시트를 접는다.
+    // My 탭에서 고르면 지도를 그 장소로 옮기고, 카드가 보이게 시트를 접는다.
     const handleSelectSavedPlace = useCallback(
         (place: SavedPlace) => {
             showSavedPlace(place);
@@ -323,15 +330,24 @@ export default function App() {
             inline={wide}
         />
     );
-    const savedList = (
-        <SavedPanel
-            places={savedPlaces.places}
-            available={savedPlaces.available}
-            error={savedPlaces.error}
-            onSelect={handleSelectSavedPlace}
-            onDelete={savedPlaces.remove}
-        />
-    );
+    // 로그인·로그아웃으로 사용자가 바뀌면 그 사용자의 장소·경로를 다시 불러온다.
+    const reloadSaved = () => {
+        savedPlaces.reload();
+        savedRoutes.reload();
+    };
+    // 지금 찾은 경로와 그 경로를 이미 내 경로에 저장했는지
+    const routeEntry =
+        route.status === 'success'
+            ? toRouteEntry(endpoints, preset, route.route.distance_m)
+            : null;
+    const savedRoute = findSavedRoute(savedRoutes.routes, routeEntry);
+    const toggleSavedRoute = () => {
+        if (savedRoute) {
+            savedRoutes.remove(savedRoute.id);
+        } else if (routeEntry) {
+            savedRoutes.add(routeEntry);
+        }
+    };
     // 탭마다 패널(넓은 화면)이나 시트(좁은 화면)에 보일 내용
     const tabContent: Record<Tab, ReactNode> = {
         search: searchBox,
@@ -349,27 +365,38 @@ export default function App() {
                     endpoints={endpoints}
                     route={route}
                     notes={elevatorRoute.stops.map(elevatorStopText)}
+                    saved={savedRoute !== null}
+                    onToggleSave={
+                        savedRoutes.available && routeEntry
+                            ? toggleSavedRoute
+                            : undefined
+                    }
+                    saveError={savedRoutes.error}
                     onPresetChange={setPreset}
                     onReset={() => setEndpoints(NO_ENDPOINTS)}
                     onStartNavigation={startNavigation}
                 />
             </>
         ),
-        saved: savedList,
-        // 즐겨찾기·내 장소를 함께 보인다. 넓은 화면은 로그인을 오른쪽 위 계정 메뉴에 둔다.
+        // 넓은 화면은 로그인·로그아웃을 오른쪽 위 계정 메뉴에 둔다.
         my: (
-            <div className="my-tab">
-                {savedList}
+            <MyTab
+                savedPlaces={savedPlaces}
+                savedRoutes={savedRoutes}
+                near={mapCenter}
+                onSelectPlace={handleSelectSavedPlace}
+                onSelectRoute={handleSelectRoute}
+            >
                 {!wide && (
                     <section className="my-tab__account" aria-label="계정">
-                        <h3 className="saved-panel__title">계정</h3>
+                        <h3 className="my-tab__heading">계정</h3>
                         <AccountPanel
                             initialMessage={loginMessage}
-                            onSessionChange={savedPlaces.reload}
+                            onSessionChange={reloadSaved}
                         />
                     </section>
                 )}
-            </div>
+            </MyTab>
         ),
     };
     const showPanel = wide && !navigating;
@@ -455,7 +482,7 @@ export default function App() {
             {showPanel && (
                 <AccountMenu
                     initialMessage={loginMessage}
-                    onSessionChange={savedPlaces.reload}
+                    onSessionChange={reloadSaved}
                 />
             )}
             {!wide && !navigating && searchBox}

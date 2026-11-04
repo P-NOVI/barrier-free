@@ -3,7 +3,7 @@
 export type SheetSnap = 'half' | 'collapsed';
 
 /** 아래 메뉴 탭. 검색은 시트를 닫고 지도와 위 검색창만 보인다. */
-export type Tab = 'search' | 'route' | 'saved' | 'my';
+export type Tab = 'search' | 'route' | 'my';
 
 // 이보다 적게 움직이면 끌기가 아니라 누른 것으로 본다(px).
 export const TAP_SLOP_PX = 6;

@@ -43,9 +43,10 @@ describe('snapAfterDrag', () => {
 
 describe('selectTab', () => {
     it('다른 탭을 누르면 절반으로 연다', () => {
-        expect(selectTab({ tab: 'route', snap: 'collapsed' }, 'saved')).toEqual(
-            { tab: 'saved', snap: 'half' },
-        );
+        expect(selectTab({ tab: 'route', snap: 'collapsed' }, 'my')).toEqual({
+            tab: 'my',
+            snap: 'half',
+        });
     });
 
     it('열린 탭을 다시 누르면 접거나 편다', () => {

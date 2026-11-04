@@ -13,6 +13,12 @@ type RoutePanelProps = {
     /** 안내 문구 아래 작은 글씨 (예: 역 엘리베이터로 바꾼 출발·도착) */
     notes?: string[];
     route: RouteState;
+    /** 지금 경로를 내 경로에 저장했는지 */
+    saved?: boolean;
+    /** 없으면 저장 버튼을 숨긴다(백엔드·DB가 꺼짐). */
+    onToggleSave?: () => void;
+    /** 내 경로 저장·삭제에 실패했을 때 알림 */
+    saveError?: string | null;
     onPresetChange: (preset: PresetId) => void;
     onReset: () => void;
     onStartNavigation: () => void;
@@ -47,17 +53,42 @@ function gapNotices(route: RouteResponse): string[] {
     return notices;
 }
 
-function RouteSummary({ route }: { route: RouteResponse }) {
+// 내 경로 저장 별
+const STAR_ICON =
+    'M12 4l2.4 5 5.4.6-4 3.7 1.1 5.3L12 16l-4.9 2.6 1.1-5.3-4-3.7 5.4-.6Z';
+
+function RouteSummary({
+    route,
+    saved,
+    onToggleSave,
+}: {
+    route: RouteResponse;
+    saved: boolean;
+    onToggleSave?: () => void;
+}) {
     return (
         <>
-            <p className="route-panel__headline">
+            <div className="route-panel__headline">
                 <span className="route-panel__duration">
                     {formatDuration(route.duration_s)}
                 </span>
                 <span className="route-panel__distance">
                     {formatDistance(route.distance_m)}
                 </span>
-            </p>
+                {onToggleSave && (
+                    <button
+                        type="button"
+                        className="route-panel__save"
+                        aria-label="내 경로에 저장"
+                        aria-pressed={saved}
+                        onClick={onToggleSave}
+                    >
+                        <svg viewBox="0 0 24 24" aria-hidden="true">
+                            <path d={STAR_ICON} />
+                        </svg>
+                    </button>
+                )}
+            </div>
             <dl className="route-panel__summary">
                 <div>
                     <dt>최대 경사</dt>
@@ -86,6 +117,9 @@ export default function RoutePanel({
     endpoints,
     notes = [],
     route,
+    saved = false,
+    onToggleSave,
+    saveError = null,
     onPresetChange,
     onReset,
     onStartNavigation,
@@ -139,7 +173,16 @@ export default function RoutePanel({
                     </p>
                 )}
                 {route.status === 'success' && (
-                    <RouteSummary route={route.route} />
+                    <RouteSummary
+                        route={route.route}
+                        saved={saved}
+                        onToggleSave={onToggleSave}
+                    />
+                )}
+                {saveError && (
+                    <p role="alert" className="route-panel__error">
+                        {saveError}
+                    </p>
                 )}
             </div>
             {route.status === 'success' && (
