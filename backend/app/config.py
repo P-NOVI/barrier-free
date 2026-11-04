@@ -37,6 +37,19 @@ class Settings(BaseSettings):
     sdot_page_size: int = 1000
     # 센서는 10분마다 측정한다. 이 시간 안에는 API를 다시 부르지 않는다.
     sdot_cache_ttl_s: float = 60.0
+    # 기상청 API허브 동네예보(초단기실황·초단기예보·단기예보).
+    # 키는 backend/.env 에만 둔다. 키가 요청 주소의 쿼리에 들어가므로
+    # 주소를 로그나 응답에 내보내지 않는다.
+    kma_api_key: SecretStr = SecretStr("")
+    kma_base_url: str = (
+        "https://apihub.kma.go.kr/api/typ02/openApi/VilageFcstInfoService_2.0"
+    )
+    kma_timeout_s: float = 5.0
+    # 한 번에 받는 행 수. 단기예보는 1,000건이 넘어서 쪽을 나눠 받는다.
+    kma_page_size: int = 1000
+    # 기상청 자료는 한 시간 또는 세 시간마다 갱신된다.
+    # 이 시간 안에는 같은 격자·기준 시각을 다시 부르지 않는다.
+    kma_cache_ttl_s: float = 600.0
     # 경로 탐색의 길별 혼잡도(core/congestion.py). 10분 유동인구가 이 값 이상이면 1.
     # 초안 값이다. 2026-11-03 10~15시 S-DoT 3,000행의 95% 지점(296명)에 맞췄다.
     congestion_full_count: float = 300.0

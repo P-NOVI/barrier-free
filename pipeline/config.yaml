@@ -150,3 +150,47 @@ sites:
     - {landuse: "^residential$", name: "아파트"}
   # 저장소 기준. backend/app/config.py 의 기본 시설 영역 경로와 같아야 한다.
   output: data/processed/sites.json.gz
+
+# 11 단계. 05 단계처럼 run_all.py 에 넣지 않고 따로 실행한다.
+weather:
+  # 기상청 AWS 시간자료 CSV (OBS_AWS_TIM_*.csv)와 지점 목록
+  source_dir: raw/weather/aws
+  file_pattern: "OBS_AWS_TIM_*.csv"
+  stations: raw/weather/aws_stations.csv
+  # 혼잡도 쪽 자치구 이름과 센서 코드를 읽는다(06 단계 결과).
+  history: interim/sdot/history.parquet
+  # 저장소 기준. 센서 위치(자치구 중심 계산용)
+  sensors: data/processed/sdot_sensors.json
+  output: interim/weather/hourly.parquet
+  report: interim/weather/hourly_report.json
+  # 혼잡도 history 의 자치구 이름 → AWS 지점주소의 자치구.
+  # 같은 구에 지점이 없거나(종로구) 구가 아니면(null) 센서 위치 중심에서 가장 가까운 지점을 쓴다.
+  districts:
+    Dobong-gu: 도봉구
+    Dongjak-gu: 동작구
+    Eunpyeong-gu: 은평구
+    Gangbuk-gu: 강북구
+    Gangdong-gu: 강동구
+    Gangnam-gu: 강남구
+    Gangseo-gu: 강서구
+    Geumcheon-gu: 금천구
+    Guro-gu: 구로구
+    Gwanak-gu: 관악구
+    Gwangjin-gu: 광진구
+    Jongno-gu: 종로구
+    Jung-gu: 중구
+    Jungnang-gu: 중랑구
+    Mapo-gu: 마포구
+    Nowon-gu: 노원구
+    Seocho-gu: 서초구
+    Seodaemun-gu: 서대문구
+    Seongdong-gu: 성동구
+    Seoul_Grand_Park: null
+    Songpa-gu: 송파구
+    Yangcheon-gu: 양천구
+    Yeongdeungpo-gu: 영등포구
+    Yongsan-gu: 용산구
+  # 결측 칸은 같은 시간에 값이 있는 가까운 자치구 이만큼의 평균으로 채운다.
+  fill_neighbors: 3
+  # 남은 기온 결측 중 앞뒤 값이 있는 이 시간 이하의 구간은 직선으로 잇는다.
+  max_gap_hours: 3

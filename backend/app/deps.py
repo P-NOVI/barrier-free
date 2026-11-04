@@ -21,6 +21,7 @@ from app.services.congestion_service import (
 )
 from app.services.oauth_service import create_oauth_client
 from app.services.place_service import create_kakao_client
+from app.services.weather_service import ItemCache, KeyedTtlCache, create_kma_client
 from core.entrance import EntranceIndex
 from core.graph import Graph
 from core.site import SiteIndex
@@ -147,6 +148,31 @@ def get_road_congestion(
 
 
 RoadCongestionDep = Annotated[dict[int, float], Depends(get_road_congestion)]
+
+
+def get_kma_client(settings: SettingsDep) -> Iterator[httpx.Client]:
+    if not settings.kma_api_key.get_secret_value():
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={
+                "reason": "weather_unavailable",
+                "message": "날씨 키가 없습니다. backend/.env 의 "
+                "KMA_API_KEY 를 확인하세요.",
+            },
+        )
+    with create_kma_client(settings) as client:
+        yield client
+
+
+KmaClientDep = Annotated[httpx.Client, Depends(get_kma_client)]
+
+
+@cache
+def get_weather_cache() -> ItemCache:
+    return KeyedTtlCache(get_settings().kma_cache_ttl_s)
+
+
+WeatherCacheDep = Annotated[ItemCache, Depends(get_weather_cache)]
 
 
 def get_db_session(settings: SettingsDep) -> Iterator[Session]:
