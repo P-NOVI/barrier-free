@@ -1162,16 +1162,19 @@ body,
     overscroll-behavior: contain;
 }
 
-/* 넓은 화면 왼쪽 패널: 위에 이름과 메뉴, 아래에 고른 탭 내용 */
+/* 넓은 화면 왼쪽 위에 띄운 패널: 위에 이름과 메뉴, 아래에 고른 탭 내용 */
 .side-panel {
     position: absolute;
-    top: 0;
-    bottom: 0;
-    left: 0;
+    top: 12px;
+    left: 12px;
     z-index: 20;
     display: flex;
     flex-direction: column;
     width: var(--panel-width);
+    /* 아래 40px 은 카카오 로고·축척이 가리지 않게 비운다. */
+    max-height: calc(100% - 52px);
+    overflow: hidden;
+    border-radius: 12px;
     background: var(--bg);
     box-shadow: var(--panel-shadow);
 }
@@ -1296,8 +1299,8 @@ body,
 }
 
 /*
- * 넓은 화면: 왼쪽 패널은 위아래로 붙이고 지도는 그 오른쪽에 둔다.
- * 지도 왼쪽 아래 카카오 로고·축척이 패널에 가리지 않는다. App.tsx 의 WIDE_LAYOUT 과 같은 값
+ * 넓은 화면: 지도는 화면 전체, 패널은 왼쪽 위에 띄운 카드 하나.
+ * App.tsx 의 WIDE_LAYOUT 과 같은 값
  */
 @media (min-width: 768px) {
     .app {
@@ -1306,10 +1309,6 @@ body,
 
     .app[data-sheet] {
         --map-bottom: 0px;
-    }
-
-    .app:not([data-navigating]) .map-view {
-        left: var(--panel-width);
     }
 
     .navigation-panel {
@@ -1321,13 +1320,10 @@ body,
         margin: 0;
     }
 
-    /* 지도 위 오류는 계정 아이콘 왼쪽에 띄운다. */
+    /* 지도 위 오류는 패널 오른쪽, 계정 아이콘 왼쪽에 띄운다. */
     .map-view__error {
         top: 12px;
-    }
-
-    .app:not([data-navigating]) > .map-view__error {
-        left: calc(var(--panel-width) + 12px);
+        left: calc(var(--panel-width) + 24px);
     }
 
     /* 오른쪽 아래, OpenStreetMap 출처 표기 위 */

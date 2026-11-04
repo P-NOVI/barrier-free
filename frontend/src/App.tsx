@@ -62,13 +62,13 @@ import {
     VOICE_ON_TEXT,
 } from './lib/voiceGuidance';
 
-// 이보다 넓으면 메뉴·검색을 왼쪽 패널(위에 메뉴)에 두고 지도는 그 오른쪽에 둔다.
+// 이보다 넓으면 메뉴·검색을 왼쪽 위에 띄운 패널(위에 메뉴) 하나에 둔다.
 // 좁으면 위에 검색창, 아래에 메뉴와 오르내리는 시트를 둔다. index.css 와 같은 값.
 const WIDE_LAYOUT = '(min-width: 768px)';
 // 경로에 맞출 때 지도 위 검색창·버튼에 가리지 않게 둘 여백(px)
 const FIT_PADDING: Record<'wide' | 'narrow', FitPadding> = {
-    // 지도가 패널 오른쪽에서 시작하므로 왼쪽 여백을 더 두지 않는다.
-    wide: { top: 48, right: 48, bottom: 48, left: 48 },
+    // 왼쪽은 패널(여백 12 + 폭 380)만큼 더 둔다.
+    wide: { top: 48, right: 48, bottom: 48, left: 440 },
     // 위는 검색창 높이. 지도가 메뉴·시트 위에서 끝나므로 아래 여백을 더 두지 않는다.
     narrow: { top: 80, right: 32, bottom: 32, left: 32 },
 };
