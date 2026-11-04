@@ -1,8 +1,9 @@
-"""pipeline 00~04 단계를 필요한 것만 순서대로 실행한다.
+"""pipeline 00~04, 09, 10 단계를 필요한 것만 순서대로 실행한다.
 
 실행: pipeline/ 에서 uv run python steps/run_all.py [--force] [--from 02]
 - 최종 결과(graph.json.gz)를 만드는 데 필요한 단계만 실행한다. 예를 들어
-  walk_tagged.graphml 이 있으면 앞 단계 파일이 없어도 04 단계만 실행한다.
+  walk_sidewalk.graphml 이 있으면 앞 단계 파일이 없어도 04 단계만 실행한다.
+- 순서는 00 → 01 → 02 → 03 → 09 → 10 → 04 다. 09·10 은 나중에 더한 단계라 번호가 뒤다.
 - 어떤 단계를 다시 만들면 그 결과를 쓰는 뒤 단계도 다시 만든다.
 - --force 는 모든 단계, --from NN 은 NN 단계와 그 뒤 단계를 다시 만든다.
 """
@@ -61,11 +62,27 @@ STEPS = [
         needs=("02",),
     ),
     Step(
+        "09",
+        "도보 네트워크 받기",
+        "09_fetch_walknet.py",
+        lambda c: [
+            data_path(c["walknet"]["output_dir"]) / f"{name}.json.gz"
+            for name in c["walknet"]["districts"]
+        ],
+    ),
+    Step(
+        "10",
+        "큰 도로 인도 넣기",
+        "10_add_sidewalks.py",
+        lambda c: [data_path(c["sidewalks"]["output"])],
+        needs=("00", "03", "09"),
+    ),
+    Step(
         "04",
         "graph.json.gz 내보내기",
         "04_export_graph.py",
         lambda c: [repo_path(c["export"]["output"])],
-        needs=("03",),
+        needs=("10",),
     ),
 ]
 

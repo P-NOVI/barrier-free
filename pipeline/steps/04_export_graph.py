@@ -4,10 +4,11 @@
 형식은 backend/core/graph.py 의 build_graph 입력과 같다.
 - nodes: [{lon, lat, elevation}], 노드 번호는 배열 순서
 - edges: [{id, u, v, length, grade, steps, ramp, wheelchair_ok, walk_ok, geometry?,
-  trail?}]
+  trail?, sidewalk_separate?}]
   같은 길의 양방향 구간은 하나만 남기고, grade 는 u → v 방향 값이다.
   geometry 는 u → v 사이 중간 지점 [[lon, lat]]. 곧은 구간이면 없다.
   trail 은 등산로 단계(hiking, mountain). 등산로가 아니면 없다.
+  sidewalk_separate 는 인도가 따로 있는 큰 도로 중심선이면 true(10 단계). 아니면 없다.
 """
 
 import argparse
@@ -28,6 +29,8 @@ COORD_DIGITS = 6  # 약 0.1m
 ELEVATION_DIGITS = 1
 LENGTH_DIGITS = 1
 BOOL_TAGS = ("steps", "ramp", "wheelchair_ok", "walk_ok")
+# 참일 때만 내보내는 태그
+OPTIONAL_BOOL_TAGS = ("sidewalk_separate",)
 
 
 def parse_bool(value: str) -> bool:
@@ -74,6 +77,9 @@ def export_graph(graph: nx.MultiDiGraph) -> dict[str, list[dict[str, Any]]]:
             edge["geometry"] = inner
         if trail := data.get("trail"):
             edge["trail"] = trail
+        for tag in OPTIONAL_BOOL_TAGS:
+            if data.get(tag):
+                edge[tag] = True
         edges.append(edge)
     return {"nodes": nodes, "edges": edges}
 
@@ -100,12 +106,13 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", type=Path, default=CONFIG_PATH)
     config = load_config(parser.parse_args().config)
-    source = data_path(config["barriers"]["output"])
+    source = data_path(config["sidewalks"]["output"])
     output = repo_path(config["export"]["output"])
     require_files(source)
 
     started = time.time()
-    graph = ox.load_graphml(source, edge_dtypes={tag: parse_bool for tag in BOOL_TAGS})
+    tags = (*BOOL_TAGS, *OPTIONAL_BOOL_TAGS)
+    graph = ox.load_graphml(source, edge_dtypes={tag: parse_bool for tag in tags})
     exported = export_graph(graph)
     text = json.dumps(exported, ensure_ascii=False, separators=(",", ":"))
     output.parent.mkdir(parents=True, exist_ok=True)

@@ -576,7 +576,7 @@ export default function MapView({
             </a>
             {popup && createPortal(popup, popupContainer)}
             <span className="map-view__source">
-                엘리베이터 위치: 서울시 공공데이터
+                엘리베이터 위치·인도: 서울시 공공데이터
             </span>
             {error && (
                 <p role="alert" className="map-view__error">

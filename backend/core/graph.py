@@ -42,6 +42,8 @@ class Arc:
     geometry: tuple[tuple[float, float], ...] = ()
     # 등산로면 그 단계. 일반 길이면 None
     trail: Trail | None = None
+    # 인도가 따로 있는 큰 도로 중심선(차도). pipeline 10 단계가 정한다.
+    sidewalk_separate: bool = False
 
 
 @dataclass(frozen=True)
@@ -81,6 +83,7 @@ def build_graph(data: dict[str, Any]) -> Graph:
             walk_ok=edge["walk_ok"],
             geometry=tuple((lon, lat) for lon, lat in edge.get("geometry", ())),
             trail=Trail(edge["trail"]) if "trail" in edge else None,
+            sidewalk_separate=edge.get("sidewalk_separate", False),
         )
         backward = replace(
             forward,

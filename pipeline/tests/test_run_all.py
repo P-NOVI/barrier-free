@@ -28,8 +28,11 @@ def test_skip_everything_when_all_outputs_exist() -> None:
     assert planned(all_outputs()) == []
 
 
+ALL = ["00", "01", "02", "03", "09", "10", "04"]
+
+
 def test_run_everything_on_empty_folder() -> None:
-    assert planned(set()) == ["00", "01", "02", "03", "04"]
+    assert planned(set()) == ALL
 
 
 def test_missing_middle_output_is_ignored_when_final_exists() -> None:
@@ -41,28 +44,34 @@ def test_only_export_missing() -> None:
     assert planned(all_outputs() - output_of("04")) == ["04"]
 
 
-def test_only_tagged_graph_is_enough_for_export() -> None:
-    # walk_tagged.graphml 하나만 받아도 04 단계만 실행
-    assert planned(output_of("03")) == ["04"]
+def test_only_sidewalk_graph_is_enough_for_export() -> None:
+    # walk_sidewalk.graphml 하나만 받아도 04 단계만 실행
+    assert planned(output_of("10")) == ["04"]
+
+
+def test_tagged_graph_needs_walknet_and_dem_for_sidewalks() -> None:
+    assert planned(output_of("00") | output_of("03")) == ["09", "10", "04"]
+    existing = output_of("00") | output_of("03") | output_of("09")
+    assert planned(existing) == ["10", "04"]
 
 
 def test_missing_inputs_walk_back_until_found() -> None:
     existing = output_of("00") | output_of("01")
-    assert planned(existing) == ["02", "03", "04"]
+    assert planned(existing) == ["02", "03", "09", "10", "04"]
 
 
 def test_rebuilt_dem_reruns_elevation_but_not_network() -> None:
-    assert planned(all_outputs(), start_from="00") == ["00", "02", "03", "04"]
+    assert planned(all_outputs(), start_from="00") == ["00", "02", "03", "10", "04"]
 
 
 def test_from_step_also_builds_its_missing_inputs() -> None:
     existing = all_outputs() - output_of("01")
-    assert planned(existing, start_from="02") == ["01", "02", "03", "04"]
+    assert planned(existing, start_from="02") == ["01", "02", "03", "10", "04"]
 
 
 def test_force_and_from() -> None:
-    assert planned(all_outputs(), force=True) == ["00", "01", "02", "03", "04"]
-    assert planned(all_outputs(), start_from="02") == ["02", "03", "04"]
+    assert planned(all_outputs(), force=True) == ALL
+    assert planned(all_outputs(), start_from="02") == ["02", "03", "10", "04"]
 
 
 def test_data_dir_from_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

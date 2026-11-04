@@ -55,6 +55,52 @@ barriers:
   # 길이를 재는 평면 좌표계 (dem.target_crs 와 같은 중부원점 TM)
   metric_crs: EPSG:5186
 
+# 09 단계. 서울시 도보 네트워크 공간정보 OpenAPI (자치구별)
+walknet:
+  url: http://openapi.seoul.go.kr:8088
+  service: TbTraficWlkNet
+  # 한 번에 받는 최대 행 수
+  page_size: 1000
+  # 요청마다 행 순서가 달라 처음부터 다시 받아 합치는 최대 횟수
+  max_passes: 10
+  timeout_s: 60
+  attempts: 3
+  retry_wait_s: 10
+  output_dir: raw/walknet
+  districts: [종로구, 중구, 용산구, 성동구, 광진구, 동대문구, 중랑구, 성북구, 강북구, 도봉구,
+    노원구, 은평구, 서대문구, 마포구, 양천구, 강서구, 구로구, 금천구, 영등포구, 동작구,
+    관악구, 서초구, 강남구, 송파구, 강동구]
+
+# 10 단계. 큰 도로 중심선 옆에 도보 네트워크 인도를 넣는다. 거리는 barriers.metric_crs 로 잰다.
+sidewalks:
+  output: interim/walk_sidewalk.graphml
+  # 인도를 따로 찾는 큰 도로 (OSM highway)
+  big_roads: [trunk, trunk_link, primary, primary_link, secondary, secondary_link,
+    tertiary, tertiary_link]
+  # 넣지 않는 링크: 횡단보도, 육교, 지하철 연결, 건물 안, 터널, 다리(DEM 고도가 수면이다)
+  excluded_flags: [CRSWK, OVRP, SBWY_NTW, BLDG, TNL, BRG]
+  # 중심선을 sample_m 간격 지점으로 나눠 sidewalk_max_m 안에 parallel_deg 안으로 나란한
+  # 링크가 있는 지점 비율이 min_coverage 이상이면 인도가 따로 있는 중심선으로 본다.
+  sample_m: 5
+  sidewalk_max_m: 25
+  parallel_deg: 30
+  min_coverage: 0.7
+  # 교차로 노드·골목 점 → 인도 연결 최대 거리. 교차로 노드 → 인도 선은 도로와
+  # crossing_min_deg 이상 벌어져야 한다(비스듬하면 다른 길의 인도다).
+  connect_max_m: 30
+  crossing_min_deg: 60
+  # 골목이 어느 쪽으로 나가는지 alley_arm_m 지점에서 보고, alley_max_m 안에서
+  # alley_step_m 간격으로 인도 위치를 찾는다.
+  alley_arm_m: 5
+  alley_max_m: 40
+  alley_step_m: 0.5
+  # 다른 링크 중간에 이 거리 안으로 닿는 링크 끝은 잇는다.
+  snap_m: 1.5
+  # 홀로 끝난 인도 끝을 OSM 길에 잇는 최대 거리
+  dangling_max_m: 20
+  # 인도 링크 끝점을 같은 노드로 합치는 격자 크기
+  node_grid_m: 0.5
+
 export:
   # 저장소 기준. backend/app/config.py 의 기본 그래프 경로와 같아야 한다.
   output: data/processed/graph.json.gz
