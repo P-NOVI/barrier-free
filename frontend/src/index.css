@@ -807,7 +807,7 @@ body,
 /* 폭을 고정한다. 안 그러면 지도 가장자리 가까이에서 카드 폭이 줄고 크기 변화가 생긴다. */
 .map-popup {
     position: relative;
-    width: min(260px, calc(100vw - 32px));
+    width: min(300px, calc(100vw - 32px));
     /* 높이 0: 지도가 오버레이 위치를 잡을 때 카드 높이에 기대지 않게 한다. */
     height: 0;
 }
@@ -819,11 +819,11 @@ body,
     left: 0;
     box-sizing: border-box;
     width: 100%;
-    padding: 12px 16px;
+    padding: 16px;
     /* 지도 오버레이가 줄바꿈을 막아 두는 경우가 있어 되돌린다. */
     white-space: normal;
     word-break: keep-all;
-    border-radius: 12px;
+    border-radius: 8px;
     background: var(--bg);
     box-shadow: var(--panel-shadow);
 }
@@ -842,47 +842,144 @@ body,
 
 .place-info__close {
     position: absolute;
-    top: 4px;
+    top: 8px;
     right: 8px;
-    width: 32px;
-    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    padding: 0;
     border: 0;
-    font-size: 22px;
-    line-height: 1;
-    color: var(--muted);
+    color: var(--text);
     background: none;
     cursor: pointer;
 }
 
+.place-info__close svg {
+    width: 20px;
+    height: 20px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+}
+
 .place-info__name {
-    margin: 0 32px 0 0;
-    font-size: 17px;
+    margin: 0 36px 0 0;
+    font-size: 18px;
     overflow-wrap: anywhere;
 }
 
 .place-info__address {
-    margin: 2px 0 0;
+    margin: 4px 0 0;
     font-size: 14px;
     color: var(--muted);
     overflow-wrap: anywhere;
 }
 
-.place-info__actions {
-    display: flex;
-    gap: 8px;
-    margin-top: 12px;
+.place-info__error {
+    margin: 8px 0 0;
+    padding: 6px 8px;
+    border-radius: 8px;
+    font-size: 13px;
+    color: var(--error-text);
+    background: var(--error-bg);
 }
 
-.place-info__save,
-.place-info__labels {
+/* 아래 줄: 왼쪽 북마크, 오른쪽 길찾기 */
+.place-info__toolbar {
     display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
+    gap: 8px;
+    margin-top: 16px;
+}
+
+.place-info__bookmark,
+.place-info__route {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 40px;
+    border-radius: 4px;
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.place-info__bookmark {
+    flex: 1;
+    padding: 0;
+    border: 1px solid var(--border);
+    color: var(--text);
+    background: var(--bg);
+}
+
+.place-info__bookmark svg {
+    width: 22px;
+    height: 22px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.6;
+    stroke-linejoin: round;
+}
+
+/* 저장한 장소면 북마크를 채운다. */
+.place-info__bookmark[data-saved] {
+    border-color: var(--saved-place);
+    color: var(--saved-place);
+}
+
+.place-info__bookmark[data-saved] svg {
+    fill: currentColor;
+}
+
+.place-info__route {
+    flex: none;
+    gap: 4px;
+    padding: 0 14px;
+    border: 0;
+    color: #fff;
+    background: var(--brand);
+}
+
+.place-info__route svg {
+    width: 18px;
+    height: 18px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.place-info__bookmark[aria-expanded='true'],
+.place-info__route[aria-expanded='true'] {
+    box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.2);
+}
+
+/* 북마크·길찾기를 눌러 펼친 칸 */
+.place-info__panel {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
     margin-top: 10px;
 }
 
-.place-info__save-button,
-.place-info__label {
+.place-info__panel-title {
+    margin: 4px 0 0;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--muted);
+}
+
+.place-info__chips,
+.place-info__custom {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.place-info__chip {
     min-height: 36px;
     padding: 0 12px;
     border: 1px solid var(--border);
@@ -894,18 +991,23 @@ body,
     cursor: pointer;
 }
 
-.place-info__save-button[aria-pressed='true'] {
-    border-color: var(--saved-place);
-    color: var(--saved-place);
-    font-weight: 600;
+/* 즐겨찾기 칩은 내용 너비만 차지한다. */
+.place-info__panel > .place-info__chip {
+    align-self: flex-start;
 }
 
-.place-info__label:disabled {
+.place-info__chip[aria-pressed='true'] {
+    border-color: var(--saved-place);
+    font-weight: 600;
+    color: var(--saved-place);
+}
+
+.place-info__chip:disabled {
     color: var(--muted);
     cursor: default;
 }
 
-.place-info__label-input {
+.place-info__custom-input {
     flex: 1;
     min-width: 80px;
     min-height: 36px;
@@ -917,13 +1019,32 @@ body,
     font-size: 14px;
 }
 
-.place-info__error {
-    margin: 8px 0 0;
-    padding: 6px 8px;
-    border-radius: 8px;
-    font-size: 13px;
-    color: var(--error-text);
-    background: var(--error-bg);
+/* 출발·도착: 기본은 흰 바탕. 올리거나(마우스) 누르는 동안(터치) 출발은 초록, 도착은 빨강 */
+.place-info__endpoint {
+    min-height: 40px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font: inherit;
+    font-weight: 600;
+    color: var(--text);
+    background: var(--bg);
+    cursor: pointer;
+}
+
+.place-info__endpoint--start:hover,
+.place-info__endpoint--start:focus-visible,
+.place-info__endpoint--start:active {
+    border-color: var(--pin-start);
+    color: #fff;
+    background: var(--pin-start);
+}
+
+.place-info__endpoint--goal:hover,
+.place-info__endpoint--goal:focus-visible,
+.place-info__endpoint--goal:active {
+    border-color: var(--pin-goal);
+    color: #fff;
+    background: var(--pin-goal);
 }
 
 /* 즐겨찾기·내 장소 별. 별 가운데가 장소를 가리키고, 내 장소 이름표는 그 아래에 뜬다. */
@@ -971,25 +1092,6 @@ body,
     white-space: nowrap;
     color: var(--text);
     background: var(--overlay-bg);
-}
-
-.place-info__action {
-    flex: 1;
-    min-height: 40px;
-    border: 0;
-    border-radius: 8px;
-    font: inherit;
-    font-weight: 600;
-    color: #fff;
-    cursor: pointer;
-}
-
-.place-info__action--start {
-    background: var(--pin-start);
-}
-
-.place-info__action--goal {
-    background: var(--pin-goal);
 }
 
 /* 좁은 화면: 패널 묶음은 자리를 차지하지 않고, 검색창·경로 패널이 지도 위에 뜬다. */
