@@ -10,6 +10,8 @@ const GAP_NOTICE_M = 30;
 type RoutePanelProps = {
     preset: PresetId;
     endpoints: Endpoints;
+    /** 안내 문구 아래 작은 글씨 (예: 역 엘리베이터로 바꾼 출발·도착) */
+    notes?: string[];
     route: RouteState;
     onPresetChange: (preset: PresetId) => void;
     onReset: () => void;
@@ -82,6 +84,7 @@ function RouteSummary({ route }: { route: RouteResponse }) {
 export default function RoutePanel({
     preset,
     endpoints,
+    notes = [],
     route,
     onPresetChange,
     onReset,
@@ -122,6 +125,11 @@ export default function RoutePanel({
 
             <div aria-live="polite">
                 {message && <p className="route-panel__guide">{message}</p>}
+                {notes.map((note) => (
+                    <p key={note} className="route-panel__note">
+                        {note}
+                    </p>
+                ))}
                 {route.status === 'loading' && (
                     <p className="route-panel__guide">경로를 찾는 중…</p>
                 )}

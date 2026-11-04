@@ -14,6 +14,8 @@ import {
 
 type PlaceInfoCardProps = {
     place: PickedPlace;
+    /** 주소 아래 작은 글씨 (예: 역 엘리베이터 출구) */
+    note?: string | null;
     /** 이 위치에 저장한 즐겨찾기·내 장소 */
     saved?: SavedPlace[];
     /** 없으면(백엔드·DB가 꺼짐) 저장 버튼을 숨긴다. */
@@ -30,6 +32,7 @@ type Panel = 'save' | 'route' | null;
 
 export default function PlaceInfoCard({
     place,
+    note,
     saved = [],
     onSave,
     onUnsave,
@@ -91,6 +94,7 @@ export default function PlaceInfoCard({
             <p className="place-info__address">
                 {place.address ?? '주소를 찾지 못했어요.'}
             </p>
+            {note && <p className="place-info__note">{note}</p>}
             {saveError && (
                 <p role="alert" className="place-info__error">
                     {saveError}

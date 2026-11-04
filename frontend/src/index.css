@@ -80,28 +80,6 @@ body,
     cursor: pointer;
 }
 
-/* 좁은 화면: 검색창 아래 왼쪽 */
-.map-toggle {
-    position: absolute;
-    top: 130px;
-    left: 12px;
-    z-index: 15;
-    padding: 8px 14px;
-    font-size: 14px;
-    color: var(--text);
-    background: var(--overlay-bg);
-    border: 1px solid var(--text);
-    border-radius: 6px;
-    cursor: pointer;
-}
-
-/* 켜짐 색은 카카오맵 기본 마커의 파란색과 같다 */
-.map-toggle[aria-pressed='true'] {
-    color: #fff;
-    background: #238cfa;
-    border-color: #238cfa;
-}
-
 .map-view__error {
     position: absolute;
     top: 12px;
@@ -884,6 +862,12 @@ body,
     overflow-wrap: anywhere;
 }
 
+.place-info__note {
+    margin: 2px 0 0;
+    font-size: 12px;
+    color: var(--muted);
+}
+
 .place-info__error {
     margin: 8px 0 0;
     padding: 6px 8px;
@@ -1188,10 +1172,5 @@ body,
     .account-menu__panel {
         max-height: calc(100vh - 140px);
         text-align: left;
-    }
-
-    .map-toggle {
-        top: 12px;
-        left: calc(var(--side-panel-width) + 24px);
     }
 }
