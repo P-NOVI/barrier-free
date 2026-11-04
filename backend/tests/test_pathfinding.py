@@ -4,7 +4,13 @@ from itertools import pairwise
 
 import pytest
 
-from core.cost import SLOPE_FACTORS, STEEP_FACTORS, TRAIL_FACTORS, is_passable
+from core.cost import (
+    SIDEWALK_SEPARATE_FACTOR,
+    SLOPE_FACTORS,
+    STEEP_FACTORS,
+    TRAIL_FACTORS,
+    is_passable,
+)
 from core.graph import Graph, build_graph
 from core.pathfinding import find_path, find_path_between, summarize
 from core.profiles import CONGESTION_WEIGHTS, PRESETS, CongestionTolerance
@@ -182,11 +188,34 @@ def test_general_takes_mountain_trail_when_it_is_the_only_way() -> None:
     assert path.nodes == [0, 1, 3]
 
 
+# 0 → 2 직선 중심선(100m)과, 그 옆 인도(0-1-2, 120m)
+CENTERLINE_OR_SIDEWALK = [
+    {**edge(0, 0, 2, 100), "sidewalk_separate": True},
+    edge(1, 0, 1, 60),
+    edge(2, 1, 2, 60),
+]
+
+
+def test_route_takes_sidewalk_beside_centerline() -> None:
+    graph = make_graph(3, CENTERLINE_OR_SIDEWALK)
+    path = find_path(graph, 0, 2, PRESETS["general"])
+    assert path is not None
+    assert path.nodes == [0, 1, 2]
+
+
+def test_route_keeps_centerline_when_sidewalk_is_cut() -> None:
+    graph = make_graph(3, CENTERLINE_OR_SIDEWALK[:2])
+    path = find_path(graph, 0, 2, PRESETS["general"])
+    assert path is not None
+    assert path.nodes == [0, 2]
+
+
 def test_cost_factors_keep_heuristic_admissible() -> None:
     # A* 가 최적 경로를 보장하려면 모든 배율이 1 이상이어야 한다.
     assert min(SLOPE_FACTORS.values()) >= 1
     assert min(factor for _, factor in STEEP_FACTORS) >= 1
     assert min(TRAIL_FACTORS.values()) >= 1
+    assert SIDEWALK_SEPARATE_FACTOR >= 1
     assert min(profile.stair_factor for profile in PRESETS.values()) >= 1
     assert min(CONGESTION_WEIGHTS.values()) >= 0
 

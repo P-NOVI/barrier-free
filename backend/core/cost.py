@@ -16,6 +16,9 @@ SLOPE_FACTORS: dict[GradeLevel, float] = {
 STEEP_FACTORS: tuple[tuple[float, float], ...] = ((0.25, 10.0), (0.15, 5.0))
 # 등산로 배율. 경사·계단 배율에 곱한다. 초안 값이다.
 TRAIL_FACTORS: dict[Trail, float] = {Trail.HIKING: 2.0, Trail.MOUNTAIN: 10.0}
+# 인도가 따로 있는 중심선(차도) 배율. 옆 인도로 가게 한다. 지우지 않는 것은 인도가
+# 한쪽만 있거나 끊긴 곳에서 길이 막히지 않게 하려는 것이다. 초안 값이다.
+SIDEWALK_SEPARATE_FACTOR = 3.0
 
 
 def is_passable(arc: Arc, profile: Profile) -> bool:
@@ -42,7 +45,7 @@ def slope_factor(grade: float) -> float:
 
 
 def arc_cost(arc: Arc, profile: Profile, congestion: float = 0.0) -> float:
-    """구간 비용 = 길이 × 경사·계단 배율 × 등산로 배율 × 혼잡 배율.
+    """구간 비용 = 길이 × 경사·계단 배율 × 등산로 배율 × 차도 배율 × 혼잡 배율.
 
     계단은 계단 배율과 그 경사의 배율 중 큰 값을 쓴다. 계단 배율이 1 인 일반 보행이
     산 계단으로 능선을 넘지 않게 한다. 지나갈 수 없으면 inf.
@@ -53,7 +56,8 @@ def arc_cost(arc: Arc, profile: Profile, congestion: float = 0.0) -> float:
     if arc.steps:
         factor = max(factor, profile.stair_factor)
     trail_factor = TRAIL_FACTORS[arc.trail] if arc.trail else 1.0
+    road_factor = SIDEWALK_SEPARATE_FACTOR if arc.sidewalk_separate else 1.0
     congestion_factor = (
         1 + CONGESTION_WEIGHTS[profile.congestion_tolerance] * congestion
     )
-    return arc.length * factor * trail_factor * congestion_factor
+    return arc.length * factor * trail_factor * road_factor * congestion_factor

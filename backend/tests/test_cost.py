@@ -3,7 +3,13 @@ from dataclasses import replace
 
 import pytest
 
-from core.cost import SLOPE_FACTORS, STEEP_FACTORS, TRAIL_FACTORS, arc_cost
+from core.cost import (
+    SIDEWALK_SEPARATE_FACTOR,
+    SLOPE_FACTORS,
+    STEEP_FACTORS,
+    TRAIL_FACTORS,
+    arc_cost,
+)
 from core.graph import Arc, Trail
 from core.profiles import CONGESTION_WEIGHTS, PRESETS, CongestionTolerance
 from core.slope import GradeLevel
@@ -64,6 +70,16 @@ def test_trail_factor_multiplies_slope_and_stairs(trail: Trail) -> None:
     )
     assert arc_cost(stairs, profile) == pytest.approx(
         LENGTH * profile.stair_factor * TRAIL_FACTORS[trail]
+    )
+
+
+@pytest.mark.parametrize("preset", list(PRESETS))
+def test_centerline_with_separate_sidewalk_costs_more(preset: str) -> None:
+    profile = PRESETS[preset]
+    centerline = replace(FLAT, grade=0.05, sidewalk_separate=True)
+    assert arc_cost(centerline, profile) == pytest.approx(
+        arc_cost(replace(centerline, sidewalk_separate=False), profile)
+        * SIDEWALK_SEPARATE_FACTOR
     )
 
 
