@@ -1,6 +1,6 @@
 from datetime import UTC, datetime
 
-from sqlalchemy import DateTime, ForeignKey, String, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, ForeignKey, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db import Base
@@ -126,3 +126,28 @@ class SavedPlace(Base):
     lon: Mapped[float]
     lat: Mapped[float]
     created_at: Mapped[datetime] = created_at_column()
+
+
+class Report(Base):
+    """길 위 문제 제보. 승인 전(pending)에는 다른 사용자에게 보이지 않는다."""
+
+    __tablename__ = "reports"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    # 승인된 제보는 제보자가 게스트로 삭제돼도 남는다.
+    user_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), index=True
+    )
+    # app.services.report_service.REPORT_KINDS 의 값
+    kind: Mapped[str] = mapped_column(String(20))
+    # 지나갈 수 없는 공사인지. 공사 제보에서만 true 가 될 수 있다.
+    blocked: Mapped[bool] = mapped_column(Boolean, default=False)
+    status: Mapped[str] = mapped_column(String(20), default="pending", index=True)
+    # 사진 저장 폴더 안의 파일 이름. 관리자에게만 보여 준다.
+    photo_name: Mapped[str] = mapped_column(String(100))
+    lon: Mapped[float]
+    lat: Mapped[float]
+    # 제보 좌표를 붙인 가장 가까운 길(core.graph.Arc.edge_id)
+    edge_id: Mapped[int] = mapped_column(index=True)
+    created_at: Mapped[datetime] = created_at_column()
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)

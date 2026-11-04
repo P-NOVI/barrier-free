@@ -36,3 +36,6 @@ Thumbs.db
 
 # Claude Code (개인 설정)
 .claude/settings.local.json
+
+# 길 위 문제 제보 사진(얼굴·번호판 가능)
+data/report_photos/

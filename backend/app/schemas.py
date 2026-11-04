@@ -207,3 +207,14 @@ class SavedPlaceResponse(SavedPlaceRequest):
 
 class SavedPlaceListResponse(BaseModel):
     places: list[SavedPlaceResponse] = Field(description="최근 것부터")
+
+
+class ReportResponse(BaseModel):
+    id: int
+    kind: str
+    blocked: bool
+    status: str
+    lon: float
+    lat: float
+    created_at: datetime
+    expires_at: datetime
