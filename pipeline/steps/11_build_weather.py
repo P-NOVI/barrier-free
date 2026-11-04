@@ -1,6 +1,6 @@
 """기상청 AWS 시간자료를 자치구·시간 단위 hourly.parquet 한 파일로 정리한다.
 
-실행: pipeline/ 에서 uv run python steps/09_build_weather.py
+실행: pipeline/ 에서 uv run python steps/11_build_weather.py
 - 입력: raw/weather/aws/OBS_AWS_TIM_*.csv (지점, 일시, 기온, 강수량)
         raw/weather/aws_stations.csv (지점 위치. 종료일이 빈 행이 현재 위치)
         interim/sdot/history.parquet (혼잡도 쪽 자치구 이름·센서 코드)

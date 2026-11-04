@@ -246,12 +246,12 @@ def read_weather(
     client: httpx.Client,
     lat: float,
     lon: float,
-    at: datetime,
+    at: datetime | None,
     settings: Settings,
     cache: ItemCache,
     now: datetime | None = None,
 ) -> Weather:
-    """위경도(lat, lon)의 at 시각 날씨. at 은 가까운 정시로 맞춘다.
+    """위경도(lat, lon)의 at 시각 날씨. at 은 가까운 정시로 맞추고, 없으면 지금이다.
 
     WeatherRangeError: 격자 밖 좌표, 이미 지난 시각, 예보가 닿지 않는 먼 시각
     WeatherError: 기상청 호출·응답 실패
@@ -261,7 +261,7 @@ def read_weather(
         grid = to_grid(lat, lon)
     except ValueError as error:
         raise WeatherRangeError("예보를 제공하지 않는 위치입니다.") from error
-    target = round_to_hour(at.astimezone(KST))
+    target = round_to_hour((at or now).astimezone(KST))
     page_size = settings.kma_page_size
 
     observed = observation_base(now)

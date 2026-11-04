@@ -38,11 +38,10 @@ def get_weather(
         ),
     ] = None,
 ) -> WeatherResponse:
-    when = at or datetime.now(KST)
-    if when.tzinfo is None:
-        when = when.replace(tzinfo=KST)
+    if at is not None and at.tzinfo is None:
+        at = at.replace(tzinfo=KST)
     try:
-        weather = read_weather(client, lat, lon, when, settings, cache)
+        weather = read_weather(client, lat, lon, at, settings, cache)
     except WeatherRangeError as error:
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_CONTENT,

@@ -105,7 +105,7 @@ sites:
   # 저장소 기준. backend/app/config.py 의 기본 시설 영역 경로와 같아야 한다.
   output: data/processed/sites.json.gz
 
-# 09 단계. 05 단계처럼 run_all.py 에 넣지 않고 따로 실행한다.
+# 11 단계. 05 단계처럼 run_all.py 에 넣지 않고 따로 실행한다.
 weather:
   # 기상청 AWS 시간자료 CSV (OBS_AWS_TIM_*.csv)와 지점 목록
   source_dir: raw/weather/aws
