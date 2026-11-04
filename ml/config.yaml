@@ -3,15 +3,14 @@
 # - models/… : 저장소 루트
 
 data:
-  # pipeline 13 단계 결과
+  # pipeline 13 단계 결과. 타깃 foot_traffic 은 센서를 지나간 사람 수(명/시간)다.
   training_set: interim/training/hourly.parquet
-  sensor_scale: interim/training/sensor_scale.json
   # pipeline 12 단계 날짜별 달력. 쉬는 날 전날·다음날 피처를 만든다.
   calendar: interim/calendar/daily.parquet
   model_dir: models
-  model_file: congestion_model.txt
-  meta_file: congestion_meta.json
-  eval_file: congestion_eval.json
+  model_file: foot_traffic_model.txt
+  meta_file: foot_traffic_meta.json
+  eval_file: foot_traffic_eval.json
 
 # 슬롯 시작 시각(slot_start) 기준. 학습은 valid_start 전, 검증(조기 종료용)은 valid_start ~
 # test_start 전, 테스트는 test_start ~ test_end(그날 포함)다.
@@ -42,7 +41,8 @@ features:
 
 model:
   # 목적함수를 비교해 검증 구간 MAE 가 가장 낮은 것을 최종 모델로 쓴다.
-  objectives: [cross_entropy, regression_l1, regression_l2]
+  # poisson 은 사람 수 같은 개수 데이터용이다.
+  objectives: [regression_l1, regression_l2, poisson]
   num_boost_round: 3000
   early_stopping_rounds: 100
   seed: 42
@@ -56,6 +56,6 @@ model:
     lambda_l2: 1.0
     verbosity: -1
 
-# 평가 보고서에 남기는 센서별 오차의 상위(나쁜 쪽) 개수
+# 평가 보고서에 남기는 센서별 오차(사람 수 기준, 오차율 기준 각각)의 상위(나쁜 쪽) 개수
 report:
   worst_sensors: 10

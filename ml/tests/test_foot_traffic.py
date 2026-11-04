@@ -1,6 +1,6 @@
 import numpy as np
 
-from congestion import baseline, data, metrics, train
+from foot_traffic import baseline, data, metrics, predict, train
 
 CONFIG = {
     "temp_bin_c": 5,
@@ -57,7 +57,7 @@ def test_build_features_maps_categories_and_selects_groups() -> None:
         "temp": np.array([7.0, -2.0, np.nan], dtype=np.float32),
         "rain_mm": np.array([0.0, 3.0, 0.0], dtype=np.float32),
         "is_holiday": np.array([0, 1, 0], dtype=np.float32),
-        "congestion": np.zeros(3, dtype=np.float32),
+        "foot_traffic": np.zeros(3, dtype=np.float32),
     }
     vocab = {"sensor_code": [10, 20, 30]}
     matrix, names = data.build_features(columns, vocab, CONFIG, ["base", "weather"])
@@ -126,14 +126,28 @@ def test_metrics() -> None:
     assert metrics.improvement(0.2, 0.15) == 0.25
 
 
+def test_error_rate_is_independent_of_sensor_scale() -> None:
+    small = metrics.error_rate(np.array([10.0, 20.0]), np.array([12.0, 18.0]))
+    large = metrics.error_rate(np.array([1000.0, 2000.0]), np.array([1200.0, 1800.0]))
+    assert small == large == 4 / 30
+    assert np.isnan(metrics.error_rate(np.zeros(2), np.ones(2)))
+
+
 def test_grouped_mae() -> None:
     keys = np.array(["a", "a", "b"])
-    y = np.array([0.0, 1.0, 1.0])
-    pred = np.array([0.5, 0.5, 1.0])
+    y = np.array([0.0, 100.0, 100.0])
+    pred = np.array([50.0, 50.0, 100.0])
     base = np.array([0.0, 0.0, 0.0])
     got = metrics.grouped_mae(keys, y, pred, base)
-    assert got["a"] == {"rows": 2, "model_mae": 0.5, "baseline_mae": 0.5}
-    assert got["b"] == {"rows": 1, "model_mae": 0.0, "baseline_mae": 1.0}
+    assert got["a"] == {
+        "rows": 2,
+        "mean_actual": 50.0,
+        "model_mae": 50.0,
+        "baseline_mae": 50.0,
+        "model_error_rate": 1.0,
+        "baseline_error_rate": 1.0,
+    }
+    assert got["b"]["model_mae"] == 0.0 and got["b"]["baseline_error_rate"] == 1.0
 
 
 def test_day_type_and_rain_kind() -> None:
@@ -144,6 +158,51 @@ def test_day_type_and_rain_kind() -> None:
     }
     assert train.day_type(part).tolist() == ["holiday", "weekend", "weekday"]
     assert train.rain_kind(part).tolist() == ["no_rain", "rain", "unknown"]
+
+
+def day_part() -> dict:
+    hours = np.array([8, 9], dtype=np.int8)
+    return {
+        "sensor_code": np.array([7, 7], dtype=np.int32),
+        "hour_of_day": hours,
+        "day_of_week": np.array([4, 4], dtype=np.int8),
+        "foot_traffic": np.array([500.0, 620.0], dtype=np.float32),
+        "temp": np.array([20.0, 21.0], dtype=np.float32),
+        "rain_mm": np.array([0.0, 2.5], dtype=np.float32),
+        "is_holiday": np.zeros(2, dtype=np.float32),
+        "is_off_day": np.zeros(2, dtype=np.float32),
+        "is_before_off_day": np.ones(2, dtype=np.float32),
+        "is_after_off_day": np.zeros(2, dtype=np.float32),
+    }
+
+
+def test_select_day_matches_sensor_and_date() -> None:
+    columns = {
+        "sensor_code": np.array([7, 7, 8], dtype=np.int32),
+        "slot_start": np.array(
+            ["2026-10-10T08:00", "2026-10-11T08:00", "2026-10-10T08:00"],
+            dtype="datetime64[s]",
+        ),
+    }
+    assert predict.select_day(columns, 7, "2026-10-10").tolist() == [True, False, False]
+
+
+def test_day_tags_and_table() -> None:
+    part = day_part()
+    assert predict.day_tags(part) == "쉬는 날 전날"
+    model = np.array([430.0, 700.0])
+    base = np.array([300.0, 310.0])
+    table = predict.format_table(part, model, base, None)
+    assert "8시" in table and "500" in table and "430" in table and "2.5" in table
+    assert "가정" in predict.format_table(part, model, base, model)
+
+
+def test_plot_day_writes_png(tmp_path) -> None:
+    out = tmp_path / "day.png"
+    part = day_part()
+    model = np.array([430.0, 700.0])
+    predict.plot_day(out, "제목", part, model, model, model, "가정")
+    assert out.stat().st_size > 0
 
 
 def test_train_model_learns_simple_pattern() -> None:
@@ -166,4 +225,4 @@ def test_train_model_learns_simple_pattern() -> None:
     )
     pred = train.predict(booster, x)
     assert metrics.mae(y, pred) < 0.05
-    assert pred.min() >= 0.0 and pred.max() <= 1.0
+    assert pred.min() >= 0.0

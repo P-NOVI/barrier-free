@@ -11,7 +11,7 @@ import pyarrow.parquet as pq
 
 Columns = dict[str, np.ndarray]
 
-FLOAT_COLUMNS = ["lon", "lat", "temp", "rain_mm", "visitor_mean", "congestion"]
+FLOAT_COLUMNS = ["lon", "lat", "temp", "rain_mm", "foot_traffic"]
 CALENDAR_COLUMNS = [
     "is_holiday",
     "is_off_day",
@@ -117,7 +117,7 @@ def build_features(
         "temp_bin": lambda: temp_bin(columns["temp"], config["temp_bin_c"]),
         "rain_grade": lambda: rain_grade(columns["rain_mm"], config["rain_bins_mm"]),
     }
-    matrix = np.empty((len(columns["congestion"]), len(names)), dtype=np.float32)
+    matrix = np.empty((len(columns["foot_traffic"]), len(names)), dtype=np.float32)
     for i, name in enumerate(names):
         if name in derived:
             matrix[:, i] = derived[name]()

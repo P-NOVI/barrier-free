@@ -29,7 +29,8 @@
 | `pipeline/` | 테스트 | `uv run pytest` |
 | `pipeline/` | 린트 · 포맷 | `uv run ruff check .` · `uv run ruff format .` |
 | `ml/` | 설치 | `uv sync` |
-| `ml/` | 학습 · 평가 · 저장 | `uv run python -m congestion.train` |
+| `ml/` | 학습 · 평가 · 저장 | `uv run python -m foot_traffic.train` |
+| `ml/` | 하루 예측 확인 (표 · 그래프 PNG) | `uv run python -m foot_traffic.predict --sensor 3020 --date 2026-10-10` |
 | `ml/` | 테스트 | `uv run pytest` |
 | `ml/` | 린트 · 포맷 | `uv run ruff check .` · `uv run ruff format .` |
 

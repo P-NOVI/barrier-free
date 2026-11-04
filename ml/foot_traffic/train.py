@@ -1,12 +1,15 @@
-"""혼잡도 예측 모델을 학습·평가하고 저장한다.
+"""유동인구 예측 모델을 학습·평가하고 저장한다.
 
-실행: ml/ 에서 uv run python -m congestion.train
-- 입력: pipeline 13 단계 학습셋(interim/training/hourly.parquet)과 sensor_scale.json
-- 출력(저장소 models/): congestion_model.txt(LightGBM), congestion_meta.json(피처 목록,
-  범주 목록, 센서별 정규화 기준값, 학습 기간, 지표), congestion_eval.json(평가 보고서)
+실행: ml/ 에서 uv run python -m foot_traffic.train
+- 입력: pipeline 13 단계 학습셋(interim/training/hourly.parquet)
+- 타깃: foot_traffic, 한 시간에 센서를 지나간 사람 수(명/시간). 정규화하지 않는다.
+- 출력(저장소 models/): foot_traffic_model.txt(LightGBM), foot_traffic_meta.json(피처
+  목록, 범주 목록, 학습 기간, 지표), foot_traffic_eval.json(평가 보고서)
+- 오차는 사람 수(MAE, RMSE)와 오차율(오차 합 / 실제 합)로 잰다. 센서마다 규모가 크게
+  달라 사람 수 오차는 붐비는 센서가 좌우하므로 오차율도 같이 본다.
 순서
 1. baseline: 센서·요일·시각별 중앙값(평균도 같이 잰다).
-2. 목적함수(cross_entropy, L1, L2)마다 같은 피처로 학습해 검증 구간 MAE 가 가장
+2. 목적함수(L1, L2, poisson)마다 같은 피처로 학습해 검증 구간 MAE 가 가장
    낮은 것을 고른다. 테스트 구간은 고르는 데 쓰지 않고 보고만 한다.
 3. 고른 목적함수로 날씨 제외, 공휴일 제외, 쉬는 날 전후 제외 모델을 학습해 기여를
    비교한다.
@@ -24,9 +27,9 @@ from typing import Any
 import lightgbm as lgb
 import numpy as np
 
-from congestion import baseline, metrics
-from congestion.common import CONFIG_PATH, data_path, load_config, repo_path
-from congestion.data import (
+from foot_traffic import baseline, metrics
+from foot_traffic.common import CONFIG_PATH, data_path, load_config, repo_path
+from foot_traffic.data import (
     Columns,
     add_off_adjacent,
     build_features,
@@ -89,9 +92,9 @@ def train_model(
 
 
 def predict(booster: lgb.Booster, matrix: np.ndarray) -> np.ndarray:
-    """0~1 로 자른 예측. cross_entropy 는 이미 확률이지만 L1·L2 는 넘칠 수 있다."""
+    """0 이상으로 자른 예측(명/시간). L1·L2 는 음수가 나올 수 있다."""
     return np.clip(
-        booster.predict(matrix, num_iteration=booster.best_iteration), 0.0, 1.0
+        booster.predict(matrix, num_iteration=booster.best_iteration), 0.0, None
     )
 
 
@@ -107,8 +110,8 @@ def fit_and_score(
         matrices[split], names = build_features(part, vocab, config["features"], groups)
     booster = train_model(
         objective,
-        (matrices["train"], parts["train"]["congestion"]),
-        (matrices["valid"], parts["valid"]["congestion"]),
+        (matrices["train"], parts["train"]["foot_traffic"]),
+        (matrices["valid"], parts["valid"]["foot_traffic"]),
         names,
         config["features"]["categorical"],
         config["model"],
@@ -118,8 +121,8 @@ def fit_and_score(
     return Trained(
         booster=booster,
         names=names,
-        valid=metrics.scores(parts["valid"]["congestion"], valid_pred),
-        test=metrics.scores(parts["test"]["congestion"], test_pred),
+        valid=metrics.scores(parts["valid"]["foot_traffic"], valid_pred),
+        test=metrics.scores(parts["test"]["foot_traffic"], test_pred),
         test_pred=test_pred,
     )
 
@@ -141,7 +144,7 @@ def run_baselines(parts: dict[str, Columns]) -> dict[str, Any]:
     predictions: dict[str, np.ndarray] = {}
     pooled = {
         name: np.concatenate([parts["train"][name], parts["valid"][name]])
-        for name in ("sensor_code", "day_of_week", "hour_of_day", "congestion")
+        for name in ("sensor_code", "day_of_week", "hour_of_day", "foot_traffic")
     }
     for statistic in baseline.STATISTICS:
         result[statistic] = {}
@@ -150,7 +153,7 @@ def run_baselines(parts: dict[str, Columns]) -> dict[str, Any]:
                 source["sensor_code"], source["day_of_week"], source["hour_of_day"]
             )
             by_slot, by_sensor = baseline.fit_baseline(
-                keys, source["sensor_code"], source["congestion"], statistic
+                keys, source["sensor_code"], source["foot_traffic"], statistic
             )
             target = parts[split]
             pred = baseline.predict_baseline(
@@ -161,7 +164,7 @@ def run_baselines(parts: dict[str, Columns]) -> dict[str, Any]:
                 by_slot,
                 by_sensor,
             )
-            result[statistic][split] = metrics.scores(target["congestion"], pred)
+            result[statistic][split] = metrics.scores(target["foot_traffic"], pred)
             predictions[f"{statistic}_{split}"] = pred
     result["predictions"] = predictions
     return result
@@ -187,20 +190,23 @@ def breakdown(
     base_pred: np.ndarray,
     worst_sensors: int,
 ) -> dict[str, Any]:
-    y = test["congestion"]
+    y = test["foot_traffic"]
     by_sensor = metrics.grouped_mae(test["sensor_code"], y, pred, base_pred)
-    ranked = sorted(
-        (item for item in by_sensor.items() if item[1]["rows"] >= LOW_ROWS),
-        key=lambda item: item[1]["model_mae"],
-        reverse=True,
+    eligible = [item for item in by_sensor.items() if item[1]["rows"] >= LOW_ROWS]
+    by_people = sorted(eligible, key=lambda item: item[1]["model_mae"], reverse=True)
+    by_rate = sorted(
+        eligible, key=lambda item: item[1]["model_error_rate"], reverse=True
     )
     model_maes = np.array([item["model_mae"] for item in by_sensor.values()])
+    model_rates = np.array([item["model_error_rate"] for item in by_sensor.values()])
     return {
         "by_hour": metrics.grouped_mae(test["hour_of_day"], y, pred, base_pred),
         "by_day_type": metrics.grouped_mae(day_type(test), y, pred, base_pred),
         "by_rain": metrics.grouped_mae(rain_kind(test), y, pred, base_pred),
-        "sensor_mae_median": round(float(np.median(model_maes)), 5),
-        "worst_sensors": dict(ranked[:worst_sensors]),
+        "sensor_mae_median": round(float(np.median(model_maes)), 2),
+        "sensor_error_rate_median": round(float(np.median(model_rates)), 4),
+        "worst_sensors_by_people": dict(by_people[:worst_sensors]),
+        "worst_sensors_by_error_rate": dict(by_rate[:worst_sensors]),
     }
 
 
@@ -232,7 +238,7 @@ def main() -> None:
     print(
         "행 "
         + ", ".join(
-            f"{name} {part['congestion'].size:,}" for name, part in parts.items()
+            f"{name} {part['foot_traffic'].size:,}" for name, part in parts.items()
         ),
         flush=True,
     )
@@ -277,7 +283,6 @@ def main() -> None:
     final.booster.save_model(
         str(model_dir / data["model_file"]), num_iteration=final.booster.best_iteration
     )
-    scale = json.loads(data_path(data["sensor_scale"]).read_text(encoding="utf-8"))
     train_slots = parts["train"]["slot_start"]
     meta = {
         "created": date.today().isoformat(),
@@ -297,15 +302,14 @@ def main() -> None:
         "valid": final.valid,
         "test": final.test,
         "baseline_test": base_test,
-        "target_quantile": scale["quantile"],
-        "scale_train_start": scale["train_start"],
-        "scale_train_end": scale["train_end"],
-        "sensor_scale": scale["scales"],
+        "target": "foot_traffic",
+        "unit": "명/시간",
     }
     write_json(model_dir / data["meta_file"], meta)
     write_json(model_dir / data["eval_file"], evaluation)
     print(
-        f"선택 {best}, 테스트 MAE {final.test['mae']} (baseline {base_test['mae']}) "
+        f"선택 {best}, 테스트 MAE {final.test['mae']}명 "
+        f"(baseline {base_test['mae']}명) "
         f"→ {model_dir} ({time.time() - started:.0f}s)",
         flush=True,
     )
