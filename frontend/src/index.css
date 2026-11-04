@@ -13,6 +13,7 @@
     --my-location: #1a73e8;
     --route-arrow: rgba(255, 255, 255, 0.6);
     --congestion-pin: #e8710a;
+    --saved-place: #0070dd;
     --side-panel-width: 380px;
     /* 카카오 로그인 버튼 색(카카오 디자인 가이드) */
     --kakao-yellow: #fee500;
@@ -276,15 +277,24 @@ body,
 .account-menu__toggle {
     display: inline-flex;
     align-items: center;
+    justify-content: center;
+    width: 44px;
     height: 44px;
-    padding: 0 16px;
-    border-radius: 22px;
-    font-weight: 600;
+    border-radius: 50%;
     color: var(--text);
     background: var(--bg);
     box-shadow: var(--panel-shadow);
     list-style: none;
     cursor: pointer;
+}
+
+.account-menu__icon {
+    width: 26px;
+    height: 26px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.8;
+    stroke-linecap: round;
 }
 
 .account-menu__toggle::-webkit-details-marker {
@@ -295,11 +305,91 @@ body,
     display: flex;
     flex-direction: column;
     gap: 8px;
+    box-sizing: border-box;
+    width: 260px;
+    /* 저장한 장소가 많으면 패널 안에서 스크롤한다. */
+    max-height: calc(100vh - 260px);
     margin-top: 8px;
     padding: 12px;
+    overflow-y: auto;
     border-radius: 12px;
     background: var(--bg);
     box-shadow: var(--panel-shadow);
+}
+
+.account-menu__title {
+    margin: 0;
+    font-size: 17px;
+}
+
+.account-menu__account {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.account-menu__places {
+    padding-top: 8px;
+    border-top: 1px solid var(--border);
+}
+
+.account-menu__places-title {
+    margin: 0 0 4px;
+    font-size: 14px;
+}
+
+.account-menu__place-list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.account-menu__place {
+    display: flex;
+    align-items: center;
+}
+
+.account-menu__place-pick {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 44px;
+    padding: 4px 0;
+    border: 0;
+    font: inherit;
+    text-align: left;
+    color: var(--text);
+    background: none;
+    cursor: pointer;
+}
+
+.account-menu__place-name {
+    font-weight: 600;
+}
+
+.account-menu__place-name,
+.account-menu__place-detail {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.account-menu__place-detail {
+    font-size: 13px;
+    color: var(--muted);
+}
+
+.account-menu__place-delete {
+    flex: none;
+    width: 36px;
+    height: 36px;
+    border: 0;
+    font-size: 20px;
+    line-height: 1;
+    color: var(--muted);
+    background: none;
+    cursor: pointer;
 }
 
 .account-menu__status,
@@ -783,6 +873,106 @@ body,
     margin-top: 12px;
 }
 
+.place-info__save,
+.place-info__labels {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 10px;
+}
+
+.place-info__save-button,
+.place-info__label {
+    min-height: 36px;
+    padding: 0 12px;
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    font: inherit;
+    font-size: 14px;
+    color: var(--text);
+    background: var(--bg);
+    cursor: pointer;
+}
+
+.place-info__save-button[aria-pressed='true'] {
+    border-color: var(--saved-place);
+    color: var(--saved-place);
+    font-weight: 600;
+}
+
+.place-info__label:disabled {
+    color: var(--muted);
+    cursor: default;
+}
+
+.place-info__label-input {
+    flex: 1;
+    min-width: 80px;
+    min-height: 36px;
+    box-sizing: border-box;
+    padding: 0 10px;
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    font: inherit;
+    font-size: 14px;
+}
+
+.place-info__error {
+    margin: 8px 0 0;
+    padding: 6px 8px;
+    border-radius: 8px;
+    font-size: 13px;
+    color: var(--error-text);
+    background: var(--error-bg);
+}
+
+/* 즐겨찾기·내 장소 별. 별 가운데가 장소를 가리키고, 내 장소 이름표는 그 아래에 뜬다. */
+.saved-place-pin {
+    position: relative;
+    display: block;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: none;
+    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.35));
+    cursor: pointer;
+}
+
+.saved-place-pin svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+
+.saved-place-pin circle {
+    fill: var(--saved-place);
+}
+
+.saved-place-pin path {
+    fill: #fff;
+    stroke: #fff;
+    stroke-width: 1.2;
+    stroke-linejoin: round;
+}
+
+.saved-place-pin__label {
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    margin-top: 2px;
+    padding: 0 6px;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 18px;
+    white-space: nowrap;
+    color: var(--text);
+    background: var(--overlay-bg);
+}
+
 .place-info__action {
     flex: 1;
     min-height: 40px;
@@ -888,6 +1078,7 @@ body,
     }
 
     .account-menu__panel {
+        max-height: calc(100vh - 140px);
         text-align: left;
     }
 

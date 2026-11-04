@@ -1,9 +1,14 @@
 from datetime import datetime
 from typing import Annotated, Literal
 
-from pydantic import AfterValidator, BaseModel, Field
+from pydantic import AfterValidator, BaseModel, Field, model_validator
 
-from app.models import ADDRESS_MAX_LENGTH, NAME_MAX_LENGTH, QUERY_MAX_LENGTH
+from app.models import (
+    ADDRESS_MAX_LENGTH,
+    LABEL_MAX_LENGTH,
+    NAME_MAX_LENGTH,
+    QUERY_MAX_LENGTH,
+)
 from core.profiles import DEFAULT_PRESET, PRESETS
 
 Longitude = Annotated[float, Field(ge=-180, le=180)]
@@ -172,3 +177,33 @@ class RouteHistoryResponse(RouteHistoryRequest):
 
 class RouteHistoryListResponse(BaseModel):
     routes: list[RouteHistoryResponse] = Field(description="최근 것부터")
+
+
+class SavedPlaceRequest(BaseModel):
+    kind: Literal["favorite", "mine"] = Field(
+        description="favorite 는 즐겨찾기, mine 은 이름을 붙인 내 장소"
+    )
+    label: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=LABEL_MAX_LENGTH,
+        description="내 장소 이름(집, 회사 등). 즐겨찾기는 null",
+    )
+    name: str = Field(min_length=1, max_length=NAME_MAX_LENGTH)
+    address: str | None = Field(default=None, max_length=ADDRESS_MAX_LENGTH)
+    position: Coordinate = Field(description="장소 [경도, 위도]")
+
+    @model_validator(mode="after")
+    def label_matches_kind(self) -> "SavedPlaceRequest":
+        if (self.kind == "mine") != (self.label is not None):
+            raise ValueError("내 장소에만 label 을 붙입니다.")
+        return self
+
+
+class SavedPlaceResponse(SavedPlaceRequest):
+    id: int
+    created_at: datetime
+
+
+class SavedPlaceListResponse(BaseModel):
+    places: list[SavedPlaceResponse] = Field(description="최근 것부터")
