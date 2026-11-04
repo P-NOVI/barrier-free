@@ -14,12 +14,14 @@ from app.models import (
     AuthSession,
     RouteHistory,
     SavedPlace,
+    SavedRoute,
     SearchHistory,
     SocialAccount,
     User,
     UserProfile,
     utc_now,
 )
+from app.repositories.saved_route_repository import same_route
 from core.profiles import DEFAULT_PRESET
 
 TOKEN_BYTES = 32
@@ -31,6 +33,7 @@ USER_OWNED = (
     SearchHistory,
     RouteHistory,
     SavedPlace,
+    SavedRoute,
 )
 
 
@@ -132,10 +135,11 @@ def sign_in_with_social(
 def merge_guest(session: Session, guest_id: int, user_id: int) -> None:
     """게스트의 이력·장소를 회원으로 옮기고 게스트를 지운다.
 
-    이동 조건, 같은 이름의 내 장소, 같은 위치의 즐겨찾기는 회원 것이 우선.
+    이동 조건, 같은 이름의 내 장소, 같은 위치의 즐겨찾기, 같은 내 경로는 회원 것이 우선.
     """
     drop_duplicate_places(session, guest_id, user_id)
-    for model in (SearchHistory, RouteHistory, SavedPlace):
+    drop_duplicate_routes(session, guest_id, user_id)
+    for model in (SearchHistory, RouteHistory, SavedPlace, SavedRoute):
         session.execute(
             update(model).where(model.user_id == guest_id).values(user_id=user_id)
         )
@@ -162,6 +166,22 @@ def drop_duplicate_places(session: Session, guest_id: int, user_id: int) -> None
         delete(SavedPlace).where(
             SavedPlace.user_id == guest_id,
             exists().where(member.user_id == user_id, same_place),
+        )
+    )
+
+
+def drop_duplicate_routes(session: Session, guest_id: int, user_id: int) -> None:
+    member = aliased(SavedRoute)
+    same = same_route(
+        member,
+        (SavedRoute.start_lon, SavedRoute.start_lat),
+        (SavedRoute.goal_lon, SavedRoute.goal_lat),
+        SavedRoute.preset,
+    )
+    session.execute(
+        delete(SavedRoute).where(
+            SavedRoute.user_id == guest_id,
+            exists().where(member.user_id == user_id, same),
         )
     )
 

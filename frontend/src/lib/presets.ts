@@ -16,3 +16,8 @@ export const DEFAULT_PRESET: PresetId = 'general';
 export function isPresetId(value: string): value is PresetId {
     return PRESETS.some((preset) => preset.id === value);
 }
+
+/** 화면에 보일 이름. 예전에 저장한 모르는 id 는 그대로 보인다. */
+export function presetLabel(id: string): string {
+    return PRESETS.find((preset) => preset.id === id)?.label ?? id;
+}

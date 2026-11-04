@@ -1,22 +1,40 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+    type ReactNode,
+    useCallback,
+    useEffect,
+    useMemo,
+    useRef,
+    useState,
+} from 'react';
 
 import AccountMenu from './components/AccountMenu';
+import AccountPanel from './components/AccountPanel';
+import BottomSheet from './components/BottomSheet';
 import MapView, { type FitPadding } from './components/MapView';
+import MenuBar from './components/MenuBar';
+import MyTab from './components/MyTab';
 import MyLocationControl from './components/MyLocationControl';
 import NavigationPanel from './components/NavigationPanel';
 import PlaceInfoCard from './components/PlaceInfoCard';
 import PlaceSearch from './components/PlaceSearch';
 import RoutePanel from './components/RoutePanel';
+import TopSearch from './components/TopSearch';
 import { useMediaQuery } from './hooks/useMediaQuery';
 import { useNavigation } from './hooks/useNavigation';
 import { useRoute } from './hooks/useRoute';
 import { useRouteHistory } from './hooks/useRouteHistory';
 import { useSavedPlaces } from './hooks/useSavedPlaces';
+import { useSavedRoutes } from './hooks/useSavedRoutes';
 import { useVoiceGuidance } from './hooks/useVoiceGuidance';
 import { useWakeLock } from './hooks/useWakeLock';
+import { takeLoginFailure } from './lib/authApi';
 import { type Elevator, fetchElevators } from './lib/elevators';
 import type { LocationFix } from './lib/geolocation';
-import { type RouteHistory, routeEndpoints } from './lib/historyApi';
+import {
+    type RouteHistory,
+    routeEndpoints,
+    toRouteEntry,
+} from './lib/historyApi';
 import { type LngLat, SEOUL_CITY_HALL } from './lib/kakaoMap';
 import { findAddress } from './lib/placeApi';
 import { DEFAULT_PRESET, isPresetId, type PresetId } from './lib/presets';
@@ -25,6 +43,7 @@ import {
     type SavedPlace,
     toSavedPlaceRequest,
 } from './lib/savedPlacesApi';
+import { findSavedRoute } from './lib/savedRoutesApi';
 import {
     CURRENT_LOCATION_LABEL,
     type Endpoint,
@@ -34,6 +53,7 @@ import {
     type PickedPlace,
     toPickedPlace,
 } from './lib/selection';
+import { selectTab, type SheetSnap, type Tab } from './lib/sheet';
 import {
     elevatorExitsText,
     elevatorStopText,
@@ -48,16 +68,21 @@ import {
     VOICE_ON_TEXT,
 } from './lib/voiceGuidance';
 
-// 이보다 넓으면 왼쪽 위에 패널 카드 하나, 좁으면 검색창·경로 패널을 위아래에 띄운다.
-// index.css 와 같은 값.
+// 이보다 넓으면 메뉴·검색을 왼쪽 위에 띄운 패널(위에 메뉴) 하나에 둔다.
+// 좁으면 위에 검색창, 아래에 메뉴와 오르내리는 시트를 둔다. index.css 와 같은 값.
 const WIDE_LAYOUT = '(min-width: 768px)';
-// 경로에 맞출 때 패널에 가리지 않게 둘 여백(px)
+// 경로에 맞출 때 지도 위 검색창·버튼에 가리지 않게 둘 여백(px)
 const FIT_PADDING: Record<'wide' | 'narrow', FitPadding> = {
-    // 왼쪽은 패널 카드(여백 12 + 폭 380)만큼 더 둔다.
+    // 왼쪽은 패널(여백 12 + 폭 380)만큼 더 둔다.
     wide: { top: 48, right: 48, bottom: 48, left: 440 },
-    // 위는 검색창, 아래는 경로 패널 높이만큼 더 둔다.
-    narrow: { top: 160, right: 32, bottom: 240, left: 32 },
+    // 위는 검색창 높이. 지도가 메뉴·시트 위에서 끝나므로 아래 여백을 더 두지 않는다.
+    narrow: { top: 80, right: 32, bottom: 32, left: 32 },
 };
+const SHEET_TITLES: Record<Exclude<Tab, 'search'>, string> = {
+    route: '길찾기',
+    my: 'My',
+};
+const LOGIN_FAILED_MESSAGE = '로그인하지 못했어요. 다시 시도해 주세요.';
 
 export default function App() {
     const wide = useMediaQuery(WIDE_LAYOUT);
@@ -78,9 +103,21 @@ export default function App() {
     const speechSupported = canSpeak();
     const [voice, setVoice] = useState(speechSupported);
     const [elevators, setElevators] = useState<Elevator[]>([]);
+    // 소셜 로그인에 실패하고 돌아오면 계정 메뉴(넓은 화면)나 My 탭(좁은 화면)을 열어 알린다.
+    const [loginFailed] = useState(() => takeLoginFailure());
+    const loginMessage = loginFailed ? LOGIN_FAILED_MESSAGE : undefined;
+    // 메뉴에서 고른 탭과 시트 단계. 좁은 화면에서 검색 탭은 시트를 닫는다.
+    const [sheet, setSheet] = useState<{ tab: Tab; snap: SheetSnap }>(() => ({
+        tab: loginFailed && !wide ? 'my' : 'search',
+        snap: 'half',
+    }));
+    const sheetOpen = !navigating && !wide && sheet.tab !== 'search';
+    const searchInput = useRef<HTMLInputElement>(null);
     const [elevatorError, setElevatorError] = useState<string | null>(null);
     // 즐겨찾기·내 장소. 지도에 별 아이콘으로 보인다.
     const savedPlaces = useSavedPlaces();
+    // 즐겨찾기한 경로(내 경로)
+    const savedRoutes = useSavedRoutes();
     // 계단을 못 쓰는 이동 조건이면 역인 출발·도착을 그 역 엘리베이터로 바꿔 경로를 찾는다.
     const elevatorRoute = useMemo(
         () => toElevatorEndpoints(endpoints, preset, elevators),
@@ -176,15 +213,33 @@ export default function App() {
         });
     }, []);
 
-    // 프로필 목록에서 고르면 지도를 그 장소로 옮긴다.
+    // My 탭에서 고르면 지도를 그 장소로 옮기고, 카드가 보이게 시트를 접는다.
     const handleSelectSavedPlace = useCallback(
         (place: SavedPlace) => {
             showSavedPlace(place);
             const [lng, lat] = place.position;
             setFocus([lng, lat]);
+            setSheet((current) => ({ ...current, snap: 'collapsed' }));
         },
         [showSavedPlace],
     );
+
+    // 위 검색창에서 고른 장소. 지도를 옮기고 장소 카드를 띄운다.
+    const showSearchedPlace = useCallback((place: PickedPlace) => {
+        latestClick.current = place.position;
+        setPicked(place);
+        const [lng, lat] = place.position;
+        setFocus([lng, lat]);
+        setSheet((current) => ({ ...current, snap: 'collapsed' }));
+    }, []);
+
+    const handleSelectTab = (next: Tab) => {
+        // 검색 탭을 한 번 더 누르면 검색창에 포커스를 준다.
+        if (next === 'search' && sheet.tab === 'search') {
+            searchInput.current?.focus();
+        }
+        setSheet((current) => selectTab(current, next));
+    };
 
     const handleSelect = useCallback(
         (role: EndpointRole, endpoint: Endpoint) => {
@@ -207,6 +262,7 @@ export default function App() {
             if (isPresetId(entry.preset)) {
                 setPreset(entry.preset);
             }
+            setSheet({ tab: 'route', snap: 'half' });
         },
         [handleSelect],
     );
@@ -225,6 +281,7 @@ export default function App() {
                 },
             }));
             setPicked(null);
+            setSheet({ tab: 'route', snap: 'half' });
         },
         [picked],
     );
@@ -264,12 +321,38 @@ export default function App() {
 
     const stopFollowing = useCallback(() => setFollowing(false), []);
 
-    return (
-        <div className="app">
-            <aside className="side-panel" aria-label="길찾기">
-                <header className="side-panel__header">
-                    <h1>베리어프리</h1>
-                </header>
+    const searchBox = (
+        <TopSearch
+            near={mapCenter}
+            inputRef={searchInput}
+            onPickPlace={showSearchedPlace}
+            onSelectRoute={handleSelectRoute}
+            inline={wide}
+        />
+    );
+    // 로그인·로그아웃으로 사용자가 바뀌면 그 사용자의 장소·경로를 다시 불러온다.
+    const reloadSaved = () => {
+        savedPlaces.reload();
+        savedRoutes.reload();
+    };
+    // 지금 찾은 경로와 그 경로를 이미 내 경로에 저장했는지
+    const routeEntry =
+        route.status === 'success'
+            ? toRouteEntry(endpoints, preset, route.route.distance_m)
+            : null;
+    const savedRoute = findSavedRoute(savedRoutes.routes, routeEntry);
+    const toggleSavedRoute = () => {
+        if (savedRoute) {
+            savedRoutes.remove(savedRoute.id);
+        } else if (routeEntry) {
+            savedRoutes.add(routeEntry);
+        }
+    };
+    // 탭마다 패널(넓은 화면)이나 시트(좁은 화면)에 보일 내용
+    const tabContent: Record<Tab, ReactNode> = {
+        search: searchBox,
+        route: (
+            <>
                 <PlaceSearch
                     endpoints={endpoints}
                     near={mapCenter}
@@ -277,29 +360,55 @@ export default function App() {
                     onSelectRoute={handleSelectRoute}
                     onLocate={setMyLocation}
                 />
-                {navigating ? (
-                    <NavigationPanel
-                        route={route}
-                        navigation={navigation}
-                        following={following}
-                        voice={voice}
-                        onVoiceChange={
-                            speechSupported ? changeVoice : undefined
-                        }
-                        onStop={stopNavigation}
-                    />
-                ) : (
-                    <RoutePanel
-                        preset={preset}
-                        endpoints={endpoints}
-                        route={route}
-                        notes={elevatorRoute.stops.map(elevatorStopText)}
-                        onPresetChange={setPreset}
-                        onReset={() => setEndpoints(NO_ENDPOINTS)}
-                        onStartNavigation={startNavigation}
-                    />
+                <RoutePanel
+                    preset={preset}
+                    endpoints={endpoints}
+                    route={route}
+                    notes={elevatorRoute.stops.map(elevatorStopText)}
+                    saved={savedRoute !== null}
+                    onToggleSave={
+                        savedRoutes.available && routeEntry
+                            ? toggleSavedRoute
+                            : undefined
+                    }
+                    saveError={savedRoutes.error}
+                    onPresetChange={setPreset}
+                    onReset={() => setEndpoints(NO_ENDPOINTS)}
+                    onStartNavigation={startNavigation}
+                />
+            </>
+        ),
+        // 넓은 화면은 로그인·로그아웃을 오른쪽 위 계정 메뉴에 둔다.
+        my: (
+            <MyTab
+                savedPlaces={savedPlaces}
+                savedRoutes={savedRoutes}
+                near={mapCenter}
+                onSelectPlace={handleSelectSavedPlace}
+                onSelectRoute={handleSelectRoute}
+            >
+                {!wide && (
+                    <section className="my-tab__account" aria-label="계정">
+                        <h3 className="my-tab__heading">계정</h3>
+                        <AccountPanel
+                            initialMessage={loginMessage}
+                            onSessionChange={reloadSaved}
+                        />
+                    </section>
                 )}
-            </aside>
+            </MyTab>
+        ),
+    };
+    const showPanel = wide && !navigating;
+
+    return (
+        <div
+            className="app"
+            // 좁은 화면은 지도가 메뉴·시트 위에서 끝난다(index.css).
+            data-sheet={sheetOpen ? sheet.snap : 'closed'}
+            data-navigating={navigating || undefined}
+        >
+            {!showPanel && <h1 className="visually-hidden">베리어프리</h1>}
             <MapView
                 center={focus ?? undefined}
                 start={start}
@@ -359,14 +468,47 @@ export default function App() {
                 onDragStart={stopFollowing}
                 myLocation={navigationFix ?? myLocation}
             />
-            {!navigating && (
+            {showPanel && (
+                <aside className="side-panel" aria-label="메뉴">
+                    <header className="side-panel__header">
+                        <h1 className="side-panel__title">베리어프리</h1>
+                        <MenuBar tab={sheet.tab} onSelect={handleSelectTab} />
+                    </header>
+                    <div className="side-panel__body">
+                        {tabContent[sheet.tab]}
+                    </div>
+                </aside>
+            )}
+            {showPanel && (
                 <AccountMenu
-                    places={savedPlaces.places}
-                    placeError={savedPlaces.error}
-                    onSelectPlace={handleSelectSavedPlace}
-                    onDeletePlace={savedPlaces.remove}
-                    onSessionChange={savedPlaces.reload}
+                    initialMessage={loginMessage}
+                    onSessionChange={reloadSaved}
                 />
+            )}
+            {!wide && !navigating && searchBox}
+            {navigating && (
+                <NavigationPanel
+                    route={route}
+                    navigation={navigation}
+                    following={following}
+                    voice={voice}
+                    onVoiceChange={speechSupported ? changeVoice : undefined}
+                    onStop={stopNavigation}
+                />
+            )}
+            {sheetOpen && sheet.tab !== 'search' && (
+                <BottomSheet
+                    title={SHEET_TITLES[sheet.tab]}
+                    snap={sheet.snap}
+                    onSnapChange={(snap) =>
+                        setSheet((current) => ({ ...current, snap }))
+                    }
+                >
+                    {tabContent[sheet.tab]}
+                </BottomSheet>
+            )}
+            {!wide && !navigating && (
+                <MenuBar tab={sheet.tab} onSelect={handleSelectTab} />
             )}
             <MyLocationControl
                 onLocate={showMyLocation}

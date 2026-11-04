@@ -1,4 +1,4 @@
-"""게스트·회원의 세션, 이동 조건, 검색·경로 이력, 즐겨찾기·내 장소.
+"""게스트·회원의 세션, 이동 조건, 검색·경로 이력, 즐겨찾기·내 장소·내 경로.
 
 사용자는 쿠키(HttpOnly)의 토큰으로 찾는다. 이력을 처음 저장할 때 쿠키가 없으면
 게스트를 만든다. 쿠키 없이 조회하면 빈 목록을 준다.
@@ -7,8 +7,12 @@
 from fastapi import APIRouter, HTTPException, status
 
 from app.deps import CurrentUserDep, DbSessionDep, SettingsDep, UserDep
-from app.models import RouteHistory, SavedPlace, SearchHistory
-from app.repositories import history_repository, place_repository
+from app.models import RouteHistory, SavedPlace, SavedRoute, SearchHistory
+from app.repositories import (
+    history_repository,
+    place_repository,
+    saved_route_repository,
+)
 from app.repositories.user_repository import (
     linked_providers,
     load_preset,
@@ -23,6 +27,9 @@ from app.schemas import (
     SavedPlaceListResponse,
     SavedPlaceRequest,
     SavedPlaceResponse,
+    SavedRouteListResponse,
+    SavedRouteRequest,
+    SavedRouteResponse,
     SearchHistoryListResponse,
     SearchHistoryRequest,
     SearchHistoryResponse,
@@ -62,6 +69,19 @@ def search_response(row: SearchHistory) -> SearchHistoryResponse:
 
 def route_response(row: RouteHistory) -> RouteHistoryResponse:
     return RouteHistoryResponse(
+        id=row.id,
+        start_name=row.start_name,
+        start=(row.start_lon, row.start_lat),
+        goal_name=row.goal_name,
+        goal=(row.goal_lon, row.goal_lat),
+        preset=row.preset,
+        distance_m=row.distance_m,
+        created_at=row.created_at,
+    )
+
+
+def saved_route_response(row: SavedRoute) -> SavedRouteResponse:
+    return SavedRouteResponse(
         id=row.id,
         start_name=row.start_name,
         start=(row.start_lon, row.start_lat),
@@ -278,5 +298,66 @@ def delete_place(place_id: int, user: CurrentUserDep, session: DbSessionDep) -> 
         raise HTTPException(
             status.HTTP_404_NOT_FOUND,
             detail={"reason": "place_not_found", "message": "장소가 없습니다."},
+        )
+    session.commit()
+
+
+@router.get("/me/saved-routes", response_model=SavedRouteListResponse)
+def get_saved_routes(
+    user: CurrentUserDep, session: DbSessionDep
+) -> SavedRouteListResponse:
+    rows = saved_route_repository.list_saved_routes(session, user.id) if user else []
+    return SavedRouteListResponse(routes=[saved_route_response(row) for row in rows])
+
+
+@router.post(
+    "/me/saved-routes",
+    response_model=SavedRouteResponse,
+    status_code=status.HTTP_201_CREATED,
+    responses={409: {"model": RouteError, "description": "저장할 수 있는 수를 넘음"}},
+)
+def post_saved_route(
+    request: SavedRouteRequest,
+    user: UserDep,
+    session: DbSessionDep,
+    settings: SettingsDep,
+) -> SavedRouteResponse:
+    """출발·도착 위치와 이동 조건이 같은 경로가 있으면 바꿔 저장한다."""
+    try:
+        row = saved_route_repository.add_saved_route(
+            session,
+            user.id,
+            settings.saved_routes_max,
+            request.start_name,
+            request.start,
+            request.goal_name,
+            request.goal,
+            request.preset,
+            request.distance_m,
+        )
+    except saved_route_repository.SavedRoutesFullError as error:
+        session.rollback()
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail={"reason": "saved_routes_full", "message": str(error)},
+        ) from error
+    session.commit()
+    return saved_route_response(row)
+
+
+@router.delete(
+    "/me/saved-routes/{route_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    responses={404: {"model": RouteError, "description": "내 경로에 없는 id"}},
+)
+def delete_saved_route(
+    route_id: int, user: CurrentUserDep, session: DbSessionDep
+) -> None:
+    if user is None or not saved_route_repository.delete_saved_route(
+        session, user.id, route_id
+    ):
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            detail={"reason": "saved_route_not_found", "message": "경로가 없습니다."},
         )
     session.commit()

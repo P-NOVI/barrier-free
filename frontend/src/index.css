@@ -13,7 +13,7 @@
     --my-location: #1a73e8;
     --route-arrow: rgba(255, 255, 255, 0.6);
     --saved-place: #0070dd;
-    --side-panel-width: 380px;
+    --icon-bg: #bdc1c6;
     /* 카카오 로그인 버튼 색(카카오 디자인 가이드) */
     --kakao-yellow: #fee500;
     --kakao-label: rgba(0, 0, 0, 0.85);
@@ -35,13 +35,50 @@ body,
     margin: 0;
 }
 
+/* 아래 메뉴·시트 크기. 좁은 화면은 지도가 그 위에서 끝나 카카오 로고·축척이 가리지 않는다. */
 .app {
+    --nav-height: 60px;
+    /* 접힌 시트에 보이는 손잡이·제목 높이 */
+    --sheet-peek: 52px;
+    /* 펼친 시트는 화면 가운데까지 올라온다. */
+    --sheet-half: calc(50% - var(--nav-height));
+    --map-bottom: var(--nav-height);
+
     position: relative;
+    overflow: hidden;
+}
+
+.app[data-sheet='collapsed'] {
+    --map-bottom: calc(var(--nav-height) + var(--sheet-peek));
+}
+
+.app[data-sheet='half'] {
+    --map-bottom: calc(var(--nav-height) + var(--sheet-half));
+}
+
+/* 안내 중에는 메뉴를 숨긴다. */
+.app[data-navigating] {
+    --nav-height: 0px;
 }
 
 .map-view {
-    position: relative;
-    height: 100%;
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: var(--map-bottom);
+    left: 0;
+}
+
+.visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
 }
 
 .map-view__canvas {
@@ -79,11 +116,12 @@ body,
     cursor: pointer;
 }
 
+/* 좁은 화면: 검색창 아래, 내 위치 버튼 왼쪽 */
 .map-view__error {
     position: absolute;
-    top: 12px;
+    top: 72px;
     left: 12px;
-    right: 12px;
+    right: 68px;
     z-index: 10;
     margin: 0;
     padding: 8px 12px;
@@ -160,7 +198,7 @@ body,
 /* 좁은 화면: 검색창 아래 오른쪽 */
 .my-location-control {
     position: absolute;
-    top: 130px;
+    top: 72px;
     right: 12px;
     z-index: 15;
     display: flex;
@@ -204,97 +242,99 @@ body,
     box-shadow: var(--panel-shadow);
 }
 
-/* 좁은 화면: 검색창 아래 왼쪽 */
-.account-menu {
-    position: absolute;
-    top: 182px;
-    left: 12px;
-    z-index: 15;
-    max-width: 260px;
+/* 로그인·로그아웃 */
+.account-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
 }
 
-.account-menu__toggle {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 44px;
-    height: 44px;
-    border-radius: 50%;
-    color: var(--text);
-    background: var(--bg);
-    box-shadow: var(--panel-shadow);
-    list-style: none;
+.account-panel__status,
+.my-tab__status {
+    margin: 0;
+    font-size: 14px;
+    color: var(--muted);
+}
+
+.account-panel__error,
+.my-tab__error {
+    margin: 0;
+    padding: 6px 8px;
+    border-radius: 8px;
+    font-size: 13px;
+    color: var(--error-text);
+    background: var(--error-bg);
+}
+
+/* My 탭: 위에 즐겨찾기·내 장소·내 경로 탭, 좁은 화면은 맨 아래 계정 */
+.my-tab__tabs {
+    display: flex;
+    border-bottom: 1px solid var(--border);
+}
+
+.my-tab__tab {
+    flex: 1;
+    min-height: 44px;
+    padding: 0;
+    border: 0;
+    border-bottom: 3px solid transparent;
+    font: inherit;
+    color: var(--muted);
+    background: none;
     cursor: pointer;
 }
 
-.account-menu__icon {
-    width: 26px;
-    height: 26px;
-    fill: none;
-    stroke: currentColor;
-    stroke-width: 1.8;
-    stroke-linecap: round;
+.my-tab__tab[aria-selected='true'] {
+    border-bottom-color: var(--brand);
+    font-weight: 600;
+    color: var(--brand);
 }
 
-.account-menu__toggle::-webkit-details-marker {
-    display: none;
-}
-
-.account-menu__panel {
+.my-tab__panel {
     display: flex;
     flex-direction: column;
     gap: 8px;
-    box-sizing: border-box;
-    width: 260px;
-    /* 저장한 장소가 많으면 패널 안에서 스크롤한다. */
-    max-height: calc(100vh - 260px);
-    margin-top: 8px;
-    padding: 12px;
-    overflow-y: auto;
-    border-radius: 12px;
-    background: var(--bg);
-    box-shadow: var(--panel-shadow);
-}
-
-.account-menu__title {
-    margin: 0;
-    font-size: 17px;
-}
-
-.account-menu__account {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-}
-
-.account-menu__places {
     padding-top: 8px;
+}
+
+.my-tab__heading {
+    margin: 12px 0 0;
+    font-size: 13px;
+    font-weight: 400;
+    color: var(--muted);
+}
+
+.my-tab__account {
+    margin-top: 16px;
+    padding-top: 4px;
     border-top: 1px solid var(--border);
 }
 
-.account-menu__places-title {
-    margin: 0 0 4px;
-    font-size: 14px;
+.my-tab__account .my-tab__heading {
+    margin-bottom: 8px;
 }
 
-.account-menu__place-list {
+/* My 탭 목록: 동그란 아이콘, 이름, 작은 글씨 설명 */
+.my-list {
     margin: 0;
     padding: 0;
     list-style: none;
 }
 
-.account-menu__place {
+.my-list__row {
     display: flex;
     align-items: center;
+    border-bottom: 1px solid var(--border);
 }
 
-.account-menu__place-pick {
+.my-list__pick {
     display: flex;
     flex: 1;
-    flex-direction: column;
+    align-items: center;
+    gap: 12px;
     min-width: 0;
-    min-height: 44px;
-    padding: 4px 0;
+    min-height: 64px;
+    padding: 8px 0;
     border: 0;
     font: inherit;
     text-align: left;
@@ -303,26 +343,53 @@ body,
     cursor: pointer;
 }
 
-.account-menu__place-name {
+.my-list__icon {
+    display: grid;
+    flex: none;
+    place-items: center;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    color: #fff;
+    background: var(--icon-bg);
+}
+
+.my-list__icon svg {
+    width: 22px;
+    height: 22px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.my-list__text {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.my-list__title {
     font-weight: 600;
 }
 
-.account-menu__place-name,
-.account-menu__place-detail {
+.my-list__title,
+.my-list__detail {
     overflow: hidden;
     white-space: nowrap;
     text-overflow: ellipsis;
 }
 
-.account-menu__place-detail {
+.my-list__detail {
     font-size: 13px;
     color: var(--muted);
 }
 
-.account-menu__place-delete {
+.my-list__delete {
     flex: none;
-    width: 36px;
-    height: 36px;
+    width: 44px;
+    height: 44px;
     border: 0;
     font-size: 20px;
     line-height: 1;
@@ -331,22 +398,52 @@ body,
     cursor: pointer;
 }
 
-.account-menu__status,
-.account-menu__message {
+/* 내 장소로 등록할 장소 찾기 */
+.my-register {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.my-register__header {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.my-register__back {
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    border: 0;
+    font-size: 28px;
+    line-height: 1;
+    color: var(--text);
+    background: none;
+    cursor: pointer;
+}
+
+.my-register__title {
     margin: 0;
-    font-size: 13px;
-    color: var(--muted);
+    font-size: 16px;
 }
 
-.account-menu__message {
-    padding: 6px 8px;
+.my-register__input {
+    box-sizing: border-box;
+    width: 100%;
+    min-height: 44px;
+    padding: 0 12px;
+    border: 1px solid var(--border);
     border-radius: 8px;
-    color: var(--error-text);
-    background: var(--error-bg);
+    font: inherit;
 }
 
-.account-menu__login,
-.account-menu__logout {
+.my-register__input:focus {
+    border-color: var(--brand);
+    outline: none;
+}
+
+.account-panel__button {
     display: flex;
     align-items: center;
     justify-content: center;
@@ -361,18 +458,24 @@ body,
     cursor: pointer;
 }
 
-.account-menu__login--kakao {
+.account-panel__button--kakao {
     border-color: var(--kakao-yellow);
     color: var(--kakao-label);
     background: var(--kakao-yellow);
 }
 
+/* 길찾기 탭: 출발·도착 검색 아래 */
 .route-panel {
+    padding-top: 12px;
+}
+
+/* 안내 중에는 시트 대신 지도 아래에 뜬 카드 */
+.navigation-panel {
     position: absolute;
     left: 12px;
     right: 12px;
     bottom: 28px;
-    z-index: 10;
+    z-index: 20;
     max-width: 420px;
     margin: 0 auto;
     padding: 12px 16px;
@@ -505,6 +608,41 @@ body,
     font-weight: 700;
 }
 
+/* 내 경로 저장 별: 흰 별, 저장하면 파란 별 */
+.route-panel__save {
+    display: grid;
+    flex: none;
+    place-items: center;
+    align-self: center;
+    width: 40px;
+    height: 40px;
+    margin-left: auto;
+    padding: 0;
+    border: 1px solid var(--border);
+    border-radius: 50%;
+    color: var(--muted);
+    background: var(--bg);
+    cursor: pointer;
+}
+
+.route-panel__save svg {
+    width: 22px;
+    height: 22px;
+    fill: #fff;
+    stroke: currentColor;
+    stroke-width: 1.6;
+    stroke-linejoin: round;
+}
+
+.route-panel__save[aria-pressed='true'] {
+    border-color: var(--saved-place);
+    color: var(--saved-place);
+}
+
+.route-panel__save[aria-pressed='true'] svg {
+    fill: currentColor;
+}
+
 .route-panel__duration {
     font-size: 24px;
 }
@@ -534,23 +672,13 @@ body,
     font-weight: 600;
 }
 
+/* 길찾기 탭 위쪽 출발·도착 입력 */
 .place-search {
-    position: absolute;
-    top: 12px;
-    left: 12px;
-    right: 12px;
-    z-index: 20;
     display: flex;
     flex-direction: column;
     gap: 6px;
-    max-width: 420px;
-    max-height: calc(100% - 200px);
-    margin: 0 auto;
-    padding: 8px;
-    border-radius: 12px;
-    overflow-y: auto;
-    background: var(--bg);
-    box-shadow: var(--panel-shadow);
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--border);
 }
 
 .place-search__row {
@@ -993,87 +1121,356 @@ body,
     background: var(--overlay-bg);
 }
 
-/* 좁은 화면: 패널 묶음은 자리를 차지하지 않고, 검색창·경로 패널이 지도 위에 뜬다. */
-.side-panel {
-    display: contents;
+/* 화면 맨 위 장소 검색창 */
+.top-search {
+    position: absolute;
+    top: 12px;
+    left: 12px;
+    right: 12px;
+    z-index: 30;
+    border-radius: 12px;
+    background: var(--bg);
+    box-shadow: var(--panel-shadow);
 }
 
-.side-panel__header {
+.top-search:focus-within {
+    box-shadow:
+        var(--panel-shadow),
+        0 0 0 2px var(--brand);
+}
+
+.top-search__field {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 48px;
+    padding: 0 14px;
+}
+
+.top-search__icon {
+    flex: none;
+    width: 20px;
+    height: 20px;
+    fill: none;
+    stroke: var(--muted);
+    stroke-width: 2;
+    stroke-linecap: round;
+}
+
+.top-search__field input {
+    flex: 1;
+    min-width: 0;
+    min-height: 44px;
+    border: 0;
+    outline: none;
+    font: inherit;
+    color: var(--text);
+    background: transparent;
+}
+
+/* 누르면 펼쳐지는 최근 경로·검색과 검색 결과 */
+.top-search__list {
+    max-height: 60vh;
+    padding: 0 8px 8px;
+    overflow-y: auto;
+    border-top: 1px solid var(--border);
+}
+
+.top-search__list:empty {
     display: none;
 }
 
-/* 넓은 화면: 지도는 화면 전체, 패널은 왼쪽 위에 뜬 카드 하나. App.tsx 의 WIDE_LAYOUT 과 같은 값 */
+/* 화면 아래 메뉴 바 */
+.menu-bar {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 25;
+    display: grid;
+    /* 메뉴 수와 상관없이 같은 폭으로 나눈다. */
+    grid-auto-columns: 1fr;
+    grid-auto-flow: column;
+    box-sizing: border-box;
+    height: var(--nav-height);
+    border-top: 1px solid var(--border);
+    background: var(--bg);
+}
+
+.menu-bar__item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    padding: 0;
+    border: 0;
+    font: inherit;
+    font-size: 12px;
+    color: var(--muted);
+    background: none;
+    cursor: pointer;
+}
+
+.menu-bar__item svg {
+    width: 24px;
+    height: 24px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.menu-bar__item[aria-current='page'] {
+    font-weight: 600;
+    color: var(--brand);
+}
+
+/*
+ * 메뉴 위에서 올라오는 시트. 접으면 손잡이·제목만 남기고 아래로 내린다.
+ * --shift 만큼 내리고 그만큼 아래를 잘라, 메뉴 아래로 비어져 나오지 않게 한다.
+ */
+.bottom-sheet {
+    --shift: var(--drag);
+
+    position: absolute;
+    right: 0;
+    bottom: var(--nav-height);
+    left: 0;
+    z-index: 15;
+    display: flex;
+    flex-direction: column;
+    height: var(--sheet-half);
+    border-radius: 16px 16px 0 0;
+    background: var(--bg);
+    box-shadow: var(--panel-shadow);
+    transform: translateY(var(--shift));
+    /* 위·옆은 그림자가 보이게 조금 넓게 남긴다. */
+    clip-path: inset(-16px -16px var(--shift) -16px);
+    transition:
+        transform 0.2s ease,
+        clip-path 0.2s ease;
+}
+
+.bottom-sheet[data-snap='collapsed'] {
+    --shift: calc(100% - var(--sheet-peek) + var(--drag));
+}
+
+/* 끄는 동안은 손가락을 바로 따라온다. */
+.bottom-sheet[data-dragging] {
+    transition: none;
+}
+
+.bottom-sheet__header {
+    display: flex;
+    flex: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    box-sizing: border-box;
+    height: var(--sheet-peek);
+    padding: 0 16px;
+    border: 0;
+    font: inherit;
+    color: var(--text);
+    background: none;
+    cursor: grab;
+    /* 끌 때 페이지가 스크롤되지 않게 한다. */
+    touch-action: none;
+}
+
+.bottom-sheet[data-dragging] .bottom-sheet__header {
+    cursor: grabbing;
+}
+
+.bottom-sheet__handle {
+    width: 36px;
+    height: 4px;
+    border-radius: 2px;
+    background: var(--border);
+}
+
+.bottom-sheet__title {
+    font-weight: 600;
+}
+
+.bottom-sheet__body {
+    flex: 1;
+    min-height: 0;
+    padding: 0 16px 16px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+
+/* 넓은 화면 왼쪽 위에 띄운 패널: 위에 이름과 메뉴, 아래에 고른 탭 내용 */
+.side-panel {
+    position: absolute;
+    top: 12px;
+    left: 12px;
+    z-index: 20;
+    display: flex;
+    flex-direction: column;
+    width: var(--panel-width);
+    /* 아래 40px 은 카카오 로고·축척이 가리지 않게 비운다. */
+    max-height: calc(100% - 52px);
+    overflow: hidden;
+    border-radius: 12px;
+    background: var(--bg);
+    box-shadow: var(--panel-shadow);
+}
+
+.side-panel__header {
+    flex: none;
+    padding: 14px 16px 10px;
+    color: #fff;
+    background: var(--brand);
+}
+
+.side-panel__title {
+    margin: 0 0 8px;
+    font-size: 20px;
+}
+
+.side-panel .menu-bar {
+    position: static;
+    display: flex;
+    gap: 4px;
+    height: auto;
+    border: 0;
+    background: none;
+}
+
+.side-panel .menu-bar__item {
+    flex: 1;
+    min-height: 36px;
+    border-radius: 6px;
+    font-size: 16px;
+    color: rgba(255, 255, 255, 0.85);
+}
+
+.side-panel .menu-bar__item svg {
+    display: none;
+}
+
+.side-panel .menu-bar__item[aria-current='page'] {
+    color: #fff;
+    background: rgba(0, 0, 0, 0.22);
+}
+
+.side-panel__body {
+    flex: 1;
+    min-height: 0;
+    padding: 16px;
+    overflow-y: auto;
+}
+
+/* 패널 안 검색창: 입력칸에만 테두리를 두고, 최근 기록·검색 결과는 늘 아래에 펼친다. */
+.top-search--inline {
+    position: static;
+    border-radius: 0;
+    background: none;
+    box-shadow: none;
+}
+
+.top-search--inline:focus-within {
+    box-shadow: none;
+}
+
+.top-search--inline .top-search__field {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+}
+
+.top-search--inline .top-search__field:focus-within {
+    border-color: var(--brand);
+}
+
+.top-search--inline .top-search__list {
+    max-height: none;
+    padding: 8px 0 0;
+    overflow: visible;
+    border-top: 0;
+}
+
+/* 넓은 화면 오른쪽 위 계정 아이콘 */
+.account-menu {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    z-index: 25;
+}
+
+.account-menu__toggle {
+    display: grid;
+    place-items: center;
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    color: var(--text);
+    background: var(--bg);
+    box-shadow: var(--panel-shadow);
+    list-style: none;
+    cursor: pointer;
+}
+
+.account-menu__toggle::-webkit-details-marker {
+    display: none;
+}
+
+.account-menu__toggle svg {
+    width: 26px;
+    height: 26px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+}
+
+.account-menu__panel {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    box-sizing: border-box;
+    width: 280px;
+    padding: 16px;
+    border-radius: 12px;
+    background: var(--bg);
+    box-shadow: var(--panel-shadow);
+}
+
+/*
+ * 넓은 화면: 지도는 화면 전체, 패널은 왼쪽 위에 띄운 카드 하나.
+ * App.tsx 의 WIDE_LAYOUT 과 같은 값
+ */
 @media (min-width: 768px) {
-    .side-panel {
-        position: absolute;
-        top: 12px;
-        left: 12px;
-        z-index: 20;
-        display: flex;
-        flex-direction: column;
-        width: var(--side-panel-width);
-        /* 아래 40px 은 카카오 로고·축척이 가리지 않게 비운다. */
-        max-height: calc(100% - 52px);
-        border-radius: 12px;
-        overflow-y: auto;
-        background: var(--bg);
-        box-shadow: var(--panel-shadow);
+    .app {
+        --panel-width: 380px;
     }
 
-    .side-panel__header {
-        display: block;
-        padding: 14px 16px;
-        color: #fff;
-        background: var(--brand);
+    .app[data-sheet] {
+        --map-bottom: 0px;
     }
 
-    .side-panel__header h1 {
-        margin: 0;
-        font-size: 20px;
-    }
-
-    .place-search,
-    .route-panel {
-        position: static;
+    .navigation-panel {
+        right: auto;
+        bottom: 40px;
+        width: var(--panel-width);
         max-width: none;
-        max-height: none;
+        box-sizing: border-box;
         margin: 0;
-        border-radius: 0;
-        overflow: visible;
-        box-shadow: none;
     }
 
-    .place-search {
-        padding: 12px 16px;
-        border-bottom: 1px solid var(--border);
-    }
-
-    .route-panel {
-        padding: 12px 16px;
-    }
-
-    /* 패널 카드 오른쪽에 띄운다. */
+    /* 지도 위 오류는 패널 오른쪽, 계정 아이콘 왼쪽에 띄운다. */
     .map-view__error {
-        left: calc(var(--side-panel-width) + 24px);
+        top: 12px;
+        left: calc(var(--panel-width) + 24px);
     }
 
     /* 오른쪽 아래, OpenStreetMap 출처 표기 위 */
     .my-location-control {
         top: auto;
         bottom: 32px;
-    }
-
-    /* 패널 카드 오른쪽 위 */
-    /* 넓은 화면: 지도 오른쪽 위. 메뉴를 펼쳐도 버튼은 오른쪽에 그대로 둔다. */
-    .account-menu {
-        top: 12px;
-        right: 12px;
-        left: auto;
-        text-align: right;
-    }
-
-    .account-menu__panel {
-        max-height: calc(100vh - 140px);
-        text-align: left;
     }
 }

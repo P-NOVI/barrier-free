@@ -18,7 +18,7 @@ import {
 } from '../lib/historyApi';
 import type { LngLat } from '../lib/kakaoMap';
 import type { Place } from '../lib/placeApi';
-import { PRESETS } from '../lib/presets';
+import { presetLabel } from '../lib/presets';
 import {
     CURRENT_LOCATION_LABEL,
     type Endpoint,
@@ -54,7 +54,7 @@ type LocateState =
     // 출발지가 다른 방법으로 바뀌면 오류 안내를 감추려고 그때의 출발지를 같이 둔다.
     | { status: 'error'; message: string; start: Endpoint | null };
 
-function SearchResults({
+export function SearchResults({
     listId,
     search,
     onPick,
@@ -108,10 +108,6 @@ function keepFocus(event: MouseEvent) {
     event.preventDefault();
 }
 
-function presetLabel(id: string): string {
-    return PRESETS.find((preset) => preset.id === id)?.label ?? id;
-}
-
 function RecentItem({
     name,
     detail,
@@ -144,7 +140,7 @@ function RecentItem({
     );
 }
 
-function RecentList({
+export function RecentList({
     listId,
     recent,
     onPickSearch,
