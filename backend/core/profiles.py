@@ -36,6 +36,8 @@ class Profile:
     # 평균 이동 속도(m/s). 연구에서 관측된 이동 조건별 평균값이다.
     # 소요시간은 경로 거리를 이 값으로 나눠 구한다.
     speed_mps: float
+    # False 면 경사 배율을 쓰지 않고 산길처럼 아주 가파른 길만 피한다(일반 보행).
+    slope_sensitive: bool = True
 
 
 PRESETS: dict[str, Profile] = {
@@ -92,6 +94,8 @@ PRESETS: dict[str, Profile] = {
         needs_wheelchair_access=False,
         congestion_tolerance=CongestionTolerance.NORMAL,
         speed_mps=1.28,
+        # 일반 보행은 최단 경로로 간다.
+        slope_sensitive=False,
     ),
 }
 

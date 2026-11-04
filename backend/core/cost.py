@@ -11,9 +11,11 @@ SLOPE_FACTORS: dict[GradeLevel, float] = {
     GradeLevel.HARD: 3.0,
 }
 # 1/12 보다 가파른 구간을 더 나눈 배율 (이 경사 초과, 배율). 가파른 것부터 본다.
-# 일반 보행은 경사 상한이 없어서, 이게 없으면 30% 산길도 9% 오르막과 비용이 같다.
 # 초안 값이다.
 STEEP_FACTORS: tuple[tuple[float, float], ...] = ((0.25, 10.0), (0.15, 5.0))
+# 경사를 따지지 않는 이동 조건(일반 보행)도 이보다 가파른 길은 산길로 보고 피한다.
+# 경사 상한이 없어서, 이게 없으면 30% 산길도 평지와 비용이 같다.
+MOUNTAIN_GRADE, MOUNTAIN_FACTOR = STEEP_FACTORS[0]
 # 등산로 배율. 경사·계단 배율에 곱한다. 초안 값이다.
 TRAIL_FACTORS: dict[Trail, float] = {Trail.HIKING: 2.0, Trail.MOUNTAIN: 10.0}
 # 인도가 따로 있는 중심선(차도) 배율. 옆 인도로 가게 한다. 지우지 않는 것은 인도가
@@ -36,8 +38,10 @@ def is_passable(arc: Arc, profile: Profile) -> bool:
     return profile.max_grade is None or abs(arc.grade) <= profile.max_grade
 
 
-def slope_factor(grade: float) -> float:
+def slope_factor(grade: float, profile: Profile) -> float:
     steepness = abs(grade)
+    if not profile.slope_sensitive:
+        return MOUNTAIN_FACTOR if steepness > MOUNTAIN_GRADE else 1.0
     for min_grade, factor in STEEP_FACTORS:
         if steepness > min_grade:
             return factor
@@ -52,7 +56,7 @@ def arc_cost(arc: Arc, profile: Profile, congestion: float = 0.0) -> float:
     """
     if not is_passable(arc, profile):
         return math.inf
-    factor = slope_factor(arc.grade)
+    factor = slope_factor(arc.grade, profile)
     if arc.steps:
         factor = max(factor, profile.stair_factor)
     trail_factor = TRAIL_FACTORS[arc.trail] if arc.trail else 1.0

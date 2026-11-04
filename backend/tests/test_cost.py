@@ -4,11 +4,13 @@ from dataclasses import replace
 import pytest
 
 from core.cost import (
+    MOUNTAIN_FACTOR,
     SIDEWALK_SEPARATE_FACTOR,
     SLOPE_FACTORS,
     STEEP_FACTORS,
     TRAIL_FACTORS,
     arc_cost,
+    slope_factor,
 )
 from core.graph import Arc, Trail
 from core.profiles import CONGESTION_WEIGHTS, PRESETS, CongestionTolerance
@@ -27,6 +29,8 @@ FLAT = Arc(
 )
 STAIRS_UP = replace(FLAT, grade=0.3, steps=True, wheelchair_ok=False)
 STAIRS_DOWN = replace(STAIRS_UP, grade=-0.3)
+# 경사 상한 없이 경사 배율만 쓰는 이동 조건. 배율 단계를 모두 본다.
+SLOPED = replace(PRESETS["general"], slope_sensitive=True)
 
 
 def test_flat_arc_costs_its_length() -> None:
@@ -35,9 +39,7 @@ def test_flat_arc_costs_its_length() -> None:
 
 def test_slope_factor_by_grade_level() -> None:
     arc = replace(FLAT, grade=0.05)
-    assert (
-        arc_cost(arc, PRESETS["general"]) == LENGTH * SLOPE_FACTORS[GradeLevel.MODERATE]
-    )
+    assert arc_cost(arc, SLOPED) == LENGTH * SLOPE_FACTORS[GradeLevel.MODERATE]
 
 
 @pytest.mark.parametrize(
@@ -50,9 +52,28 @@ def test_slope_factor_by_grade_level() -> None:
         (0.3, STEEP_FACTORS[0][1]),
     ],
 )
-def test_steeper_grades_cost_more_for_general(grade: float, factor: float) -> None:
+def test_steeper_grades_cost_more(grade: float, factor: float) -> None:
+    arc = replace(FLAT, grade=grade)
+    assert arc_cost(arc, SLOPED) == pytest.approx(LENGTH * factor)
+
+
+@pytest.mark.parametrize(
+    ("grade", "factor"),
+    [
+        (0.05, 1.0),
+        (0.2, 1.0),
+        (-0.25, 1.0),
+        (0.3, MOUNTAIN_FACTOR),
+        (-0.3, MOUNTAIN_FACTOR),
+    ],
+)
+def test_general_ignores_slope_except_mountain(grade: float, factor: float) -> None:
     arc = replace(FLAT, grade=grade)
     assert arc_cost(arc, PRESETS["general"]) == pytest.approx(LENGTH * factor)
+
+
+def test_only_general_ignores_slope() -> None:
+    assert [name for name, p in PRESETS.items() if not p.slope_sensitive] == ["general"]
 
 
 def test_steep_factors_grow_with_grade() -> None:
@@ -62,7 +83,7 @@ def test_steep_factors_grow_with_grade() -> None:
 
 @pytest.mark.parametrize("trail", list(Trail))
 def test_trail_factor_multiplies_slope_and_stairs(trail: Trail) -> None:
-    profile = PRESETS["general"]
+    profile = SLOPED
     steep = replace(FLAT, grade=0.2, trail=trail)
     stairs = replace(STAIRS_UP, grade=0.0, trail=trail)
     assert arc_cost(steep, profile) == pytest.approx(
@@ -107,7 +128,7 @@ def test_stairs_use_larger_of_stair_and_slope_factor(preset: str) -> None:
     profile = PRESETS[preset]
     gentle = replace(STAIRS_UP, grade=0.05)
     assert arc_cost(gentle, profile) == LENGTH * max(
-        profile.stair_factor, SLOPE_FACTORS[GradeLevel.MODERATE]
+        profile.stair_factor, slope_factor(gentle.grade, profile)
     )
     assert arc_cost(STAIRS_UP, profile) == LENGTH * max(
         profile.stair_factor, STEEP_FACTORS[0][1]
