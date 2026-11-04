@@ -222,11 +222,7 @@ training_set:
   # 저장소 기준. 센서 위치
   sensors: data/processed/sdot_sensors.json
   output: interim/training/hourly.parquet
-  scale_output: interim/training/sensor_scale.json
   report: interim/training/hourly_report.json
-  # 한 시간(10분 값 6개) 중 이만큼 이상 있어야 시간 평균을 만든다.
+  # 한 시간에 10분 값이 6개 있다. 이만큼 이상 있어야 그 시간의 유동인구를 만든다.
+  bins_per_hour: 6
   min_bins: 4
-  # 센서별 정규화 기준값(분위수)을 구하는 학습 기간. 끝 날짜를 포함한다.
-  train_start: "2024-01-01"
-  train_end: "2026-07-31"
-  quantile: 0.95

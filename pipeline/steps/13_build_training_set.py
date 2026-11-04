@@ -1,13 +1,13 @@
-"""S-DoT 혼잡도 예측 모델의 학습셋 training/hourly.parquet 을 만든다.
+"""S-DoT 유동인구 예측 모델의 학습셋 training/hourly.parquet 을 만든다.
 
 실행: pipeline/ 에서 uv run python steps/13_build_training_set.py
 - 입력: interim/sdot/history.parquet (06 단계, 10분 단위 유동인구)
         interim/weather/hourly.parquet (11 단계, 자치구·시간별 기온·강수)
         interim/calendar/daily.parquet (12 단계, 날짜별 공휴일·연휴)
         data/processed/sdot_sensors.json (센서 위치)
-- 출력: interim/training/hourly.parquet, sensor_scale.json, hourly_report.json
+- 출력: interim/training/hourly.parquet, hourly_report.json
   열: sensor_code, district, lon, lat, slot_start, day_of_week, hour_of_day, temp,
-      rain_mm, 달력 열 6개(12 단계와 같은 이름), visitor_mean, congestion
+      rain_mm, 달력 열 6개(12 단계와 같은 이름), foot_traffic
 시각
 - measured_at 은 구간 끝 시각이다. (H-1:00, H:00] 의 10분 값을 묶어 한 시간 H 로
   만든다.
@@ -15,11 +15,10 @@
   구한다.
 - 날씨는 H 정시 행을 그대로 붙인다. 강수량이 직전 1시간 누적이라 한 시간 구간과 맞는다.
 처리
-- visitor_mean 은 한 시간 안 10분 값의 평균이다. 10분 값이 min_bins 개 미만이면 버린다.
-- 0 은 낮에도 그대로 둔다(사람이 안 지나갔을 수 있다).
-- congestion 은 visitor_mean / (센서별 분위수), 1 이 넘으면 1 이다. 분위수는 학습 기간
-  (train_start ~ train_end)의 행만으로 센서마다 구한다. 구해도 0 인 센서는 정규화할 수
-  없어 행을 버리고 보고서에 남긴다.
+- foot_traffic 은 한 시간에 센서를 지나간 사람 수(명/시간)다. 한 시간 안 10분 값의
+  평균에 bins_per_hour 를 곱한다. 10분 값이 min_bins 개 미만인 시간은 버린다.
+- 센서 값은 그대로 쓰고 정규화하지 않는다. 0 은 낮에도 그대로 둔다(사람이 안
+  지나갔을 수 있다).
 - 센서의 자치구는 가장 많이 기록된 하나다. 다른 자치구로 기록된 행(자치구가 잘못
   찍힌 주, 센서를 옮기기 전 구간)은 버리고 개수를 보고서에 남긴다.
 - 날씨가 없는 칸(강수 결측 등)은 NaN 으로 둔다.
@@ -50,6 +49,7 @@ CALENDAR_COLUMNS = [
     "days_since_long_holiday",
 ]
 HOUR = np.timedelta64(1, "h")
+TRAFFIC_QUANTILES = (0.5, 0.95, 0.99)
 
 
 def hour_end(measured_at: np.ndarray) -> np.ndarray:
@@ -60,10 +60,13 @@ def hour_end(measured_at: np.ndarray) -> np.ndarray:
     return ceil_hours.astype("datetime64[h]").astype("datetime64[s]")
 
 
-def aggregate_hourly(history: pa.Table, min_bins: int) -> tuple[pa.Table, int]:
-    """10분 값을 센서·시간별 평균으로 묶는다.
+def aggregate_hourly(
+    history: pa.Table, min_bins: int, bins_per_hour: int
+) -> tuple[pa.Table, int]:
+    """10분 값을 센서·시간별 유동인구(명/시간)로 묶는다.
 
-    반환: (열 sensor_code, hour_end, visitor_mean, bins 의 표,
+    10분 값이 빠진 시간은 있는 값의 평균을 bins_per_hour 개로 늘려 한 시간치로 본다.
+    반환: (열 sensor_code, hour_end, foot_traffic, bins 의 표,
     10분 값이 모자라 버린 시간 수)
     """
     ends = hour_end(history["measured_at"].to_numpy())
@@ -87,33 +90,13 @@ def aggregate_hourly(history: pa.Table, min_bins: int) -> tuple[pa.Table, int]:
             "hour_end": pa.array(
                 grouped["hour_end"].to_numpy()[keep], type=pa.timestamp("s")
             ),
-            "visitor_mean": (total[keep] / bins[keep]).astype(np.float32),
+            "foot_traffic": (total[keep] / bins[keep] * bins_per_hour).astype(
+                np.float32
+            ),
             "bins": bins[keep],
         }
     )
     return table, int((~keep).sum())
-
-
-def sensor_scales(
-    sensor_code: np.ndarray,
-    slot_start: np.ndarray,
-    visitor_mean: np.ndarray,
-    train_start: str,
-    train_end: str,
-    quantile: float,
-) -> dict[int, float]:
-    """센서별 정규화 기준값: 학습 기간(train_end 날짜 포함)의 visitor_mean 분위수."""
-    in_train = (slot_start >= np.datetime64(train_start)) & (
-        slot_start < np.datetime64(train_end) + np.timedelta64(1, "D")
-    )
-    codes, values = sensor_code[in_train], visitor_mean[in_train]
-    order = np.argsort(codes, kind="stable")
-    codes, values = codes[order], values[order]
-    unique, starts = np.unique(codes, return_index=True)
-    scales = {}
-    for code, group in zip(unique, np.split(values, starts[1:])):
-        scales[int(code)] = float(np.quantile(group, quantile))
-    return scales
 
 
 def read_sensor_places(path: Path) -> dict[int, tuple[float, float]]:
@@ -157,18 +140,13 @@ def keep_majority_district(history: pa.Table, districts: dict[int, str]) -> pa.T
 
 def build_training_set(
     hourly: pa.Table,
-    scales: dict[int, float],
     districts: dict[int, str],
     places: dict[int, tuple[float, float]],
     weather: pa.Table,
     calendar: pa.Table,
 ) -> pa.Table:
-    """센서·시간별 평균에 정규화 값, 센서 정보, 날씨, 달력을 붙인다."""
+    """센서·시간별 유동인구에 센서 정보, 날씨, 달력을 붙인다."""
     codes = hourly["sensor_code"].to_numpy()
-    scale = np.array([scales[int(c)] for c in codes])
-    mean = hourly["visitor_mean"].to_numpy()
-    congestion = np.clip(mean / scale, 0.0, 1.0).astype(np.float32)
-
     slot_start = pa.array(
         hourly["hour_end"].to_numpy() - HOUR.astype("timedelta64[s]"),
         type=pa.timestamp("s"),
@@ -184,8 +162,7 @@ def build_training_set(
             "date": pc.cast(slot_start, pa.date32()),
             "day_of_week": pc.cast(pc.day_of_week(slot_start), pa.int8()),
             "hour_of_day": pc.cast(pc.hour(slot_start), pa.int8()),
-            "visitor_mean": hourly["visitor_mean"],
-            "congestion": congestion,
+            "foot_traffic": hourly["foot_traffic"],
         }
     )
     weather = weather.rename_columns(["district", "hour_end", "temp", "rain_mm"])
@@ -213,8 +190,7 @@ def build_training_set(
         "temp",
         "rain_mm",
         *CALENDAR_COLUMNS,
-        "visitor_mean",
-        "congestion",
+        "foot_traffic",
     ]
     return table.select(names).sort_by(
         [("sensor_code", "ascending"), ("slot_start", "ascending")]
@@ -226,14 +202,10 @@ def count_missing(column: pa.ChunkedArray) -> int:
     return int(column.null_count + np.isnan(column.fill_null(0.0).to_numpy()).sum())
 
 
-def make_report(
-    table: pa.Table, dropped: dict[str, Any], scales: dict[int, float]
-) -> dict[str, Any]:
-    visitor = table["visitor_mean"].to_numpy()
+def make_report(table: pa.Table, dropped: dict[str, Any]) -> dict[str, Any]:
+    traffic = table["foot_traffic"].to_numpy()
     hour_of_day = table["hour_of_day"].to_numpy()
-    congestion = table["congestion"].to_numpy()
-    zero = visitor == 0
-    values = np.array(list(scales.values()))
+    zero = traffic == 0
     return {
         "rows": table.num_rows,
         "sensors": len(set(table["sensor_code"].to_pylist())),
@@ -244,13 +216,14 @@ def make_report(
         "zero_share_by_hour": {
             int(h): round(float(zero[hour_of_day == h].mean()), 4) for h in range(24)
         },
-        "congestion_at_one_share": round(float((congestion >= 1).mean()), 4),
+        "foot_traffic_mean": round(float(traffic.mean()), 2),
+        "foot_traffic_max": round(float(traffic.max()), 1),
+        "foot_traffic_quantiles": {
+            str(q): round(float(np.quantile(traffic, q)), 1) for q in TRAFFIC_QUANTILES
+        },
         "missing_temp": count_missing(table["temp"]),
         "missing_rain_mm": count_missing(table["rain_mm"]),
         "missing_calendar": int(table["is_holiday"].null_count),
-        "scale_min": round(float(values.min()), 3),
-        "scale_median": round(float(np.median(values)), 3),
-        "scale_max": round(float(values.max()), 3),
     }
 
 
@@ -263,7 +236,6 @@ def main() -> None:
     calendar_path = data_path(config["calendar"])
     sensors_path = repo_path(config["sensors"])
     output = data_path(config["output"])
-    scale_path = data_path(config["scale_output"])
     report_path = data_path(config["report"])
     require_files(history_path, weather_path, calendar_path, sensors_path)
 
@@ -284,60 +256,30 @@ def main() -> None:
     # 날씨가 있는 시간(구간 끝 H 가 날씨 첫 시각 이후)만 쓴다.
     first_hour = np.datetime64(pc.min(weather["hour"]).as_py(), "s")
     last_hour = np.datetime64(pc.max(weather["hour"]).as_py(), "s")
-    hourly, short_hours = aggregate_hourly(history, config["min_bins"])
+    hourly, short_hours = aggregate_hourly(
+        history, config["min_bins"], config["bins_per_hour"]
+    )
     ends = hourly["hour_end"].to_numpy()
     in_weather = (ends >= first_hour) & (ends <= last_hour)
     located = np.isin(hourly["sensor_code"].to_numpy(), list(places))
     hourly = hourly.filter(pa.array(in_weather & located))
 
-    scales = sensor_scales(
-        hourly["sensor_code"].to_numpy(),
-        hourly["hour_end"].to_numpy() - HOUR.astype("timedelta64[s]"),
-        hourly["visitor_mean"].to_numpy(),
-        config["train_start"],
-        config["train_end"],
-        config["quantile"],
-    )
-    zero_scale = sorted(code for code, scale in scales.items() if scale <= 0)
-    usable = {code: scale for code, scale in scales.items() if scale > 0}
-    no_train_rows = sorted(set(hourly["sensor_code"].to_pylist()) - set(scales))
-    hourly = hourly.filter(
-        pa.array(np.isin(hourly["sensor_code"].to_numpy(), list(usable)))
-    )
-
-    table = build_training_set(hourly, usable, districts, places, weather, calendar)
+    table = build_training_set(hourly, districts, places, weather, calendar)
     output.parent.mkdir(parents=True, exist_ok=True)
     pq.write_table(table, output, compression=PARQUET_COMPRESSION)
 
-    scale_path.write_text(
-        json.dumps(
-            {
-                "quantile": config["quantile"],
-                "train_start": config["train_start"],
-                "train_end": config["train_end"],
-                "scales": {str(code): scale for code, scale in sorted(usable.items())},
-            },
-            indent=1,
-        )
-        + "\n",
-        encoding="utf-8",
-    )
     dropped = {
         "rows_dropped_other_district": rows_other_district,
         "hours_dropped_few_bins": short_hours,
         "sensors_without_location": no_place,
-        "sensors_zero_scale": zero_scale,
-        "sensors_no_train_rows": no_train_rows,
     }
+    report = make_report(table, dropped)
     report_path.write_text(
-        json.dumps(make_report(table, dropped, usable), ensure_ascii=False, indent=1)
-        + "\n",
-        encoding="utf-8",
+        json.dumps(report, ensure_ascii=False, indent=1) + "\n", encoding="utf-8"
     )
     print(
-        f"행 {table.num_rows:,}, 센서 {len(usable)}개, "
-        f"결측 기온 {count_missing(table['temp']):,} "
-        f"강수 {count_missing(table['rain_mm']):,} "
+        f"행 {table.num_rows:,}, 센서 {report['sensors']}개, "
+        f"결측 기온 {report['missing_temp']:,} 강수 {report['missing_rain_mm']:,} "
         f"→ {output} ({output.stat().st_size / 1e6:.1f} MB, "
         f"{time.time() - started:.0f}s)",
         flush=True,

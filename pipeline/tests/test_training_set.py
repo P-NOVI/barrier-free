@@ -6,6 +6,7 @@ import numpy as np
 import pyarrow as pa
 
 STEPS = Path(__file__).resolve().parents[1] / "steps"
+BINS_PER_HOUR = 6
 
 
 def load_step(filename: str):
@@ -44,18 +45,30 @@ def history_table(times: list[str], counts: list[int]) -> pa.Table:
     )
 
 
-def test_aggregate_hourly_averages_and_drops_short_hours() -> None:
+def test_aggregate_hourly_sums_to_people_per_hour_and_drops_short_hours() -> None:
     full = [f"2024-01-01T00:{m:02d}" for m in (10, 20, 30, 40, 50)] + [
         "2024-01-01T01:00"
     ]
     short = ["2024-01-01T01:10", "2024-01-01T01:20", "2024-01-01T01:30"]
     table, dropped = training.aggregate_hourly(
-        history_table(full + short, [10, 20, 30, 40, 50, 60, 5, 5, 5]), min_bins=4
+        history_table(full + short, [10, 20, 30, 40, 50, 60, 5, 5, 5]),
+        min_bins=4,
+        bins_per_hour=BINS_PER_HOUR,
     )
     assert dropped == 1
     assert table["hour_end"].to_pylist() == [datetime(2024, 1, 1, 1)]
-    assert table["visitor_mean"].to_pylist() == [35.0]
+    # 10분 값 6개의 합 = 평균 35 × 6
+    assert table["foot_traffic"].to_pylist() == [210.0]
     assert table["bins"].to_pylist() == [6]
+
+
+def test_missing_bins_are_scaled_to_a_full_hour() -> None:
+    times = [f"2024-01-01T00:{m:02d}" for m in (10, 20, 30, 40)]
+    table, _ = training.aggregate_hourly(
+        history_table(times, [10, 10, 20, 20]), 4, BINS_PER_HOUR
+    )
+    # 4개 평균 15 × 6
+    assert table["foot_traffic"].to_pylist() == [90.0]
 
 
 def test_keep_majority_district_drops_other_district_rows() -> None:
@@ -75,28 +88,13 @@ def test_keep_majority_district_drops_other_district_rows() -> None:
 
 def test_zero_counts_stay_zero() -> None:
     times = [f"2024-01-01T00:{m:02d}" for m in (10, 20, 30, 40)]
-    table, _ = training.aggregate_hourly(history_table(times, [0, 0, 0, 0]), 4)
-    assert table["visitor_mean"].to_pylist() == [0.0]
-
-
-def test_sensor_scales_use_train_period_only() -> None:
-    codes = np.array([1, 1, 1, 1, 2, 2])
-    slots = stamps(
-        "2024-01-01T10:00",
-        "2024-01-02T10:00",
-        "2024-01-02T11:00",
-        "2026-08-01T10:00",  # 학습 기간 밖: 기준값에 들어가지 않는다.
-        "2024-01-01T10:00",
-        "2024-01-01T11:00",
-    ).astype("datetime64[s]")
-    means = np.array([0.0, 10.0, 20.0, 1000.0, 3.0, 5.0], dtype=np.float32)
-    scales = training.sensor_scales(
-        codes, slots, means, "2024-01-01", "2026-07-31", quantile=0.5
+    table, _ = training.aggregate_hourly(
+        history_table(times, [0, 0, 0, 0]), 4, BINS_PER_HOUR
     )
-    assert scales == {1: 10.0, 2: 4.0}
+    assert table["foot_traffic"].to_pylist() == [0.0]
 
 
-def test_build_training_set_joins_and_normalizes() -> None:
+def test_build_training_set_joins_without_normalizing() -> None:
     hourly = pa.table(
         {
             "sensor_code": pa.array([1, 1], type=pa.int32()),
@@ -107,7 +105,7 @@ def test_build_training_set_joins_and_normalizes() -> None:
                 ),
                 type=pa.timestamp("s"),
             ),
-            "visitor_mean": pa.array([5.0, 30.0], type=pa.float32()),
+            "foot_traffic": pa.array([50.0, 300.0], type=pa.float32()),
         }
     )
     weather = pa.table(
@@ -135,7 +133,6 @@ def test_build_training_set_joins_and_normalizes() -> None:
     )
     table = training.build_training_set(
         hourly,
-        {1: 10.0},
         {1: "Gangnam-gu"},
         {1: (127.0, 37.5)},
         weather,
@@ -149,9 +146,10 @@ def test_build_training_set_joins_and_normalizes() -> None:
     assert first["hour_of_day"] == 23
     assert first["is_holiday"] is False
     assert first["rain_mm"] == 0.0 and first["temp"] == -3.0
-    assert first["congestion"] == 0.5
-    # 둘째 행은 slot_start 가 01-01 00시, 비 1.5mm, 30/10 은 1 로 자른다.
+    # 유동인구는 센서 값 그대로다.
+    assert first["foot_traffic"] == 50.0
+    # 둘째 행은 slot_start 가 01-01 00시, 비 1.5mm
     assert second["is_holiday"] is True
     assert second["rain_mm"] == 1.5
-    assert second["congestion"] == 1.0
+    assert second["foot_traffic"] == 300.0
     assert second["district"] == "Gangnam-gu"
