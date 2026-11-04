@@ -75,6 +75,8 @@ const STAR_SVG =
     '<circle cx="12" cy="12" r="12"/>' +
     '<path d="M12 6.2 13.62 10.38 18.09 10.62 14.62 13.45 15.76 17.78 12 15.35 8.24 17.78 9.38 13.45 5.91 10.62 10.38 10.38Z"/>' +
     '</svg>';
+// OSMF 출처 가이드라인: 처음에 보인 출처는 5초 뒤 접어도 되고, 접은 뒤에도 찾을 수 있어야 한다.
+const ATTRIBUTION_COLLAPSE_MS = 5000;
 // 기본값을 렌더마다 새 배열로 만들면 마커 effect 가 매번 다시 돈다
 const NO_ELEVATORS: Elevator[] = [];
 const NO_SAVED_PLACES: SavedPlace[] = [];
@@ -355,6 +357,37 @@ function useSavedPlaceMarkers(
     }, [map, places, onClick]);
 }
 
+/** 경로 데이터의 OpenStreetMap 출처. 5초 뒤 (i) 버튼으로 접히고, 누르면 다시 펼친다. */
+function OsmAttribution() {
+    const [open, setOpen] = useState(true);
+    useEffect(() => {
+        const timer = setTimeout(() => setOpen(false), ATTRIBUTION_COLLAPSE_MS);
+        return () => clearTimeout(timer);
+    }, []);
+    return (
+        <div className="map-view__attribution">
+            {open && (
+                <a
+                    href="https://www.openstreetmap.org/copyright"
+                    target="_blank"
+                    rel="noreferrer"
+                >
+                    © OpenStreetMap
+                </a>
+            )}
+            <button
+                type="button"
+                className="map-view__attribution-toggle"
+                aria-label="지도 데이터 출처"
+                aria-expanded={open}
+                onClick={() => setOpen((value) => !value)}
+            >
+                i
+            </button>
+        </div>
+    );
+}
+
 function useMyLocation(
     map: kakao.maps.Map | null,
     fix: LocationFix | null | undefined,
@@ -624,18 +657,8 @@ export default function MapView({
     return (
         <div className="map-view">
             <div ref={containerRef} className="map-view__canvas" />
-            <a
-                className="map-view__attribution"
-                href="https://www.openstreetmap.org/copyright"
-                target="_blank"
-                rel="noreferrer"
-            >
-                © OpenStreetMap contributors
-            </a>
+            <OsmAttribution />
             {popup && createPortal(popup, popupContainer)}
-            <span className="map-view__source">
-                엘리베이터 위치·인도: 서울시 공공데이터
-            </span>
             {error && (
                 <p role="alert" className="map-view__error">
                     {error}
