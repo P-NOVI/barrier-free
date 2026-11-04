@@ -6,6 +6,8 @@ data:
   # pipeline 13 단계 결과
   training_set: interim/training/hourly.parquet
   sensor_scale: interim/training/sensor_scale.json
+  # pipeline 12 단계 날짜별 달력. 쉬는 날 전날·다음날 피처를 만든다.
+  calendar: interim/calendar/daily.parquet
   model_dir: models
   model_file: congestion_model.txt
   meta_file: congestion_meta.json
@@ -33,6 +35,9 @@ features:
       - in_long_holiday
       - days_to_long_holiday
       - days_since_long_holiday
+    # 쉬는 날(공휴일·주말) 기준. 전날은 금요일·연휴 전날·공휴일 전날을, 다음날은 월요일·
+    # 연휴 다음날·공휴일 다음날을 묶는다.
+    off_adjacent: [is_before_off_day, is_after_off_day]
   categorical: [sensor_code, district]
 
 model:

@@ -39,6 +39,35 @@ def load_columns(path: Path) -> Columns:
     return columns
 
 
+def off_adjacent_flags(is_off_day: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """연속한 날짜별 쉬는 날 여부 → (쉬는 날 전날, 쉬는 날 다음날).
+
+    쉬는 날은 공휴일·주말이다. 쉬는 날 자신은 둘 다 False 이고(금요일은 전날,
+    월요일은 다음날이다), 양 끝 날짜는 이웃을 몰라 False 다.
+    """
+    off = is_off_day.astype(bool)
+    next_off = np.append(off[1:], False)
+    prev_off = np.insert(off[:-1], 0, False)
+    return ~off & next_off, ~off & prev_off
+
+
+def add_off_adjacent(columns: Columns, calendar_path: Path) -> None:
+    """달력(12 단계)으로 is_before_off_day, is_after_off_day 열을 더한다."""
+    table = pq.read_table(calendar_path, columns=["date", "is_off_day"])
+    dates = table["date"].to_numpy().astype("datetime64[D]")
+    if not np.all(np.diff(dates) == np.timedelta64(1, "D")):
+        raise ValueError("달력 날짜가 하루씩 이어지지 않습니다.")
+    before, after = off_adjacent_flags(
+        table["is_off_day"].to_numpy(zero_copy_only=False)
+    )
+    days = columns["slot_start"].astype("datetime64[D]")
+    position = np.searchsorted(dates, days)
+    if np.any(position >= len(dates)) or np.any(dates[position] != days):
+        raise ValueError("달력이 학습셋 날짜를 덮지 못합니다.")
+    columns["is_before_off_day"] = before[position].astype(np.float32)
+    columns["is_after_off_day"] = after[position].astype(np.float32)
+
+
 def take(columns: Columns, mask: np.ndarray) -> Columns:
     return {name: values[mask] for name, values in columns.items()}
 

@@ -8,7 +8,8 @@
 1. baseline: 센서·요일·시각별 중앙값(평균도 같이 잰다).
 2. 목적함수(cross_entropy, L1, L2)마다 같은 피처로 학습해 검증 구간 MAE 가 가장
    낮은 것을 고른다. 테스트 구간은 고르는 데 쓰지 않고 보고만 한다.
-3. 고른 목적함수로 날씨 제외, 공휴일 제외 모델을 학습해 기여를 비교한다.
+3. 고른 목적함수로 날씨 제외, 공휴일 제외, 쉬는 날 전후 제외 모델을 학습해 기여를
+   비교한다.
 4. 고른 모델의 테스트 구간 오차를 시각·요일 종류·강수·센서별로 나눠 보고한다.
 """
 
@@ -27,6 +28,7 @@ from congestion import baseline, metrics
 from congestion.common import CONFIG_PATH, data_path, load_config, repo_path
 from congestion.data import (
     Columns,
+    add_off_adjacent,
     build_features,
     load_columns,
     make_vocab,
@@ -34,10 +36,11 @@ from congestion.data import (
     take,
 )
 
-FULL_GROUPS = ["base", "weather", "holiday"]
+FULL_GROUPS = ["base", "weather", "holiday", "off_adjacent"]
 ABLATIONS = {
-    "no_weather": ["base", "holiday"],
+    "no_weather": ["base", "holiday", "off_adjacent"],
     "no_holiday": ["base", "weather"],
+    "no_off_adjacent": ["base", "weather", "holiday"],
 }
 LOW_ROWS = 1  # 센서별 오차에 넣는 최소 행 수
 IMPORTANCE_DIGITS = 4
@@ -222,6 +225,7 @@ def main() -> None:
     started = time.time()
 
     columns = load_columns(data_path(config["data"]["training_set"]))
+    add_off_adjacent(columns, data_path(config["data"]["calendar"]))
     masks = split_masks(columns["slot_start"], config["split"])
     parts = {name: take(columns, mask) for name, mask in masks.items()}
     vocab = make_vocab(columns, config["features"]["categorical"])

@@ -68,6 +68,36 @@ def test_build_features_maps_categories_and_selects_groups() -> None:
     assert matrix[:2, 3].tolist() == [0, 2]
 
 
+def test_off_adjacent_flags() -> None:
+    # 평일, 쉬는 날, 평일, 쉬는 날 2일, 평일 2일
+    off = np.array([False, True, False, True, True, False, False])
+    before, after = data.off_adjacent_flags(off)
+    assert before.tolist() == [True, False, True, False, False, False, False]
+    assert after.tolist() == [False, False, True, False, False, True, False]
+
+
+def test_add_off_adjacent_maps_rows_to_days(tmp_path) -> None:
+    import pyarrow as pa
+    import pyarrow.parquet as pq
+
+    days = np.arange("2026-10-01", "2026-10-08", dtype="datetime64[D]")
+    off = [False, True, True, False, False, False, True]
+    path = tmp_path / "daily.parquet"
+    pq.write_table(
+        pa.table({"date": pa.array(days, type=pa.date32()), "is_off_day": off}), path
+    )
+    columns = {
+        "slot_start": np.array(
+            ["2026-10-01T09:00", "2026-10-04T23:00", "2026-10-06T00:00"],
+            dtype="datetime64[s]",
+        )
+    }
+    data.add_off_adjacent(columns, path)
+    # 10/1 은 다음날이 쉬는 날, 10/4 는 어제가 쉬는 날, 10/6 은 다음날이 쉬는 날
+    assert columns["is_before_off_day"].tolist() == [1.0, 0.0, 1.0]
+    assert columns["is_after_off_day"].tolist() == [0.0, 1.0, 0.0]
+
+
 def test_baseline_median_with_sensor_fallback() -> None:
     sensors = np.array([1, 1, 1, 2], dtype=np.int32)
     dow = np.array([0, 0, 0, 0], dtype=np.int8)
