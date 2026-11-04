@@ -23,20 +23,20 @@ const ITEMS: { tab: Tab; label: string; icon: string }[] = [
     },
 ];
 
-type BottomNavProps = {
+type MenuBarProps = {
     tab: Tab;
     onSelect: (tab: Tab) => void;
 };
 
-/** 화면 아래 메뉴 바: 검색, 길찾기, 저장, My */
-export default function BottomNav({ tab, onSelect }: BottomNavProps) {
+/** 메뉴: 검색, 길찾기, 저장, My. 좁은 화면은 화면 아래, 넓은 화면은 왼쪽 패널 위에 둔다. */
+export default function MenuBar({ tab, onSelect }: MenuBarProps) {
     return (
-        <nav className="bottom-nav" aria-label="메뉴">
+        <nav className="menu-bar" aria-label="메뉴">
             {ITEMS.map((item) => (
                 <button
                     key={item.tab}
                     type="button"
-                    className="bottom-nav__item"
+                    className="menu-bar__item"
                     aria-current={item.tab === tab ? 'page' : undefined}
                     onClick={() => onSelect(item.tab)}
                 >

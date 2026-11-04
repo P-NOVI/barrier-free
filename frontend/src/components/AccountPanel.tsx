@@ -16,7 +16,7 @@ type SessionState =
     | { status: 'error' }
     | { status: 'success'; session: Session };
 
-type MyPanelProps = {
+type AccountPanelProps = {
     /** 처음 띄울 알림 (예: 소셜 로그인 실패) */
     initialMessage?: string;
     /** 로그아웃해서 사용자가 바뀌었을 때 */
@@ -24,13 +24,13 @@ type MyPanelProps = {
 };
 
 /**
- * My 탭: 로그인·로그아웃. 로그인하지 않아도 기록·장소는 이 브라우저에 이어지고,
+ * 로그인·로그아웃. 넓은 화면은 오른쪽 위 계정 메뉴, 좁은 화면은 My 탭에 보인다. 로그인하지 않아도 기록·장소는 이 브라우저에 이어지고,
  * 로그인하면 계정으로 옮겨진다.
  */
-export default function MyPanel({
+export default function AccountPanel({
     initialMessage = '',
     onSessionChange,
-}: MyPanelProps) {
+}: AccountPanelProps) {
     const [state, setState] = useState<SessionState>({ status: 'loading' });
     const [message, setMessage] = useState(initialMessage);
 
@@ -60,11 +60,11 @@ export default function MyPanel({
     };
 
     if (state.status === 'loading') {
-        return <p className="my-panel__status">불러오는 중…</p>;
+        return <p className="account-panel__status">불러오는 중…</p>;
     }
     if (state.status === 'error') {
         return (
-            <p className="my-panel__status">
+            <p className="account-panel__status">
                 서버에 연결하지 못해 로그인할 수 없어요. 잠시 뒤 다시 열어
                 주세요.
             </p>
@@ -73,15 +73,15 @@ export default function MyPanel({
 
     const { providers } = state.session;
     return (
-        <div className="my-panel">
+        <div className="account-panel">
             {message && (
-                <p role="alert" className="my-panel__error">
+                <p role="alert" className="account-panel__error">
                     {message}
                 </p>
             )}
             {providers.length > 0 ? (
                 <>
-                    <p className="my-panel__status">
+                    <p className="account-panel__status">
                         {providers
                             .map((provider) => PROVIDER_LABELS[provider])
                             .join(' · ')}{' '}
@@ -89,7 +89,7 @@ export default function MyPanel({
                     </p>
                     <button
                         type="button"
-                        className="my-panel__button"
+                        className="account-panel__button"
                         onClick={handleLogout}
                     >
                         로그아웃
@@ -97,14 +97,14 @@ export default function MyPanel({
                 </>
             ) : (
                 <>
-                    <p className="my-panel__status">
+                    <p className="account-panel__status">
                         로그인하면 기록과 저장한 장소를 다른 기기에서도 볼 수
                         있어요.
                     </p>
                     {PROVIDERS.map((provider) => (
                         <a
                             key={provider}
-                            className={`my-panel__button my-panel__button--${provider}`}
+                            className={`account-panel__button account-panel__button--${provider}`}
                             href={loginUrl(provider)}
                         >
                             {PROVIDER_LABELS[provider]}로 로그인

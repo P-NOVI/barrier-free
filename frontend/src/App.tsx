@@ -1,10 +1,18 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+    type ReactNode,
+    useCallback,
+    useEffect,
+    useMemo,
+    useRef,
+    useState,
+} from 'react';
 
-import BottomNav from './components/BottomNav';
+import AccountMenu from './components/AccountMenu';
+import AccountPanel from './components/AccountPanel';
 import BottomSheet from './components/BottomSheet';
 import MapView, { type FitPadding } from './components/MapView';
+import MenuBar from './components/MenuBar';
 import MyLocationControl from './components/MyLocationControl';
-import MyPanel from './components/MyPanel';
 import NavigationPanel from './components/NavigationPanel';
 import PlaceInfoCard from './components/PlaceInfoCard';
 import PlaceSearch from './components/PlaceSearch';
@@ -54,13 +62,14 @@ import {
     VOICE_ON_TEXT,
 } from './lib/voiceGuidance';
 
-// 이보다 넓으면 검색창·메뉴·시트를 왼쪽에 380px 폭으로 둔다. index.css 와 같은 값.
+// 이보다 넓으면 메뉴·검색을 왼쪽 패널(위에 메뉴)에 두고 지도는 그 오른쪽에 둔다.
+// 좁으면 위에 검색창, 아래에 메뉴와 오르내리는 시트를 둔다. index.css 와 같은 값.
 const WIDE_LAYOUT = '(min-width: 768px)';
-// 경로에 맞출 때 지도 위 검색창·메뉴·시트에 가리지 않게 둘 여백(px). 위는 검색창 높이.
+// 경로에 맞출 때 지도 위 검색창·버튼에 가리지 않게 둘 여백(px)
 const FIT_PADDING: Record<'wide' | 'narrow', FitPadding> = {
-    // 왼쪽은 메뉴·시트(여백 12 + 폭 380)만큼 더 둔다.
-    wide: { top: 80, right: 48, bottom: 48, left: 440 },
-    // 좁은 화면은 지도가 메뉴·시트 위에서 끝나므로 아래 여백을 더 두지 않는다.
+    // 지도가 패널 오른쪽에서 시작하므로 왼쪽 여백을 더 두지 않는다.
+    wide: { top: 48, right: 48, bottom: 48, left: 48 },
+    // 위는 검색창 높이. 지도가 메뉴·시트 위에서 끝나므로 아래 여백을 더 두지 않는다.
     narrow: { top: 80, right: 32, bottom: 32, left: 32 },
 };
 const SHEET_TITLES: Record<Exclude<Tab, 'search'>, string> = {
@@ -89,14 +98,15 @@ export default function App() {
     const speechSupported = canSpeak();
     const [voice, setVoice] = useState(speechSupported);
     const [elevators, setElevators] = useState<Elevator[]>([]);
-    // 소셜 로그인에 실패하고 돌아오면 My 탭을 열어 알린다.
+    // 소셜 로그인에 실패하고 돌아오면 계정 메뉴(넓은 화면)나 My 탭(좁은 화면)을 열어 알린다.
     const [loginFailed] = useState(() => takeLoginFailure());
-    // 아래 메뉴에서 고른 탭과 시트 단계. 검색 탭은 시트를 닫는다.
+    const loginMessage = loginFailed ? LOGIN_FAILED_MESSAGE : undefined;
+    // 메뉴에서 고른 탭과 시트 단계. 좁은 화면에서 검색 탭은 시트를 닫는다.
     const [sheet, setSheet] = useState<{ tab: Tab; snap: SheetSnap }>(() => ({
-        tab: loginFailed ? 'my' : 'search',
+        tab: loginFailed && !wide ? 'my' : 'search',
         snap: 'half',
     }));
-    const sheetOpen = !navigating && sheet.tab !== 'search';
+    const sheetOpen = !navigating && !wide && sheet.tab !== 'search';
     const searchInput = useRef<HTMLInputElement>(null);
     const [elevatorError, setElevatorError] = useState<string | null>(null);
     // 즐겨찾기·내 장소. 지도에 별 아이콘으로 보인다.
@@ -304,6 +314,66 @@ export default function App() {
 
     const stopFollowing = useCallback(() => setFollowing(false), []);
 
+    const searchBox = (
+        <TopSearch
+            near={mapCenter}
+            inputRef={searchInput}
+            onPickPlace={showSearchedPlace}
+            onSelectRoute={handleSelectRoute}
+            inline={wide}
+        />
+    );
+    const savedList = (
+        <SavedPanel
+            places={savedPlaces.places}
+            available={savedPlaces.available}
+            error={savedPlaces.error}
+            onSelect={handleSelectSavedPlace}
+            onDelete={savedPlaces.remove}
+        />
+    );
+    // 탭마다 패널(넓은 화면)이나 시트(좁은 화면)에 보일 내용
+    const tabContent: Record<Tab, ReactNode> = {
+        search: searchBox,
+        route: (
+            <>
+                <PlaceSearch
+                    endpoints={endpoints}
+                    near={mapCenter}
+                    onSelect={handleSelect}
+                    onSelectRoute={handleSelectRoute}
+                    onLocate={setMyLocation}
+                />
+                <RoutePanel
+                    preset={preset}
+                    endpoints={endpoints}
+                    route={route}
+                    notes={elevatorRoute.stops.map(elevatorStopText)}
+                    onPresetChange={setPreset}
+                    onReset={() => setEndpoints(NO_ENDPOINTS)}
+                    onStartNavigation={startNavigation}
+                />
+            </>
+        ),
+        saved: savedList,
+        // 즐겨찾기·내 장소를 함께 보인다. 넓은 화면은 로그인을 오른쪽 위 계정 메뉴에 둔다.
+        my: (
+            <div className="my-tab">
+                {savedList}
+                {!wide && (
+                    <section className="my-tab__account" aria-label="계정">
+                        <h3 className="saved-panel__title">계정</h3>
+                        <AccountPanel
+                            initialMessage={loginMessage}
+                            onSessionChange={savedPlaces.reload}
+                        />
+                    </section>
+                )}
+            </div>
+        ),
+    };
+    const showPanel = wide && !navigating;
+
     return (
         <div
             className="app"
@@ -311,7 +381,7 @@ export default function App() {
             data-sheet={sheetOpen ? sheet.snap : 'closed'}
             data-navigating={navigating || undefined}
         >
-            <h1 className="visually-hidden">베리어프리</h1>
+            {!showPanel && <h1 className="visually-hidden">베리어프리</h1>}
             <MapView
                 center={focus ?? undefined}
                 start={start}
@@ -371,14 +441,24 @@ export default function App() {
                 onDragStart={stopFollowing}
                 myLocation={navigationFix ?? myLocation}
             />
-            {!navigating && (
-                <TopSearch
-                    near={mapCenter}
-                    inputRef={searchInput}
-                    onPickPlace={showSearchedPlace}
-                    onSelectRoute={handleSelectRoute}
+            {showPanel && (
+                <aside className="side-panel" aria-label="메뉴">
+                    <header className="side-panel__header">
+                        <h1 className="side-panel__title">베리어프리</h1>
+                        <MenuBar tab={sheet.tab} onSelect={handleSelectTab} />
+                    </header>
+                    <div className="side-panel__body">
+                        {tabContent[sheet.tab]}
+                    </div>
+                </aside>
+            )}
+            {showPanel && (
+                <AccountMenu
+                    initialMessage={loginMessage}
+                    onSessionChange={savedPlaces.reload}
                 />
             )}
+            {!wide && !navigating && searchBox}
             {navigating && (
                 <NavigationPanel
                     route={route}
@@ -397,49 +477,11 @@ export default function App() {
                         setSheet((current) => ({ ...current, snap }))
                     }
                 >
-                    {sheet.tab === 'route' && (
-                        <>
-                            <PlaceSearch
-                                endpoints={endpoints}
-                                near={mapCenter}
-                                onSelect={handleSelect}
-                                onSelectRoute={handleSelectRoute}
-                                onLocate={setMyLocation}
-                            />
-                            <RoutePanel
-                                preset={preset}
-                                endpoints={endpoints}
-                                route={route}
-                                notes={elevatorRoute.stops.map(
-                                    elevatorStopText,
-                                )}
-                                onPresetChange={setPreset}
-                                onReset={() => setEndpoints(NO_ENDPOINTS)}
-                                onStartNavigation={startNavigation}
-                            />
-                        </>
-                    )}
-                    {sheet.tab === 'saved' && (
-                        <SavedPanel
-                            places={savedPlaces.places}
-                            available={savedPlaces.available}
-                            error={savedPlaces.error}
-                            onSelect={handleSelectSavedPlace}
-                            onDelete={savedPlaces.remove}
-                        />
-                    )}
-                    {sheet.tab === 'my' && (
-                        <MyPanel
-                            initialMessage={
-                                loginFailed ? LOGIN_FAILED_MESSAGE : undefined
-                            }
-                            onSessionChange={savedPlaces.reload}
-                        />
-                    )}
+                    {tabContent[sheet.tab]}
                 </BottomSheet>
             )}
-            {!navigating && (
-                <BottomNav tab={sheet.tab} onSelect={handleSelectTab} />
+            {!wide && !navigating && (
+                <MenuBar tab={sheet.tab} onSelect={handleSelectTab} />
             )}
             <MyLocationControl
                 onLocate={showMyLocation}

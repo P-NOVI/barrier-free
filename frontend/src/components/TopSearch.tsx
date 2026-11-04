@@ -26,20 +26,24 @@ type TopSearchProps = {
     onPickPlace: (place: PickedPlace) => void;
     /** 최근 경로를 고르면 출발·도착을 함께 바꾼다. */
     onSelectRoute: (entry: RouteHistory) => void;
+    /** true 면 왼쪽 패널 안에 두고, 최근 기록·검색 결과를 늘 펼쳐 둔다(넓은 화면). */
+    inline?: boolean;
 };
 
-/** 화면 맨 위 장소 검색창. 누르면 최근 경로·최근 검색이 아래로 펼쳐진다. */
+/** 장소 검색창. 누르면 최근 경로·최근 검색이 아래로 펼쳐진다. */
 export default function TopSearch({
     near,
     inputRef,
     onPickPlace,
     onSelectRoute,
+    inline = false,
 }: TopSearchProps) {
     const [text, setText] = useState('');
     // 사용자가 입력을 고친 뒤에만 검색한다.
     const [editing, setEditing] = useState(false);
     // 입력창을 누르면 열고, 포커스가 검색창 밖으로 나가면 닫는다.
-    const [listOpen, setListOpen] = useState(false);
+    const [opened, setOpened] = useState(false);
+    const listOpen = inline || opened;
     const typing = editing && text.trim() !== '';
     const query = useDebouncedValue(editing ? text : '', SEARCH_DELAY_MS);
     const search = usePlaceSearch(query, near);
@@ -50,7 +54,7 @@ export default function TopSearch({
     const close = (label: string) => {
         setText(label);
         setEditing(false);
-        setListOpen(false);
+        setOpened(false);
         // 휴대폰 키보드를 내려 지도와 장소 카드가 보이게 한다.
         if (document.activeElement instanceof HTMLElement) {
             document.activeElement.blur();
@@ -96,10 +100,10 @@ export default function TopSearch({
     return (
         <div
             role="search"
-            className="top-search"
+            className={inline ? 'top-search top-search--inline' : 'top-search'}
             onBlur={(event) => {
                 if (!event.currentTarget.contains(event.relatedTarget)) {
-                    setListOpen(false);
+                    setOpened(false);
                 }
             }}
         >
@@ -119,17 +123,17 @@ export default function TopSearch({
                     aria-label="장소 검색"
                     autoComplete="off"
                     aria-controls={listId}
-                    onFocus={() => setListOpen(true)}
-                    onClick={() => setListOpen(true)}
+                    onFocus={() => setOpened(true)}
+                    onClick={() => setOpened(true)}
                     onChange={(event) => {
                         setText(event.target.value);
                         setEditing(true);
-                        setListOpen(true);
+                        setOpened(true);
                     }}
                     onKeyDown={(event) => {
                         if (event.key === 'Escape') {
                             setEditing(false);
-                            setListOpen(false);
+                            setOpened(false);
                         }
                     }}
                 />
