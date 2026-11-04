@@ -55,11 +55,29 @@ body,
     right: 4px;
     bottom: 4px;
     z-index: 10;
-    padding: 0 4px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
     font-size: 11px;
+}
+
+.map-view__attribution a {
+    padding: 0 4px;
     color: var(--text);
     background: var(--overlay-bg);
     text-decoration: none;
+}
+
+.map-view__attribution-toggle {
+    width: 18px;
+    height: 18px;
+    padding: 0;
+    border: 1px solid var(--muted);
+    border-radius: 50%;
+    font: italic 600 11px/1 serif;
+    color: var(--muted);
+    background: var(--overlay-bg);
+    cursor: pointer;
 }
 
 /* 좁은 화면: 검색창 아래 왼쪽 */
@@ -82,18 +100,6 @@ body,
     color: #fff;
     background: #238cfa;
     border-color: #238cfa;
-}
-
-/* OpenStreetMap 출처 표기 왼쪽 */
-.map-view__source {
-    position: absolute;
-    right: 176px;
-    bottom: 4px;
-    z-index: 10;
-    padding: 0 4px;
-    font-size: 11px;
-    color: var(--text);
-    background: var(--overlay-bg);
 }
 
 .map-view__error {
