@@ -1,0 +1,56 @@
+# 경로 기준
+# - interim/… : 데이터 폴더 (ml/.env 의 DATA_DIR, 없으면 저장소 data/). pipeline 과 같은 폴더다.
+# - models/… : 저장소 루트
+
+data:
+  # pipeline 13 단계 결과
+  training_set: interim/training/hourly.parquet
+  sensor_scale: interim/training/sensor_scale.json
+  model_dir: models
+  model_file: congestion_model.txt
+  meta_file: congestion_meta.json
+  eval_file: congestion_eval.json
+
+# 슬롯 시작 시각(slot_start) 기준. 학습은 valid_start 전, 검증(조기 종료용)은 valid_start ~
+# test_start 전, 테스트는 test_start ~ test_end(그날 포함)다.
+split:
+  valid_start: "2026-06-01"
+  test_start: "2026-08-01"
+  test_end: "2026-10-25"
+
+features:
+  # 서비스에서는 예보를 넣으므로 실측 그대로 쓰지 않고 구간으로 줄인다.
+  temp_bin_c: 5
+  # 강수 등급: 0 이하 → 0, (0,1] → 1, (1,5] → 2, (5,20] → 3, 20 초과 → 4 (mm)
+  rain_bins_mm: [0, 1, 5, 20]
+  groups:
+    base: [sensor_code, district, lon, lat, day_of_week, hour_of_day]
+    weather: [temp_bin, rain_grade]
+    holiday:
+      - is_holiday
+      - is_off_day
+      - off_run_length
+      - in_long_holiday
+      - days_to_long_holiday
+      - days_since_long_holiday
+  categorical: [sensor_code, district]
+
+model:
+  # 목적함수를 비교해 검증 구간 MAE 가 가장 낮은 것을 최종 모델로 쓴다.
+  objectives: [cross_entropy, regression_l1, regression_l2]
+  num_boost_round: 3000
+  early_stopping_rounds: 100
+  seed: 42
+  params:
+    learning_rate: 0.05
+    num_leaves: 127
+    min_data_in_leaf: 200
+    feature_fraction: 0.8
+    bagging_fraction: 0.8
+    bagging_freq: 1
+    lambda_l2: 1.0
+    verbosity: -1
+
+# 평가 보고서에 남기는 센서별 오차의 상위(나쁜 쪽) 개수
+report:
+  worst_sensors: 10

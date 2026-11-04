@@ -28,6 +28,10 @@
 | `pipeline/` | 전체 실행 (결과 있는 단계는 건너뜀) | `uv run python steps/run_all.py` · `--from 02` · `--force` |
 | `pipeline/` | 테스트 | `uv run pytest` |
 | `pipeline/` | 린트 · 포맷 | `uv run ruff check .` · `uv run ruff format .` |
+| `ml/` | 설치 | `uv sync` |
+| `ml/` | 학습 · 평가 · 저장 | `uv run python -m congestion.train` |
+| `ml/` | 테스트 | `uv run pytest` |
+| `ml/` | 린트 · 포맷 | `uv run ruff check .` · `uv run ruff format .` |
 
 - Python 도구는 uv + ruff + pytest로 통일한다. pip, poetry, black은 쓰지 않는다.
 - 프론트 도구는 npm + ESLint + Prettier + Vitest로 통일한다. yarn, pnpm은 쓰지 않는다.
