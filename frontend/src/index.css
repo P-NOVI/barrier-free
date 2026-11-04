@@ -12,7 +12,6 @@
     --brand: #1a73e8;
     --my-location: #1a73e8;
     --route-arrow: rgba(255, 255, 255, 0.6);
-    --congestion-pin: #e8710a;
     --saved-place: #0070dd;
     --side-panel-width: 380px;
     /* 카카오 로그인 버튼 색(카카오 디자인 가이드) */
@@ -205,51 +204,7 @@ body,
     box-shadow: var(--panel-shadow);
 }
 
-/* 혼잡도 핀: 센서 위치에 유동인구 숫자. 누르면 설치 주소와 측정 시각을 아래로 펼친다. */
-.congestion-pin {
-    position: relative;
-    display: block;
-    padding: 0;
-    border: none;
-    background: none;
-    cursor: pointer;
-}
-
-.congestion-pin__count {
-    display: block;
-    min-width: 28px;
-    padding: 2px 8px;
-    border: 2px solid #fff;
-    border-radius: 14px;
-    font-size: 12px;
-    font-weight: 700;
-    line-height: 20px;
-    text-align: center;
-    color: #fff;
-    background: var(--congestion-pin);
-    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
-}
-
-.congestion-pin__detail {
-    position: absolute;
-    top: calc(100% + 4px);
-    left: 50%;
-    display: none;
-    padding: 4px 8px;
-    border-radius: 6px;
-    font-size: 12px;
-    white-space: nowrap;
-    color: var(--text);
-    background: var(--bg);
-    box-shadow: var(--panel-shadow);
-    transform: translateX(-50%);
-}
-
-.congestion-pin--open .congestion-pin__detail {
-    display: block;
-}
-
-/* 좁은 화면: 엘리베이터 토글 아래 왼쪽 */
+/* 좁은 화면: 검색창 아래 왼쪽 */
 .account-menu {
     position: absolute;
     top: 182px;
@@ -410,52 +365,6 @@ body,
     border-color: var(--kakao-yellow);
     color: var(--kakao-label);
     background: var(--kakao-yellow);
-}
-
-/* 좁은 화면: 내 위치 버튼 아래 오른쪽 */
-.congestion-toggle {
-    position: absolute;
-    top: 182px;
-    right: 12px;
-    z-index: 15;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-
-.congestion-toggle__button {
-    flex: none;
-    height: 44px;
-    padding: 0 16px;
-    border: none;
-    border-radius: 22px;
-    font: inherit;
-    font-weight: 600;
-    color: var(--text);
-    background: var(--bg);
-    box-shadow: var(--panel-shadow);
-    cursor: pointer;
-}
-
-.congestion-toggle__button[aria-pressed='true'] {
-    color: #fff;
-    background: var(--congestion-pin);
-}
-
-.congestion-toggle__message {
-    max-width: 240px;
-    margin: 0;
-    padding: 6px 10px;
-    border-radius: 8px;
-    font-size: 13px;
-    color: var(--muted);
-    background: var(--bg);
-    box-shadow: var(--panel-shadow);
-}
-
-.congestion-toggle__message[role='alert'] {
-    color: var(--error-text);
-    background: var(--error-bg);
 }
 
 .route-panel {
@@ -1152,12 +1061,6 @@ body,
     .my-location-control {
         top: auto;
         bottom: 32px;
-    }
-
-    /* 내 위치 버튼 위 */
-    .congestion-toggle {
-        top: auto;
-        bottom: 84px;
     }
 
     /* 패널 카드 오른쪽 위 */
