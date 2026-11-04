@@ -194,3 +194,22 @@ weather:
   fill_neighbors: 3
   # 남은 기온 결측 중 앞뒤 값이 있는 이 시간 이하의 구간은 직선으로 잇는다.
   max_gap_hours: 3
+
+# 12 단계. 05 단계처럼 run_all.py 에 넣지 않고 따로 실행한다.
+calendar:
+  # 공공데이터포털 한국천문연구원 특일 정보(공휴일)
+  url: http://apis.data.go.kr/B090041/openapi/service/SpcdeInfoService
+  operation: getRestDeInfo
+  # 한 달 공휴일은 한 쪽에 다 담긴다.
+  page_size: 100
+  timeout_s: 20
+  attempts: 3
+  retry_wait_s: 5
+  # 받을 기간(이 달 포함). 연휴 묶음이 기간 끝에서 잘리지 않게 학습 기간보다 앞뒤로 넓게 잡는다.
+  start_month: "2023-12"
+  end_month: "2026-12"
+  # 쉬는 날(공휴일·주말)이 이만큼 이어지면 연휴로 본다.
+  long_holiday_min_days: 3
+  raw_dir: raw/calendar/holidays
+  output: interim/calendar/daily.parquet
+  report: interim/calendar/daily_report.json
