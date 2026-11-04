@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import elevatorsRaw from '../../public/data/elevators.json?raw';
-import { elevatorName, fetchElevators, parseElevators } from './elevators';
+import { fetchElevators, parseElevators } from './elevators';
 
 const SAMPLE = {
     id: '211578',
@@ -9,22 +9,11 @@ const SAMPLE = {
     district: '종로구',
     nodeType: 1,
     position: [126.9918, 37.5725],
+    exit: '4',
 };
 
 afterEach(() => {
     vi.unstubAllGlobals();
-});
-
-describe('elevatorName', () => {
-    it('역명 뒤에 엘리베이터를 붙인다', () => {
-        const [elevator] = parseElevators([SAMPLE]);
-        expect(elevatorName(elevator)).toBe('종로3가 엘리베이터');
-    });
-
-    it('역명이 비어 있으면 엘리베이터만 쓴다', () => {
-        const [elevator] = parseElevators([{ ...SAMPLE, station: '' }]);
-        expect(elevatorName(elevator)).toBe('엘리베이터');
-    });
 });
 
 describe('parseElevators', () => {
@@ -35,6 +24,20 @@ describe('parseElevators', () => {
     it('역명이 빈 문자열이어도 받는다', () => {
         const [elevator] = parseElevators([{ ...SAMPLE, station: '' }]);
         expect(elevator.station).toBe('');
+    });
+
+    it('출구 번호가 null 이어도 받는다', () => {
+        const [elevator] = parseElevators([{ ...SAMPLE, exit: null }]);
+        expect(elevator.exit).toBeNull();
+    });
+
+    it('출구 번호가 없거나 문자열이 아니면 실패한다', () => {
+        const noExit: Record<string, unknown> = { ...SAMPLE };
+        delete noExit.exit;
+        expect(() => parseElevators([noExit])).toThrow('0번 항목');
+        expect(() => parseElevators([{ ...SAMPLE, exit: 4 }])).toThrow(
+            '0번 항목',
+        );
     });
 
     it('배열이 아니면 실패한다', () => {
@@ -57,7 +60,7 @@ describe('parseElevators', () => {
     });
 
     // 임시 JSON 을 쓰는 동안만 둔다. /api/elevators 로 바꾸면 이 케이스도 지운다.
-    it('make_elevators.py 가 만든 실제 데이터 643건이 모두 통과한다', () => {
+    it('make_elevators.py·add_elevator_exits.py 가 만든 실제 데이터 643건이 모두 통과한다', () => {
         expect(parseElevators(JSON.parse(elevatorsRaw))).toHaveLength(643);
     });
 });

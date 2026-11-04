@@ -11,12 +11,9 @@ export type Elevator = {
     district: string;
     nodeType: number;
     position: LngLat;
+    /** 가장 가까운 지하철 출구 번호. 예: "4", "3-1". 모르면 null */
+    exit: string | null;
 };
-
-/** 지도 마커와 장소 카드에 보일 이름. 예: "강남역 엘리베이터". 역명이 없으면 "엘리베이터" */
-export function elevatorName(elevator: Elevator): string {
-    return elevator.station ? `${elevator.station} 엘리베이터` : '엘리베이터';
-}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
     return typeof value === 'object' && value !== null;
@@ -41,7 +38,8 @@ export function parseElevators(data: unknown): Elevator[] {
             typeof item.station !== 'string' ||
             typeof item.district !== 'string' ||
             typeof item.nodeType !== 'number' ||
-            !isLngLat(item.position)
+            !isLngLat(item.position) ||
+            (item.exit !== null && typeof item.exit !== 'string')
         ) {
             throw new Error(`엘리베이터 ${index}번 항목 형식이 다릅니다.`);
         }
@@ -51,6 +49,7 @@ export function parseElevators(data: unknown): Elevator[] {
             district: item.district,
             nodeType: item.nodeType,
             position: item.position,
+            exit: item.exit,
         };
     });
 }

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import AccountMenu from './components/AccountMenu';
 import CongestionToggle from './components/CongestionToggle';
@@ -16,7 +16,7 @@ import { useRouteHistory } from './hooks/useRouteHistory';
 import { useSavedPlaces } from './hooks/useSavedPlaces';
 import { useVoiceGuidance } from './hooks/useVoiceGuidance';
 import { useWakeLock } from './hooks/useWakeLock';
-import { type Elevator, elevatorName, fetchElevators } from './lib/elevators';
+import { type Elevator, fetchElevators } from './lib/elevators';
 import type { LocationFix } from './lib/geolocation';
 import { type RouteHistory, routeEndpoints } from './lib/historyApi';
 import { type LngLat, SEOUL_CITY_HALL } from './lib/kakaoMap';
@@ -36,6 +36,12 @@ import {
     type PickedPlace,
     toPickedPlace,
 } from './lib/selection';
+import {
+    elevatorExitsText,
+    elevatorStopText,
+    stationElevators,
+    toElevatorEndpoints,
+} from './lib/stationElevators';
 import {
     canSpeak,
     speak,
@@ -78,11 +84,15 @@ export default function App() {
     const congestion = useCongestion(showCongestion);
     const [elevators, setElevators] = useState<Elevator[]>([]);
     const [elevatorError, setElevatorError] = useState<string | null>(null);
-    const [showElevators, setShowElevators] = useState(false);
     // 즐겨찾기·내 장소. 지도에 별 아이콘으로 보인다.
     const savedPlaces = useSavedPlaces();
-    const start = endpoints.start?.position ?? null;
-    const goal = endpoints.goal?.position ?? null;
+    // 계단을 못 쓰는 이동 조건이면 역인 출발·도착을 그 역 엘리베이터로 바꿔 경로를 찾는다.
+    const elevatorRoute = useMemo(
+        () => toElevatorEndpoints(endpoints, preset, elevators),
+        [endpoints, preset, elevators],
+    );
+    const start = elevatorRoute.endpoints.start?.position ?? null;
+    const goal = elevatorRoute.endpoints.goal?.position ?? null;
     const route = useRoute(start, goal, preset);
     useRouteHistory(endpoints, preset, route, navigating);
     // 안내 중 경로를 다시 찾는 동안에는 전 경로를 그대로 보여 준다.
@@ -139,19 +149,13 @@ export default function App() {
         };
     }, []);
 
-    // name 을 주면 찾은 이름 대신 그 이름을 쓴다(엘리베이터). 주소는 position 으로 찾는다.
-    const pickPlace = useCallback((position: LngLat, name?: string) => {
+    const handleMapClick = useCallback((position: LngLat) => {
         // 새로 누르면 이전 카드는 닫고, 이름·주소가 오면 그때 카드를 띄운다.
         latestClick.current = position;
         setPicked(null);
         const show = (found: { name: string; address: string } | null) => {
             if (latestClick.current === position) {
-                setPicked(
-                    toPickedPlace(
-                        position,
-                        name ? { name, address: found?.address ?? '' } : found,
-                    ),
-                );
+                setPicked(toPickedPlace(position, found));
             }
         };
         findAddress(position)
@@ -166,17 +170,6 @@ export default function App() {
             // 못 찾아도 카드는 띄워서 "주소를 찾지 못했어요"를 알린다.
             .catch(() => show(null));
     }, []);
-
-    const handleMapClick = useCallback(
-        (position: LngLat) => pickPlace(position),
-        [pickPlace],
-    );
-
-    const handleElevatorClick = useCallback(
-        (elevator: Elevator) =>
-            pickPlace(elevator.position, elevatorName(elevator)),
-        [pickPlace],
-    );
 
     // 저장한 장소는 이름·주소를 저장해 두었으므로 다시 찾지 않고 카드를 띄운다.
     const showSavedPlace = useCallback((place: SavedPlace) => {
@@ -305,6 +298,7 @@ export default function App() {
                         preset={preset}
                         endpoints={endpoints}
                         route={route}
+                        notes={elevatorRoute.stops.map(elevatorStopText)}
                         onPresetChange={setPreset}
                         onReset={() => setEndpoints(NO_ENDPOINTS)}
                         onStartNavigation={startNavigation}
@@ -322,6 +316,13 @@ export default function App() {
                             // 다른 장소를 고르면 펼친 이름 칸을 닫는다.
                             key={picked.position.join(',')}
                             place={picked}
+                            note={elevatorExitsText(
+                                stationElevators(
+                                    picked.name ?? '',
+                                    picked.position,
+                                    elevators,
+                                ),
+                            )}
                             saved={placesAt(
                                 savedPlaces.places,
                                 picked.position,
@@ -348,7 +349,6 @@ export default function App() {
                 path={shownRoute?.coordinates ?? null}
                 startEntrance={shownRoute?.start_entrance}
                 goalEntrance={shownRoute?.goal_entrance}
-                elevators={showElevators ? elevators : undefined}
                 savedPlaces={savedPlaces.places}
                 fitPadding={wide ? FIT_PADDING.wide : FIT_PADDING.narrow}
                 fitRoute={!navigating}
@@ -359,7 +359,6 @@ export default function App() {
                 }
                 // 안내 중에는 지도를 눌러도 출발·도착을 바꾸지 않는다.
                 onMapClick={navigating ? undefined : handleMapClick}
-                onElevatorClick={navigating ? undefined : handleElevatorClick}
                 onSavedPlaceClick={navigating ? undefined : showSavedPlace}
                 onCenterChange={setMapCenter}
                 onDragStart={stopFollowing}
@@ -390,14 +389,6 @@ export default function App() {
                         : undefined
                 }
             />
-            <button
-                type="button"
-                className="map-toggle"
-                aria-pressed={showElevators}
-                onClick={() => setShowElevators((shown) => !shown)}
-            >
-                엘리베이터
-            </button>
             {elevatorError && (
                 <p role="alert" className="map-view__error">
                     {elevatorError}

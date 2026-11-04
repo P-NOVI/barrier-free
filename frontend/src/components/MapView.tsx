@@ -2,7 +2,6 @@ import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 
 import type { SensorCongestion } from '../lib/congestionApi';
-import { type Elevator, elevatorName } from '../lib/elevators';
 import { formatClock } from '../lib/format';
 import type { LocationFix } from '../lib/geolocation';
 import {
@@ -78,7 +77,6 @@ const STAR_SVG =
 // OSMF 출처 가이드라인: 처음에 보인 출처는 5초 뒤 접어도 되고, 접은 뒤에도 찾을 수 있어야 한다.
 const ATTRIBUTION_COLLAPSE_MS = 5000;
 // 기본값을 렌더마다 새 배열로 만들면 마커 effect 가 매번 다시 돈다
-const NO_ELEVATORS: Elevator[] = [];
 const NO_SAVED_PLACES: SavedPlace[] = [];
 /** 경로 전체가 보이게 맞출 때 지도 가장자리 여백(px) */
 export type FitPadding = {
@@ -107,8 +105,6 @@ type MapViewProps = {
     /** 경로가 건물 출입구에서 시작·끝나면 그 출입구. 점선이 출입구를 거쳐 간다. */
     startEntrance?: LngLat | null;
     goalEntrance?: LngLat | null;
-    /** 마커로 보여 줄 지하철역 엘리베이터 */
-    elevators?: Elevator[];
     /** 별 아이콘으로 보여 줄 즐겨찾기·내 장소 */
     savedPlaces?: SavedPlace[];
     /** 내 위치. 파란 점과 오차 반경 원으로 그린다. */
@@ -122,7 +118,6 @@ type MapViewProps = {
     /** 지도 가운데에 계속 둘 위치 (안내 중 내 위치) */
     follow?: LngLat | null;
     onMapClick?: (position: LngLat) => void;
-    onElevatorClick?: (elevator: Elevator) => void;
     onSavedPlaceClick?: (place: SavedPlace) => void;
     /** 사용자가 지도를 끌기 시작할 때 */
     onDragStart?: () => void;
@@ -286,32 +281,6 @@ function usePopup(
         };
     }, [map, position, content, inset]);
     return content;
-}
-
-function useElevatorMarkers(
-    map: kakao.maps.Map | null,
-    elevators: Elevator[],
-    onClick: ((elevator: Elevator) => void) | undefined,
-) {
-    useEffect(() => {
-        if (!map) {
-            return;
-        }
-        const markers = elevators.map((elevator) => {
-            const marker = new kakao.maps.Marker({
-                map,
-                position: toLatLng(elevator.position),
-                title: elevatorName(elevator),
-            });
-            if (onClick) {
-                kakao.maps.event.addListener(marker, 'click', () =>
-                    onClick(elevator),
-                );
-            }
-            return marker;
-        });
-        return () => markers.forEach((marker) => marker.setMap(null));
-    }, [map, elevators, onClick]);
 }
 
 /** 즐겨찾기·내 장소마다 별 아이콘을 그린다. 내 장소는 이름(집, 회사 등)을 아래에 붙인다. */
@@ -551,7 +520,6 @@ export default function MapView({
     path,
     startEntrance,
     goalEntrance,
-    elevators = NO_ELEVATORS,
     savedPlaces = NO_SAVED_PLACES,
     myLocation,
     congestion,
@@ -559,7 +527,6 @@ export default function MapView({
     fitRoute = true,
     follow,
     onMapClick,
-    onElevatorClick,
     onSavedPlaceClick,
     onCenterChange,
     onDragStart,
@@ -648,7 +615,6 @@ export default function MapView({
     useRouteArrows(map, routeShape);
     useCongestionPins(map, congestion);
     useMyLocation(map, myLocation);
-    useElevatorMarkers(map, elevators, onElevatorClick);
     useSavedPlaceMarkers(map, savedPlaces, onSavedPlaceClick);
     usePin(map, start, '출발', 'start');
     usePin(map, goal, '도착', 'goal');
