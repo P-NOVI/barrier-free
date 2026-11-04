@@ -559,7 +559,12 @@ export default function MapView({
             return;
         }
         // 화면 배치가 바뀌어 지도 크기가 달라지면 카카오맵에 알려야 지도가 빈칸 없이 그려진다.
-        const observer = new ResizeObserver(() => map.relayout());
+        // 시트를 열어 지도가 줄어도 보던 곳이 가운데에 남게 중심을 지킨다.
+        const observer = new ResizeObserver(() => {
+            const center = map.getCenter();
+            map.relayout();
+            map.setCenter(center);
+        });
         observer.observe(container);
         return () => observer.disconnect();
     }, [map]);
