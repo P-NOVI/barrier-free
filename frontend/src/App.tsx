@@ -13,6 +13,7 @@ import { useMediaQuery } from './hooks/useMediaQuery';
 import { useNavigation } from './hooks/useNavigation';
 import { useRoute } from './hooks/useRoute';
 import { useRouteHistory } from './hooks/useRouteHistory';
+import { useSavedPlaces } from './hooks/useSavedPlaces';
 import { useVoiceGuidance } from './hooks/useVoiceGuidance';
 import { useWakeLock } from './hooks/useWakeLock';
 import { type Elevator, elevatorName, fetchElevators } from './lib/elevators';
@@ -21,6 +22,11 @@ import { type RouteHistory, routeEndpoints } from './lib/historyApi';
 import { type LngLat, SEOUL_CITY_HALL } from './lib/kakaoMap';
 import { findAddress } from './lib/placeApi';
 import { DEFAULT_PRESET, isPresetId, type PresetId } from './lib/presets';
+import {
+    placesAt,
+    type SavedPlace,
+    toSavedPlaceRequest,
+} from './lib/savedPlacesApi';
 import {
     CURRENT_LOCATION_LABEL,
     type Endpoint,
@@ -73,6 +79,8 @@ export default function App() {
     const [elevators, setElevators] = useState<Elevator[]>([]);
     const [elevatorError, setElevatorError] = useState<string | null>(null);
     const [showElevators, setShowElevators] = useState(false);
+    // 즐겨찾기·내 장소. 지도에 별 아이콘으로 보인다.
+    const savedPlaces = useSavedPlaces();
     const start = endpoints.start?.position ?? null;
     const goal = endpoints.goal?.position ?? null;
     const route = useRoute(start, goal, preset);
@@ -168,6 +176,26 @@ export default function App() {
         (elevator: Elevator) =>
             pickPlace(elevator.position, elevatorName(elevator)),
         [pickPlace],
+    );
+
+    // 저장한 장소는 이름·주소를 저장해 두었으므로 다시 찾지 않고 카드를 띄운다.
+    const showSavedPlace = useCallback((place: SavedPlace) => {
+        latestClick.current = place.position;
+        setPicked({
+            position: place.position,
+            name: place.name,
+            address: place.address,
+        });
+    }, []);
+
+    // 프로필 목록에서 고르면 지도를 그 장소로 옮긴다.
+    const handleSelectSavedPlace = useCallback(
+        (place: SavedPlace) => {
+            showSavedPlace(place);
+            const [lng, lat] = place.position;
+            setFocus([lng, lat]);
+        },
+        [showSavedPlace],
     );
 
     const handleSelect = useCallback(
@@ -291,7 +319,27 @@ export default function App() {
                 popup={
                     picked && (
                         <PlaceInfoCard
+                            // 다른 장소를 고르면 펼친 이름 칸을 닫는다.
+                            key={picked.position.join(',')}
                             place={picked}
+                            saved={placesAt(
+                                savedPlaces.places,
+                                picked.position,
+                            )}
+                            onSave={
+                                savedPlaces.available
+                                    ? (kind, label) =>
+                                          savedPlaces.add(
+                                              toSavedPlaceRequest(
+                                                  picked,
+                                                  kind,
+                                                  label,
+                                              ),
+                                          )
+                                    : undefined
+                            }
+                            onUnsave={savedPlaces.remove}
+                            saveError={savedPlaces.error}
                             onPick={handlePick}
                             onClose={() => setPicked(null)}
                         />
@@ -301,6 +349,7 @@ export default function App() {
                 startEntrance={shownRoute?.start_entrance}
                 goalEntrance={shownRoute?.goal_entrance}
                 elevators={showElevators ? elevators : undefined}
+                savedPlaces={savedPlaces.places}
                 fitPadding={wide ? FIT_PADDING.wide : FIT_PADDING.narrow}
                 fitRoute={!navigating}
                 follow={
@@ -311,6 +360,7 @@ export default function App() {
                 // 안내 중에는 지도를 눌러도 출발·도착을 바꾸지 않는다.
                 onMapClick={navigating ? undefined : handleMapClick}
                 onElevatorClick={navigating ? undefined : handleElevatorClick}
+                onSavedPlaceClick={navigating ? undefined : showSavedPlace}
                 onCenterChange={setMapCenter}
                 onDragStart={stopFollowing}
                 myLocation={navigationFix ?? myLocation}
@@ -323,7 +373,15 @@ export default function App() {
                 state={congestion}
                 onChange={setShowCongestion}
             />
-            {!navigating && <AccountMenu />}
+            {!navigating && (
+                <AccountMenu
+                    places={savedPlaces.places}
+                    placeError={savedPlaces.error}
+                    onSelectPlace={handleSelectSavedPlace}
+                    onDeletePlace={savedPlaces.remove}
+                    onSessionChange={savedPlaces.reload}
+                />
+            )}
             <MyLocationControl
                 onLocate={showMyLocation}
                 locate={

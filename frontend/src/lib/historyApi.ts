@@ -46,9 +46,10 @@ export type RouteHistory = Omit<RouteHistoryRequest, 'preset'> & {
 
 // 쿠키가 없으면 처음 저장할 때 게스트가 만들어진다.
 // 두 저장이 동시에 가면 게스트가 둘 생기므로, 앞 저장의 쿠키를 받은 뒤에 다음을 보낸다.
+// 즐겨찾기·내 장소 저장(savedPlacesApi.ts)도 이 순서를 따른다.
 let lastWrite: Promise<unknown> = Promise.resolve();
 
-function inOrder<T>(send: () => Promise<T>): Promise<T> {
+export function inOrder<T>(send: () => Promise<T>): Promise<T> {
     const result = lastWrite.then(send, send);
     lastWrite = result.catch(() => undefined);
     return result;

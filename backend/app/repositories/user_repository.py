@@ -8,11 +8,12 @@ import secrets
 from datetime import timedelta
 
 from sqlalchemy import delete, exists, select, update
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, aliased
 
 from app.models import (
     AuthSession,
     RouteHistory,
+    SavedPlace,
     SearchHistory,
     SocialAccount,
     User,
@@ -23,7 +24,14 @@ from core.profiles import DEFAULT_PRESET
 
 TOKEN_BYTES = 32
 # 사용자가 지워질 때 함께 지울 테이블
-USER_OWNED = (AuthSession, SocialAccount, UserProfile, SearchHistory, RouteHistory)
+USER_OWNED = (
+    AuthSession,
+    SocialAccount,
+    UserProfile,
+    SearchHistory,
+    RouteHistory,
+    SavedPlace,
+)
 
 
 def hash_token(token: str) -> str:
@@ -122,8 +130,12 @@ def sign_in_with_social(
 
 
 def merge_guest(session: Session, guest_id: int, user_id: int) -> None:
-    """게스트의 이력을 회원으로 옮기고 게스트를 지운다. 이동 조건은 회원 것이 우선."""
-    for model in (SearchHistory, RouteHistory):
+    """게스트의 이력·장소를 회원으로 옮기고 게스트를 지운다.
+
+    이동 조건, 같은 이름의 내 장소, 같은 위치의 즐겨찾기는 회원 것이 우선.
+    """
+    drop_duplicate_places(session, guest_id, user_id)
+    for model in (SearchHistory, RouteHistory, SavedPlace):
         session.execute(
             update(model).where(model.user_id == guest_id).values(user_id=user_id)
         )
@@ -134,6 +146,24 @@ def merge_guest(session: Session, guest_id: int, user_id: int) -> None:
             .values(user_id=user_id)
         )
     delete_users(session, [guest_id])
+
+
+def drop_duplicate_places(session: Session, guest_id: int, user_id: int) -> None:
+    member = aliased(SavedPlace)
+    same_place = (member.kind == SavedPlace.kind) & (
+        ((SavedPlace.kind == "mine") & (member.label == SavedPlace.label))
+        | (
+            (SavedPlace.kind == "favorite")
+            & (member.lon == SavedPlace.lon)
+            & (member.lat == SavedPlace.lat)
+        )
+    )
+    session.execute(
+        delete(SavedPlace).where(
+            SavedPlace.user_id == guest_id,
+            exists().where(member.user_id == user_id, same_place),
+        )
+    )
 
 
 def delete_users(session: Session, user_ids: list[int]) -> None:

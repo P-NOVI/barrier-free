@@ -14,6 +14,7 @@ import {
     toLngLat,
 } from '../lib/kakaoMap';
 import { arrowsAlong } from '../lib/routeArrows';
+import { type SavedPlace, savedPlaceTitle } from '../lib/savedPlacesApi';
 import { smoothJogs } from '../lib/routeShape';
 
 // 카카오맵 확대 수준. 숫자가 작을수록 확대 (1~14)
@@ -53,13 +54,14 @@ const ACCURACY_CIRCLE: Omit<kakao.maps.CircleOptions, 'center' | 'radius'> = {
     fillColor: '#1a73e8',
     fillOpacity: 0.12,
 };
-// 화살표 < 혼잡도 핀 < 내 위치 점 < 출발·도착 핀 순으로 위에 그린다.
+// 화살표 < 혼잡도 핀 < 저장한 장소 별 < 내 위치 점 < 출발·도착 핀 순으로 위에 그린다.
 const ROUTE_ARROW_Z_INDEX = 0;
 const CONGESTION_PIN_Z_INDEX = 1;
-const MY_LOCATION_Z_INDEX = 2;
-const PIN_Z_INDEX = 3;
+const SAVED_PLACE_Z_INDEX = 2;
+const MY_LOCATION_Z_INDEX = 3;
+const PIN_Z_INDEX = 4;
 // 선택한 장소 카드는 핀 위에 뜬다.
-const POPUP_Z_INDEX = 4;
+const POPUP_Z_INDEX = 5;
 // 카드 아래 꼬리 높이(px). index.css 의 .place-info::after 와 같은 값.
 const POPUP_TAIL = 10;
 // 출발·도착 핀: 둥근 머리에 글자를 넣고, 아래 뾰족한 끝이 지점을 가리킨다. 색은 CSS 가 정한다.
@@ -67,8 +69,15 @@ const PIN_SVG =
     '<svg viewBox="0 0 24 35" aria-hidden="true">' +
     '<path d="M12 35 1.76 18.26A12 12 0 1 1 22.24 18.26Z"/>' +
     '</svg>';
+// 즐겨찾기·내 장소: 동그라미 안 별. 색은 CSS 가 정한다.
+const STAR_SVG =
+    '<svg viewBox="0 0 24 24" aria-hidden="true">' +
+    '<circle cx="12" cy="12" r="12"/>' +
+    '<path d="M12 6.2 13.62 10.38 18.09 10.62 14.62 13.45 15.76 17.78 12 15.35 8.24 17.78 9.38 13.45 5.91 10.62 10.38 10.38Z"/>' +
+    '</svg>';
 // 기본값을 렌더마다 새 배열로 만들면 마커 effect 가 매번 다시 돈다
 const NO_ELEVATORS: Elevator[] = [];
+const NO_SAVED_PLACES: SavedPlace[] = [];
 /** 경로 전체가 보이게 맞출 때 지도 가장자리 여백(px) */
 export type FitPadding = {
     top: number;
@@ -98,6 +107,8 @@ type MapViewProps = {
     goalEntrance?: LngLat | null;
     /** 마커로 보여 줄 지하철역 엘리베이터 */
     elevators?: Elevator[];
+    /** 별 아이콘으로 보여 줄 즐겨찾기·내 장소 */
+    savedPlaces?: SavedPlace[];
     /** 내 위치. 파란 점과 오차 반경 원으로 그린다. */
     myLocation?: LocationFix | null;
     /** 센서별 유동인구. 있으면 센서 위치에 숫자 핀으로 그린다. */
@@ -110,6 +121,7 @@ type MapViewProps = {
     follow?: LngLat | null;
     onMapClick?: (position: LngLat) => void;
     onElevatorClick?: (elevator: Elevator) => void;
+    onSavedPlaceClick?: (place: SavedPlace) => void;
     /** 사용자가 지도를 끌기 시작할 때 */
     onDragStart?: () => void;
     /** 지도 이동·확대가 끝날 때마다 화면 중심을 알린다. */
@@ -300,6 +312,49 @@ function useElevatorMarkers(
     }, [map, elevators, onClick]);
 }
 
+/** 즐겨찾기·내 장소마다 별 아이콘을 그린다. 내 장소는 이름(집, 회사 등)을 아래에 붙인다. */
+function useSavedPlaceMarkers(
+    map: kakao.maps.Map | null,
+    places: SavedPlace[],
+    onClick: ((place: SavedPlace) => void) | undefined,
+) {
+    useEffect(() => {
+        if (!map) {
+            return;
+        }
+        const overlays = places.map((place) => {
+            const content = document.createElement('button');
+            content.type = 'button';
+            content.className = 'saved-place-pin';
+            content.setAttribute(
+                'aria-label',
+                `${place.kind === 'mine' ? '내 장소' : '즐겨찾기'} ${savedPlaceTitle(place)}`,
+            );
+            content.innerHTML = STAR_SVG;
+            if (place.label) {
+                const label = document.createElement('span');
+                label.className = 'saved-place-pin__label';
+                label.textContent = place.label;
+                content.append(label);
+            }
+            if (onClick) {
+                content.addEventListener('click', () => onClick(place));
+            }
+            // 이름표는 CSS 에서 버튼 밖에 띄우므로 별 가운데가 장소를 가리킨다.
+            const overlay = new kakao.maps.CustomOverlay({
+                position: toLatLng(place.position),
+                content,
+                // 눌러도 지도 클릭(출발·도착 고르기)으로 번지지 않게 한다.
+                clickable: true,
+                zIndex: SAVED_PLACE_Z_INDEX,
+            });
+            overlay.setMap(map);
+            return overlay;
+        });
+        return () => overlays.forEach((overlay) => overlay.setMap(null));
+    }, [map, places, onClick]);
+}
+
 function useMyLocation(
     map: kakao.maps.Map | null,
     fix: LocationFix | null | undefined,
@@ -464,6 +519,7 @@ export default function MapView({
     startEntrance,
     goalEntrance,
     elevators = NO_ELEVATORS,
+    savedPlaces = NO_SAVED_PLACES,
     myLocation,
     congestion,
     fitPadding = DEFAULT_FIT_PADDING,
@@ -471,6 +527,7 @@ export default function MapView({
     follow,
     onMapClick,
     onElevatorClick,
+    onSavedPlaceClick,
     onCenterChange,
     onDragStart,
 }: MapViewProps) {
@@ -559,6 +616,7 @@ export default function MapView({
     useCongestionPins(map, congestion);
     useMyLocation(map, myLocation);
     useElevatorMarkers(map, elevators, onElevatorClick);
+    useSavedPlaceMarkers(map, savedPlaces, onSavedPlaceClick);
     usePin(map, start, '출발', 'start');
     usePin(map, goal, '도착', 'goal');
     const popupContainer = usePopup(map, picked, fitPadding);

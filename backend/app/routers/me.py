@@ -1,4 +1,4 @@
-"""게스트·회원의 세션, 이동 조건, 검색·경로 이력.
+"""게스트·회원의 세션, 이동 조건, 검색·경로 이력, 즐겨찾기·내 장소.
 
 사용자는 쿠키(HttpOnly)의 토큰으로 찾는다. 이력을 처음 저장할 때 쿠키가 없으면
 게스트를 만든다. 쿠키 없이 조회하면 빈 목록을 준다.
@@ -7,8 +7,8 @@
 from fastapi import APIRouter, HTTPException, status
 
 from app.deps import CurrentUserDep, DbSessionDep, SettingsDep, UserDep
-from app.models import RouteHistory, SearchHistory
-from app.repositories import history_repository
+from app.models import RouteHistory, SavedPlace, SearchHistory
+from app.repositories import history_repository, place_repository
 from app.repositories.user_repository import (
     linked_providers,
     load_preset,
@@ -20,6 +20,9 @@ from app.schemas import (
     RouteHistoryListResponse,
     RouteHistoryRequest,
     RouteHistoryResponse,
+    SavedPlaceListResponse,
+    SavedPlaceRequest,
+    SavedPlaceResponse,
     SearchHistoryListResponse,
     SearchHistoryRequest,
     SearchHistoryResponse,
@@ -66,6 +69,18 @@ def route_response(row: RouteHistory) -> RouteHistoryResponse:
         goal=(row.goal_lon, row.goal_lat),
         preset=row.preset,
         distance_m=row.distance_m,
+        created_at=row.created_at,
+    )
+
+
+def place_response(row: SavedPlace) -> SavedPlaceResponse:
+    return SavedPlaceResponse(
+        id=row.id,
+        kind=row.kind,
+        label=row.label,
+        name=row.name,
+        address=row.address,
+        position=(row.lon, row.lat),
         created_at=row.created_at,
     )
 
@@ -211,3 +226,57 @@ def clear_routes(user: CurrentUserDep, session: DbSessionDep) -> None:
     if user:
         history_repository.clear(session, RouteHistory, user.id)
         session.commit()
+
+
+@router.get("/me/places", response_model=SavedPlaceListResponse)
+def get_places(user: CurrentUserDep, session: DbSessionDep) -> SavedPlaceListResponse:
+    rows = place_repository.list_places(session, user.id) if user else []
+    return SavedPlaceListResponse(places=[place_response(row) for row in rows])
+
+
+@router.post(
+    "/me/places",
+    response_model=SavedPlaceResponse,
+    status_code=status.HTTP_201_CREATED,
+    responses={409: {"model": RouteError, "description": "저장할 수 있는 수를 넘음"}},
+)
+def post_place(
+    request: SavedPlaceRequest,
+    user: UserDep,
+    session: DbSessionDep,
+    settings: SettingsDep,
+) -> SavedPlaceResponse:
+    """같은 위치의 즐겨찾기, 같은 이름의 내 장소가 있으면 바꿔 저장한다."""
+    try:
+        row = place_repository.add_place(
+            session,
+            user.id,
+            settings.saved_places_max,
+            request.kind,
+            request.label,
+            request.name,
+            request.address,
+            request.position,
+        )
+    except place_repository.PlacesFullError as error:
+        session.rollback()
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            detail={"reason": "places_full", "message": str(error)},
+        ) from error
+    session.commit()
+    return place_response(row)
+
+
+@router.delete(
+    "/me/places/{place_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    responses={404: {"model": RouteError, "description": "내 장소에 없는 id"}},
+)
+def delete_place(place_id: int, user: CurrentUserDep, session: DbSessionDep) -> None:
+    if user is None or not place_repository.delete_place(session, user.id, place_id):
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            detail={"reason": "place_not_found", "message": "장소가 없습니다."},
+        )
+    session.commit()

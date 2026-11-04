@@ -9,6 +9,7 @@ from app.db import Base
 QUERY_MAX_LENGTH = 100
 NAME_MAX_LENGTH = 200
 ADDRESS_MAX_LENGTH = 300
+LABEL_MAX_LENGTH = 20
 
 
 def utc_now() -> datetime:
@@ -107,4 +108,21 @@ class RouteHistory(Base):
     goal_lat: Mapped[float]
     preset: Mapped[str] = mapped_column(String(40))
     distance_m: Mapped[float]
+    created_at: Mapped[datetime] = created_at_column()
+
+
+class SavedPlace(Base):
+    """즐겨찾기(kind=favorite)와 이름을 붙인 내 장소(kind=mine. 집, 회사 등)."""
+
+    __tablename__ = "saved_places"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = user_id_column(index=True)
+    kind: Mapped[str] = mapped_column(String(20))
+    # 내 장소의 이름. 즐겨찾기는 None
+    label: Mapped[str | None] = mapped_column(String(LABEL_MAX_LENGTH))
+    name: Mapped[str] = mapped_column(String(NAME_MAX_LENGTH))
+    address: Mapped[str | None] = mapped_column(String(ADDRESS_MAX_LENGTH))
+    lon: Mapped[float]
+    lat: Mapped[float]
     created_at: Mapped[datetime] = created_at_column()
