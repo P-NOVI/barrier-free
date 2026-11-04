@@ -54,7 +54,7 @@ type LocateState =
     // 출발지가 다른 방법으로 바뀌면 오류 안내를 감추려고 그때의 출발지를 같이 둔다.
     | { status: 'error'; message: string; start: Endpoint | null };
 
-function SearchResults({
+export function SearchResults({
     listId,
     search,
     onPick,
@@ -144,7 +144,7 @@ function RecentItem({
     );
 }
 
-function RecentList({
+export function RecentList({
     listId,
     recent,
     onPickSearch,

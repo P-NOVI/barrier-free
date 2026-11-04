@@ -387,11 +387,17 @@ function useRouteLine(
         ];
         lines.forEach((line) => line.setMap(map));
 
-        if (fit) {
-            const bounds = new kakao.maps.LatLngBounds();
-            [...path, ...gaps.flat()].forEach((point) =>
-                bounds.extend(toLatLng(point)),
-            );
+        const removeLines = () => lines.forEach((line) => line.setMap(null));
+        if (!fit) {
+            return removeLines;
+        }
+        const bounds = new kakao.maps.LatLngBounds();
+        [...path, ...gaps.flat()].forEach((point) =>
+            bounds.extend(toLatLng(point)),
+        );
+        const fitBounds = () => {
+            // 시트를 여닫아 지도 크기가 바뀌면 바뀐 크기로 다시 맞춘다.
+            map.relayout();
             map.setBounds(
                 bounds,
                 padding.top,
@@ -399,8 +405,14 @@ function useRouteLine(
                 padding.bottom,
                 padding.left,
             );
-        }
-        return () => lines.forEach((line) => line.setMap(null));
+        };
+        fitBounds();
+        const observer = new ResizeObserver(fitBounds);
+        observer.observe(map.getNode());
+        return () => {
+            observer.disconnect();
+            removeLines();
+        };
     }, [map, path, start, goal, startEntrance, goalEntrance, padding, fit]);
 }
 
