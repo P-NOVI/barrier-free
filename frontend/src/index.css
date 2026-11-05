@@ -467,6 +467,24 @@ input::placeholder {
     cursor: pointer;
 }
 
+/* 내 제보: 고치는 폼, 지울지 묻는 줄 */
+.my-report__edit {
+    padding: 12px 0;
+    border-bottom: 1px solid var(--border);
+}
+
+.my-report__confirm {
+    flex-wrap: wrap;
+    gap: 8px;
+    justify-content: flex-end;
+    padding: 12px 0;
+}
+
+.my-report__question {
+    flex: 1 1 100%;
+    font-size: 14px;
+}
+
 /* 내 장소로 등록할 장소 찾기 */
 .my-register {
     display: flex;

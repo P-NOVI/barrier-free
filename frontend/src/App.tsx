@@ -26,6 +26,7 @@ import { useMediaQuery } from './hooks/useMediaQuery';
 import { useNavigation } from './hooks/useNavigation';
 import { useRoute } from './hooks/useRoute';
 import { useRouteHistory } from './hooks/useRouteHistory';
+import { useMyReports } from './hooks/useMyReports';
 import { useSavedPlaces } from './hooks/useSavedPlaces';
 import { useSavedRoutes } from './hooks/useSavedRoutes';
 import { useVoiceGuidance } from './hooks/useVoiceGuidance';
@@ -129,6 +130,8 @@ export default function App() {
     const savedPlaces = useSavedPlaces();
     // 즐겨찾기한 경로(내 경로)
     const savedRoutes = useSavedRoutes();
+    // 내가 올린 제보
+    const myReports = useMyReports();
     // 계단을 못 쓰는 이동 조건이면 역인 출발·도착을 그 역 엘리베이터로 바꿔 경로를 찾는다.
     const elevatorRoute = useMemo(
         () => toElevatorEndpoints(endpoints, preset, elevators),
@@ -341,10 +344,11 @@ export default function App() {
             inline={wide}
         />
     );
-    // 로그인·로그아웃으로 사용자가 바뀌면 그 사용자의 장소·경로를 다시 불러온다.
+    // 로그인·로그아웃으로 사용자가 바뀌면 그 사용자의 장소·경로·제보를 다시 불러온다.
     const reloadSaved = () => {
         savedPlaces.reload();
         savedRoutes.reload();
+        myReports.reload();
     };
     // 지금 찾은 경로와 그 경로를 이미 내 경로에 저장했는지
     const routeEntry =
@@ -394,6 +398,7 @@ export default function App() {
             <MyTab
                 savedPlaces={savedPlaces}
                 savedRoutes={savedRoutes}
+                myReports={myReports}
                 near={mapCenter}
                 onSelectPlace={handleSelectSavedPlace}
                 onSelectRoute={handleSelectRoute}
@@ -538,7 +543,11 @@ export default function App() {
                 <ReportForm
                     position={reporting.position}
                     address={reporting.address}
-                    onClose={() => setReporting(null)}
+                    onClose={() => {
+                        setReporting(null);
+                        // 방금 올린 제보가 내 제보에 보이게 한다.
+                        myReports.reload();
+                    }}
                 />
             )}
             {elevatorError && (
