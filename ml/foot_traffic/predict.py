@@ -5,7 +5,8 @@
 - --rain(mm), --temp(℃)를 주면 그날 모든 시간의 강수·기온을 바꿔 다시 예측한
   선을 더한다.
 - 출력: 터미널 표와 models/predict_<센서>_<날짜>.png (--out 으로 바꾼다).
-- baseline 은 그 센서의 테스트 시작 전(학습+검증) 센서·요일·시각별 중앙값이다.
+- baseline 은 그 센서의 테스트 시작 전(학습+검증) 센서·요일·시각별 중앙값 또는 평균
+  이다(학습 때 검증 구간에서 더 강했던 쪽, 메타의 reference_baseline).
   테스트 시작 전 날짜는 모델이 학습에 쓴 날이라 실제 성능보다 잘 맞는다.
   학습에 쓰지 않은 날은 split.test_start 이후다.
 """
@@ -23,6 +24,7 @@ from foot_traffic.common import CONFIG_PATH, data_path, load_config, repo_path
 from foot_traffic.data import (
     Columns,
     add_off_adjacent,
+    add_recent_levels,
     build_features,
     load_columns,
     take,
@@ -60,17 +62,22 @@ def model_predict(
     vocab: dict[str, list[Any]],
     config: dict[str, Any],
     expected_names: list[str],
+    reference: np.ndarray,
 ) -> np.ndarray:
+    """예측(명/시간). 모델이 낸 값(비율 또는 사람 수)에 기준값을 곱한다."""
     matrix, names = build_features(part, vocab, config["features"], FULL_GROUPS)
     if names != expected_names:
         raise SystemExit("모델의 피처 목록과 config.yaml 이 다릅니다. 다시 학습하세요.")
-    return np.clip(booster.predict(matrix), 0.0, None)
+    return np.clip(booster.predict(matrix), 0.0, None) * reference
 
 
 def baseline_predict(
-    columns: Columns, part: Columns, sensor: int, test_start: str
+    columns: Columns, part: Columns, sensor: int, test_start: str, statistic: str
 ) -> np.ndarray:
-    """그 센서의 테스트 시작 전 행으로 만든 센서·요일·시각별 중앙값."""
+    """그 센서의 테스트 시작 전 센서·요일·시각별 중앙값·평균, 또는 최근 수준."""
+    if statistic == "recent":
+        median = baseline_predict(columns, part, sensor, test_start, "median")
+        return baseline.recent_predict(part, median)
     mask = (columns["sensor_code"] == sensor) & (
         columns["slot_start"] < np.datetime64(test_start)
     )
@@ -79,7 +86,7 @@ def baseline_predict(
         source["sensor_code"], source["day_of_week"], source["hour_of_day"]
     )
     by_slot, by_sensor = baseline.fit_baseline(
-        keys, source["sensor_code"], source["foot_traffic"], "median"
+        keys, source["sensor_code"], source["foot_traffic"], statistic
     )
     target_keys = baseline.slot_keys(
         part["sensor_code"], part["day_of_week"], part["hour_of_day"]
@@ -117,6 +124,7 @@ def plot_day(
     base: np.ndarray,
     what_if: np.ndarray | None,
     what_if_label: str,
+    base_label: str = "baseline",
 ) -> None:
     import matplotlib
 
@@ -135,7 +143,7 @@ def plot_day(
     )
     top.plot(hours, part["foot_traffic"], color="black", marker="o", label="실제")
     top.plot(hours, model, color="tab:blue", marker="o", label="모델 예측")
-    top.plot(hours, base, color="tab:gray", linestyle="--", label="baseline 중앙값")
+    top.plot(hours, base, color="tab:gray", linestyle="--", label=base_label)
     if what_if is not None:
         top.plot(hours, what_if, color="tab:red", marker="s", label=what_if_label)
     top.set_ylim(bottom=0)
@@ -170,6 +178,7 @@ def main() -> None:
 
     columns = load_columns(data_path(data["training_set"]))
     add_off_adjacent(columns, data_path(data["calendar"]))
+    add_recent_levels(columns, config["recent_level"])
     mask = select_day(columns, args.sensor, args.date)
     if not mask.any():
         sensor_slots = columns["slot_start"][columns["sensor_code"] == args.sensor]
@@ -191,8 +200,19 @@ def main() -> None:
     )
     vocab = meta["vocab"]
     names = meta["feature_names"]
-    model = model_predict(booster, part, vocab, config, names)
-    base = baseline_predict(columns, part, args.sensor, config["split"]["test_start"])
+    # 타깃을 나눈 기준값: 학습 때와 같은 식(메타의 target_transform)으로 만든다.
+    target = meta.get("target_transform", {"mode": "absolute"})
+    median = baseline_predict(
+        columns, part, args.sensor, config["split"]["test_start"], "median"
+    )
+    reference = baseline.reference_level(part, median, target)
+    model = model_predict(booster, part, vocab, config, names, reference)
+    # 학습 때 검증 구간에서 더 강했던 baseline(중앙값·평균·최근 수준)을 쓴다.
+    statistic = meta.get("reference_baseline", "median")
+    base_label = f"baseline {baseline.STATISTIC_NAMES[statistic]}"
+    base = baseline_predict(
+        columns, part, args.sensor, config["split"]["test_start"], statistic
+    )
 
     what_if, what_if_label = None, ""
     if args.rain is not None or args.temp is not None:
@@ -204,7 +224,7 @@ def main() -> None:
         if args.temp is not None:
             changed["temp"][:] = args.temp
             parts.append(f"기온 {args.temp:g}℃")
-        what_if = model_predict(booster, changed, vocab, config, names)
+        what_if = model_predict(booster, changed, vocab, config, names, reference)
         what_if_label = "가정: " + ", ".join(parts)
 
     weekday = WEEKDAYS[int(part["day_of_week"][0])]
@@ -229,7 +249,7 @@ def main() -> None:
     out = args.out or repo_path(
         f"{data['model_dir']}/predict_{args.sensor}_{args.date}.png"
     )
-    plot_day(out, title, part, model, base, what_if, what_if_label)
+    plot_day(out, title, part, model, base, what_if, what_if_label, base_label)
     print(f"그래프 {out}")
 
 

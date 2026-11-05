@@ -126,6 +126,75 @@ def test_metrics() -> None:
     assert metrics.improvement(0.2, 0.15) == 0.25
 
 
+RATIO = {"mode": "ratio", "floor": 1.0, "weight": "ref"}
+
+
+def reference_part() -> dict:
+    nan = np.nan
+    return {
+        "foot_traffic": np.zeros(4),
+        "level_same_dow_hour": np.array([100.0, nan, nan, 0.2]),
+        "level_same_hour": np.array([50.0, 60.0, nan, nan]),
+    }
+
+
+def test_reference_level_prefers_recent_level_then_fallback_with_floor() -> None:
+    fallback = np.array([1.0, 1.0, 30.0, 1.0])
+    ref = baseline.reference_level(reference_part(), fallback, RATIO)
+    # 같은 요일·시각 → 같은 시각 → fallback 순서, 0.2 는 floor 1 로 본다.
+    assert ref.tolist() == [100.0, 60.0, 30.0, 1.0]
+    nothing = baseline.reference_level(reference_part(), np.full(4, np.nan), RATIO)
+    assert np.isnan(nothing[2]) and nothing[0] == 100.0
+
+
+def test_reference_level_is_one_for_absolute_target() -> None:
+    ref = baseline.reference_level(reference_part(), np.ones(4), {"mode": "absolute"})
+    assert ref.tolist() == [1.0, 1.0, 1.0, 1.0]
+
+
+def test_ratio_target_round_trips_to_people() -> None:
+    y = np.array([120.0, 45.0, 3000.0])
+    ref = np.array([100.0, 60.0, 2500.0])
+    assert np.allclose((y / ref) * ref, y)
+
+
+def test_train_model_accepts_sample_weights() -> None:
+    rng = np.random.default_rng(1)
+    x = rng.integers(0, 4, size=(400, 1)).astype(np.float32)
+    ref = np.where(x[:, 0] >= 2, 500.0, 5.0)
+    y = (x[:, 0] / 3).astype(np.float32)
+    config = {
+        "params": {
+            "learning_rate": 0.3,
+            "num_leaves": 4,
+            "min_data_in_leaf": 5,
+            "verbosity": -1,
+        },
+        "num_boost_round": 30,
+        "early_stopping_rounds": 5,
+        "seed": 1,
+    }
+    booster = train.train_model(
+        "regression_l1", (x, y, ref), (x, y, ref), ["hour_of_day"], [], config
+    )
+    pred = train.predict(booster, x)
+    # 가중치가 큰 행은 잘 맞추고, 가중치가 작은 행은 덜 맞춘다.
+    heavy = ref > 100
+    assert metrics.mae(y[heavy], pred[heavy]) < 0.05
+    assert metrics.mae(y[~heavy], pred[~heavy]) > metrics.mae(y[heavy], pred[heavy])
+
+
+def test_pick_reference_uses_validation_mae_of_the_stronger_baseline() -> None:
+    base = {
+        "median": {"valid": {"mae": 107.8}, "test": {"mae": 90.0}},
+        "mean": {"valid": {"mae": 102.0}, "test": {"mae": 120.0}},
+    }
+    # 테스트 값이 아니라 검증 값으로 고른다.
+    assert train.pick_reference(base) == "mean"
+    base["median"]["valid"]["mae"] = 99.0
+    assert train.pick_reference(base) == "median"
+
+
 def test_error_rate_is_independent_of_sensor_scale() -> None:
     small = metrics.error_rate(np.array([10.0, 20.0]), np.array([12.0, 18.0]))
     large = metrics.error_rate(np.array([1000.0, 2000.0]), np.array([1200.0, 1800.0]))
@@ -146,8 +215,41 @@ def test_grouped_mae() -> None:
         "baseline_mae": 50.0,
         "model_error_rate": 1.0,
         "baseline_error_rate": 1.0,
+        "model_bias": 0.0,  # (50-0 + 50-100) / 2
+        "baseline_bias": -50.0,
     }
     assert got["b"]["model_mae"] == 0.0 and got["b"]["baseline_error_rate"] == 1.0
+
+
+def test_level_breakdown_splits_by_actual_size_and_reports_bias() -> None:
+    y = np.array([50.0, 150.0, 600.0, 1500.0, 3000.0])
+    pred = np.array([40.0, 150.0, 500.0, 1400.0, 2700.0])  # 큰 값은 적게 예측
+    base = np.array([50.0, 150.0, 600.0, 1500.0, 3000.0])
+    got = train.level_breakdown(y, y, pred, base, [0, 100, 1000], top_quantile=0.8)
+    assert list(got["bins"]) == ["0~100", "100~1000", "1000+"]
+    assert got["bins"]["0~100"]["model_bias"] == -10.0
+    assert got["bins"]["1000+"]["rows"] == 2
+    assert got["bins"]["1000+"]["model_bias"] == -200.0  # (-100 + -300) / 2
+    assert got["bins"]["1000+"]["baseline_bias"] == 0.0
+    # 상위 20% 는 가장 큰 값 하나(3000)
+    assert got["top"]["rows"] == 1 and got["top"]["model_bias"] == -300.0
+
+
+def test_level_breakdown_by_prediction_exposes_regression_to_the_mean() -> None:
+    # 예측은 항상 정확한 평균(100)이고 실제는 평균 둘레로 흩어진다.
+    y = np.array([60.0, 80.0, 100.0, 120.0, 140.0])
+    pred = np.full(5, 100.0)
+    base = pred.copy()
+    by_actual = train.level_breakdown(y, y, pred, base, [0, 110], top_quantile=0.6)
+    by_pred = train.level_breakdown(pred, y, pred, base, [0, 110], top_quantile=0.6)
+    # 실제 값으로 묶으면 큰 쪽은 적게, 작은 쪽은 많이 예측한 것처럼 보인다.
+    assert (
+        by_actual["bins"]["110+"]["model_bias"]
+        < 0
+        < by_actual["bins"]["0~110"]["model_bias"]
+    )
+    # 예측 값으로 묶으면 편향이 없다.
+    assert by_pred["bins"]["0~110"]["model_bias"] == 0.0
 
 
 def test_day_type_and_rain_kind() -> None:
@@ -221,7 +323,7 @@ def test_train_model_learns_simple_pattern() -> None:
         "seed": 1,
     }
     booster = train.train_model(
-        "regression_l2", (x, y), (x, y), ["hour_of_day"], [], config
+        "regression_l2", (x, y, None), (x, y, None), ["hour_of_day"], [], config
     )
     pred = train.predict(booster, x)
     assert metrics.mae(y, pred) < 0.05

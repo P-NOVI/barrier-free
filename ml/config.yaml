@@ -37,7 +37,34 @@ features:
     # 쉬는 날(공휴일·주말) 기준. 전날은 금요일·연휴 전날·공휴일 전날을, 다음날은 월요일·
     # 연휴 다음날·공휴일 다음날을 묶는다.
     off_adjacent: [is_before_off_day, is_after_off_day]
+    # 센서의 최근 수준(recent_level 절). 단절이나 계절로 수준이 변하는 센서를 따라간다.
+    recent_level: [level_same_hour, level_same_dow_hour]
   categorical: [sensor_code, district]
+
+# 센서의 최근 수준 피처. 예측하려는 날의 gap_days 일 전까지의 데이터만 쓴다(서비스에서
+# 센서 데이터가 늦게 들어오는 것을 가정한다). 표본이 min_samples 미만이면 비운다.
+recent_level:
+  gap_days: 7
+  # 같은 시각(요일 무관) 최근 same_hour_days 일 평균
+  same_hour_days: 28
+  min_samples_hour: 5
+  # 같은 요일·시각 최근 same_dow_weeks 주 평균
+  same_dow_weeks: 8
+  min_samples_dow: 2
+
+# 타깃. ratio 는 사람 수를 센서의 최근 수준으로 나눈 비율을 맞추고, 예측값은 비율 × 최근
+# 수준(명/시간)이다. 최근 수준은 recent_level 의 같은 요일·시각 평균, 없으면 같은 시각
+# 평균, 그래도 없으면 센서·요일·시각 중앙값이다. absolute 는 사람 수를 그대로 맞춘다.
+target:
+  mode: ratio
+  # 최근 수준이 이보다 작으면 이 값으로 본다(0 으로 나누지 않는다).
+  floor: 1.0
+  # ref: 최근 수준만큼 가중해 사람 수 오차(MAE)를 그대로 줄인다. none: 모든 행을 같게
+  # 가중해 작은 센서도 같은 비중으로 본다.
+  weight: ref
+  # weight 가 ref 일 때 가중치 = 기준값 ** weight_power. 1 이면 사람 수 MAE 를 그대로 줄이고,
+  # 1 보다 크면 유동인구가 큰 행을 더 중시한다(작은 센서는 덜 맞춘다).
+  weight_power: 1.0
 
 model:
   # 목적함수를 비교해 검증 구간 MAE 가 가장 낮은 것을 최종 모델로 쓴다.
@@ -59,3 +86,7 @@ model:
 # 평가 보고서에 남기는 센서별 오차(사람 수 기준, 오차율 기준 각각)의 상위(나쁜 쪽) 개수
 report:
   worst_sensors: 10
+  # 실제 유동인구 크기별 오차 구간 경계(명/시간). 마지막 경계 이상은 한 구간이다.
+  level_bins: [0, 100, 500, 1000, 2000]
+  # 실제 값이 상위 (1 - top_quantile) 비율인 행의 오차와 편향을 따로 본다.
+  top_quantile: 0.95

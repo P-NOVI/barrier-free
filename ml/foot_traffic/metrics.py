@@ -35,18 +35,31 @@ def improvement(base: float, value: float) -> float:
 def grouped_mae(
     keys: np.ndarray, y: np.ndarray, pred: np.ndarray, base_pred: np.ndarray
 ) -> dict[str, dict[str, float]]:
-    """keys 값마다 행 수, 실제 평균, 모델·baseline 의 MAE 와 오차율."""
-    result = {}
-    for key in np.unique(keys):
-        mask = keys == key
-        result[str(key.item() if hasattr(key, "item") else key)] = {
-            "rows": int(mask.sum()),
-            "mean_actual": round(float(np.mean(y[mask])), 2),
-            "model_mae": round(mae(y[mask], pred[mask]), ROUND_DIGITS),
-            "baseline_mae": round(mae(y[mask], base_pred[mask]), ROUND_DIGITS),
-            "model_error_rate": round(error_rate(y[mask], pred[mask]), ROUND_DIGITS),
-            "baseline_error_rate": round(
-                error_rate(y[mask], base_pred[mask]), ROUND_DIGITS
-            ),
-        }
-    return result
+    """keys 값마다 행 수, 실제 평균, 모델·baseline 의 MAE·오차율·편향."""
+    return {
+        str(key.item() if hasattr(key, "item") else key): summarize_rows(
+            y[keys == key], pred[keys == key], base_pred[keys == key]
+        )
+        for key in np.unique(keys)
+    }
+
+
+def bias(y: np.ndarray, pred: np.ndarray) -> float:
+    """예측 - 실제 평균(명/시간). 음수면 적게 예측하는 쪽으로 치우쳤다."""
+    return float(np.mean(pred - y))
+
+
+def summarize_rows(
+    y: np.ndarray, pred: np.ndarray, base_pred: np.ndarray
+) -> dict[str, float]:
+    """한 묶음의 행 수, 실제 평균, 모델·baseline 의 MAE·오차율·편향."""
+    return {
+        "rows": int(y.size),
+        "mean_actual": round(float(np.mean(y)), 2),
+        "model_mae": round(mae(y, pred), ROUND_DIGITS),
+        "baseline_mae": round(mae(y, base_pred), ROUND_DIGITS),
+        "model_error_rate": round(error_rate(y, pred), ROUND_DIGITS),
+        "baseline_error_rate": round(error_rate(y, base_pred), ROUND_DIGITS),
+        "model_bias": round(bias(y, pred), 2),
+        "baseline_bias": round(bias(y, base_pred), 2),
+    }

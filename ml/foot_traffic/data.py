@@ -9,6 +9,8 @@ from typing import Any
 import numpy as np
 import pyarrow.parquet as pq
 
+from foot_traffic import recent
+
 Columns = dict[str, np.ndarray]
 
 FLOAT_COLUMNS = ["lon", "lat", "temp", "rain_mm", "foot_traffic"]
@@ -66,6 +68,15 @@ def add_off_adjacent(columns: Columns, calendar_path: Path) -> None:
         raise ValueError("달력이 학습셋 날짜를 덮지 못합니다.")
     columns["is_before_off_day"] = before[position].astype(np.float32)
     columns["is_after_off_day"] = after[position].astype(np.float32)
+
+
+def add_recent_levels(columns: Columns, config: dict[str, Any]) -> None:
+    """센서의 최근 수준 열(level_same_hour, level_same_dow_hour)을 더한다.
+
+    분할 전의 전체 열로 계산한다. 각 행은 gap_days 일 전까지의 값만 쓰므로 검증·테스트
+    구간의 행도 그 앞 구간의 값만 본다(recent.py).
+    """
+    columns.update(recent.recent_levels(columns, config))
 
 
 def take(columns: Columns, mask: np.ndarray) -> Columns:
