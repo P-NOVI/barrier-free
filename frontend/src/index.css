@@ -930,15 +930,11 @@ input::placeholder {
     cursor: pointer;
 }
 
-.place-search__results button:hover,
+/* 마우스를 올리거나 터치할 때는 테두리를 두지 않는다(터치 기기는 손을 뗀 뒤에도 hover 가 남는다).
+   키보드로 옮겨 갈 때만 테두리로 위치를 보여 준다. */
 .place-search__results button:focus-visible {
-    background: var(--overlay-bg);
-    outline: 2px solid var(--border);
+    outline: 2px solid var(--text);
     outline-offset: -2px;
-}
-
-.place-search__results button:focus-visible {
-    outline-color: var(--text);
 }
 
 /* 검색어가 없을 때 검색창 아래에 보이는 최근 경로·검색 */
