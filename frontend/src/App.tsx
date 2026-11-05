@@ -377,6 +377,13 @@ export default function App() {
                     onSelect={handleSelect}
                     onSelectRoute={handleSelectRoute}
                     onLocate={setMyLocation}
+                    myPlaces={
+                        savedPlaces.available
+                            ? savedPlaces.places.filter(
+                                  (place) => place.kind === 'mine',
+                              )
+                            : undefined
+                    }
                 />
                 <RoutePanel
                     preset={preset}

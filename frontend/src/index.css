@@ -878,9 +878,78 @@ input::placeholder {
     border-bottom: 1px solid var(--border);
 }
 
+/*
+ * 입력칸 묶음은 칸을 나누지 않고 .place-search 의 줄로 바로 놓는다.
+ * 검색 결과·최근 기록(dropdown)만 맨 뒤로 보내, 출발지 칸을 눌러도
+ * 도착지 칸과 내 장소 버튼이 그 자리에 남고 목록은 그 아래에 열린다.
+ */
+.place-search__field {
+    display: contents;
+}
+
+.place-search__dropdown {
+    order: 1;
+}
+
+.place-search__dropdown:empty {
+    display: none;
+}
+
 .place-search__row {
     display: flex;
     gap: 6px;
+}
+
+/* 입력칸 아래 집·회사 바로 넣기 버튼: 동그란 아이콘과 이름 */
+.place-search__shortcuts {
+    display: flex;
+    gap: 4px;
+    padding-top: 2px;
+}
+
+.place-search__shortcut {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 40px;
+    padding: 0 10px 0 2px;
+    border: 0;
+    border-radius: 999px;
+    font: inherit;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+    background: none;
+    cursor: pointer;
+}
+
+.place-search__shortcut-icon {
+    display: grid;
+    place-items: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    color: #fff;
+    background: var(--saved-place);
+}
+
+.place-search__shortcut-icon svg {
+    width: 16px;
+    height: 16px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+/* 아직 등록하지 않은 칸은 My 탭 내 장소처럼 흐린 회색 */
+.place-search__shortcut[data-empty] {
+    color: var(--muted);
+}
+
+.place-search__shortcut[data-empty] .place-search__shortcut-icon {
+    background: var(--icon-bg);
 }
 
 .place-search__label {
@@ -1845,6 +1914,7 @@ input::placeholder {
     .route-panel__preset select,
     .route-panel__reset,
     .place-search__locate,
+    .place-search__shortcut,
     .place-info__chip,
     .place-info__custom-input,
     .navigation-panel__stop,

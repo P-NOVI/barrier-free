@@ -1,4 +1,10 @@
-import { type MouseEvent, type ReactNode, useId, useState } from 'react';
+import {
+    type MouseEvent,
+    type ReactNode,
+    useId,
+    useRef,
+    useState,
+} from 'react';
 
 import { useDebouncedValue } from '../hooks/useDebouncedValue';
 import { type PlaceSearchState, usePlaceSearch } from '../hooks/usePlaceSearch';
@@ -17,13 +23,17 @@ import {
     toSearchEntry,
 } from '../lib/historyApi';
 import type { LngLat } from '../lib/kakaoMap';
+import { MY_PLACE_SLOTS } from '../lib/myListIcons';
 import type { Place } from '../lib/placeApi';
 import { presetLabel } from '../lib/presets';
+import type { SavedPlace } from '../lib/savedPlacesApi';
 import {
     CURRENT_LOCATION_LABEL,
     type Endpoint,
     type EndpointRole,
     type Endpoints,
+    isEndpointRole,
+    shortcutRole,
 } from '../lib/selection';
 
 // 입력을 멈추고 이만큼 지나면 검색한다.
@@ -46,6 +56,8 @@ type PlaceSearchProps = {
     onSelectRoute: (entry: RouteHistory) => void;
     /** 현재 위치를 찾으면 알린다. 지도에 내 위치로 표시한다. */
     onLocate: (fix: LocationFix) => void;
+    /** 내 장소. 있으면 입력칸 아래에 집·회사 버튼을 둔다(못 불러왔으면 숨김). */
+    myPlaces?: SavedPlace[];
 };
 
 type LocateState =
@@ -272,6 +284,7 @@ function PlaceField({
                         value={text}
                         placeholder={`${label} 입력`}
                         aria-label={label}
+                        data-role={role}
                         autoComplete="off"
                         aria-controls={listId}
                         onFocus={() => setListOpen(true)}
@@ -291,24 +304,109 @@ function PlaceField({
                 </label>
                 {action}
             </div>
-            {typing && (
-                <div aria-live="polite">
-                    <SearchResults
+            {/* 검색 결과·최근 기록은 두 입력칸과 내 장소 버튼 아래에 연다(index.css). */}
+            <div className="place-search__dropdown">
+                {typing && (
+                    <div aria-live="polite">
+                        <SearchResults
+                            listId={listId}
+                            search={search}
+                            onPick={pick}
+                        />
+                    </div>
+                )}
+                {listOpen && !typing && (
+                    <RecentList
                         listId={listId}
-                        search={search}
-                        onPick={pick}
+                        recent={recent}
+                        onPickSearch={pickRecent}
+                        onPickRoute={pickRoute}
                     />
-                </div>
-            )}
-            {listOpen && !typing && (
-                <RecentList
-                    listId={listId}
-                    recent={recent}
-                    onPickSearch={pickRecent}
-                    onPickRoute={pickRoute}
-                />
-            )}
+                )}
+            </div>
         </div>
+    );
+}
+
+/** 입력칸 아래 집·회사 버튼. 누르면 그 장소를 출발지나 도착지에 넣는다. */
+function MyPlaceShortcuts({
+    places,
+    endpoints,
+    onSelect,
+}: {
+    places: SavedPlace[];
+    endpoints: Endpoints;
+    onSelect: (role: EndpointRole, endpoint: Endpoint) => void;
+}) {
+    const rowRef = useRef<HTMLDivElement>(null);
+    // 아직 등록하지 않은 칸을 눌렀을 때 그 칸 label
+    const [missing, setMissing] = useState<string | null>(null);
+    const slots = MY_PLACE_SLOTS.map((slot) => ({
+        ...slot,
+        place: places.find((saved) => saved.label === slot.label),
+    }));
+    const missingSlot = slots.find(
+        (slot) => slot.label === missing && !slot.place,
+    );
+
+    // 버튼을 눌러도 포커스가 입력칸에 남아(keepFocus) 누르고 있던 칸을 알 수 있다.
+    const focusedRole = (): EndpointRole | null => {
+        const active = document.activeElement;
+        const section = rowRef.current?.closest('.place-search');
+        if (!(active instanceof HTMLElement) || !section?.contains(active)) {
+            return null;
+        }
+        const { role } = active.dataset;
+        return isEndpointRole(role) ? role : null;
+    };
+
+    return (
+        <>
+            <div ref={rowRef} className="place-search__shortcuts">
+                {slots.map(({ label, title, icon, place }) => (
+                    <button
+                        key={label}
+                        type="button"
+                        className="place-search__shortcut"
+                        data-empty={place ? undefined : true}
+                        aria-label={
+                            place
+                                ? `${title}: ${place.address ?? place.name}`
+                                : `${title} (등록 안 됨)`
+                        }
+                        onMouseDown={keepFocus}
+                        onClick={() => {
+                            if (!place) {
+                                setMissing(label);
+                                return;
+                            }
+                            setMissing(null);
+                            // 지도의 내 장소 표시처럼 칸 이름(집·회사)으로 넣는다.
+                            onSelect(shortcutRole(focusedRole(), endpoints), {
+                                position: place.position,
+                                label,
+                            });
+                        }}
+                    >
+                        <span
+                            className="place-search__shortcut-icon"
+                            aria-hidden="true"
+                        >
+                            <svg viewBox="0 0 24 24">
+                                <path d={icon} />
+                            </svg>
+                        </span>
+                        {label}
+                    </button>
+                ))}
+            </div>
+            {missingSlot && (
+                <p role="alert" className="place-search__message">
+                    {missingSlot.title} 주소가 없습니다. My 탭 내 장소에서
+                    등록하세요.
+                </p>
+            )}
+        </>
     );
 }
 
@@ -322,6 +420,7 @@ export default function PlaceSearch({
     onSelect,
     onSelectRoute,
     onLocate,
+    myPlaces,
 }: PlaceSearchProps) {
     const [locate, setLocate] = useState<LocateState>({ status: 'idle' });
 
@@ -381,6 +480,13 @@ export default function PlaceSearch({
                 onSelect={(endpoint) => onSelect('goal', endpoint)}
                 onSelectRoute={onSelectRoute}
             />
+            {myPlaces && (
+                <MyPlaceShortcuts
+                    places={myPlaces}
+                    endpoints={endpoints}
+                    onSelect={onSelect}
+                />
+            )}
         </section>
     );
 }
