@@ -80,13 +80,15 @@ export default function ReportForm({
                         <p className="report-form__hint">
                             관리자가 사진을 확인하면 지도에 표시돼요.
                         </p>
-                        <button
-                            type="button"
-                            className="report-form__submit"
-                            onClick={onClose}
-                        >
-                            닫기
-                        </button>
+                        <div className="report-form__actions">
+                            <button
+                                type="button"
+                                className="report-form__submit"
+                                onClick={onClose}
+                            >
+                                닫기
+                            </button>
+                        </div>
                     </>
                 ) : (
                     <form onSubmit={handleSubmit}>
