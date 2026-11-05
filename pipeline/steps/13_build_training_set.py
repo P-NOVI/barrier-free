@@ -21,6 +21,10 @@
   지나갔을 수 있다).
 - 센서의 자치구는 가장 많이 기록된 하나다. 다른 자치구로 기록된 행(자치구가 잘못
   찍힌 주, 센서를 옮기기 전 구간)은 버리고 개수를 보고서에 남긴다.
+- 2025-08 전후로 평균 유동인구가 크게 꺾인 센서(수집 방식이 바뀐 것으로 보인다)는 그
+  전 구간을 뺀다. level_break 의 낮 시간(hour_from ~ hour_to) 평균을 이전 구간과 이후
+  구간으로 비교해 이후/이전이 drop_ratio 미만이면 break_date 앞 행을 버린다. 값이
+  오른 센서는 버리지 않고 보고서에만 남긴다.
 - 날씨가 없는 칸(강수 결측 등)은 NaN 으로 둔다.
 학습·검증·테스트 나누기는 ml/ 에서 한다.
 그래프(00~04 단계)와 관계가 없어서 run_all.py 에 넣지 않고 따로 실행한다.
@@ -136,6 +140,60 @@ def keep_majority_district(history: pa.Table, districts: dict[int, str]) -> pa.T
         }
     )
     return history.join(keep, keys=["sensor_code", "district"], join_type="left semi")
+
+
+def slot_starts(hourly: pa.Table) -> np.ndarray:
+    """한 시간 구간의 시작 시각(H-1:00)."""
+    return hourly["hour_end"].to_numpy() - HOUR.astype("timedelta64[s]")
+
+
+def window_means(
+    hourly: pa.Table, window: list[str], hours: tuple[int, int]
+) -> dict[int, tuple[float, int]]:
+    """window([시작, 끝) 날짜) 안 낮 시간(hours 포함)의 센서별 (평균, 행 수)."""
+    slot_start = slot_starts(hourly)
+    hour_of_day = slot_start.astype("datetime64[h]").astype(np.int64) % 24
+    keep = (
+        (hour_of_day >= hours[0])
+        & (hour_of_day <= hours[1])
+        & (slot_start >= np.datetime64(window[0]))
+        & (slot_start < np.datetime64(window[1]))
+    )
+    codes, inverse = np.unique(
+        hourly["sensor_code"].to_numpy()[keep], return_inverse=True
+    )
+    count = np.bincount(inverse)
+    total = np.bincount(
+        inverse, weights=hourly["foot_traffic"].to_numpy()[keep].astype(np.float64)
+    )
+    return {int(c): (float(t / n), int(n)) for c, t, n in zip(codes, total, count)}
+
+
+def level_ratios(hourly: pa.Table, config: dict[str, Any]) -> dict[int, float]:
+    """센서별 (이후 구간 평균 / 이전 구간 평균). 두 구간에 min_rows 행 이상인 센서만."""
+    hours = (config["hour_from"], config["hour_to"])
+    before = window_means(hourly, config["before"], hours)
+    after = window_means(hourly, config["after"], hours)
+    return {
+        code: after[code][0] / before[code][0]
+        for code in before.keys() & after.keys()
+        if min(before[code][1], after[code][1]) >= config["min_rows"]
+        and before[code][0] > 0
+    }
+
+
+def drop_before_level_break(
+    hourly: pa.Table, ratios: dict[int, float], config: dict[str, Any]
+) -> tuple[pa.Table, list[int], int]:
+    """이후/이전이 drop_ratio 미만인 센서의 break_date 앞 행을 뺀다.
+
+    반환: (남은 표, 해당 센서 코드, 버린 행 수)
+    """
+    flagged = sorted(c for c, ratio in ratios.items() if ratio < config["drop_ratio"])
+    old = np.isin(hourly["sensor_code"].to_numpy(), flagged) & (
+        slot_starts(hourly) < np.datetime64(config["break_date"])
+    )
+    return hourly.filter(pa.array(~old)), flagged, int(old.sum())
 
 
 def build_training_set(
@@ -264,6 +322,22 @@ def main() -> None:
     located = np.isin(hourly["sensor_code"].to_numpy(), list(places))
     hourly = hourly.filter(pa.array(in_weather & located))
 
+    break_config = config["level_break"]
+    ratios = level_ratios(hourly, break_config)
+    hourly, flagged, rows_before_break = drop_before_level_break(
+        hourly, ratios, break_config
+    )
+    level_break = {
+        "break_date": break_config["break_date"],
+        "flagged_sensors": flagged,
+        "rows_dropped": rows_before_break,
+        "flagged_ratios": {str(c): round(ratios[c], 3) for c in flagged},
+        "rising_sensors": sorted(
+            c for c, ratio in ratios.items() if ratio > break_config["rise_ratio"]
+        ),
+        "compared_sensors": len(ratios),
+    }
+
     table = build_training_set(hourly, districts, places, weather, calendar)
     output.parent.mkdir(parents=True, exist_ok=True)
     pq.write_table(table, output, compression=PARQUET_COMPRESSION)
@@ -272,6 +346,7 @@ def main() -> None:
         "rows_dropped_other_district": rows_other_district,
         "hours_dropped_few_bins": short_hours,
         "sensors_without_location": no_place,
+        "level_break": level_break,
     }
     report = make_report(table, dropped)
     report_path.write_text(

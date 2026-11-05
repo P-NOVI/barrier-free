@@ -71,6 +71,70 @@ def test_missing_bins_are_scaled_to_a_full_hour() -> None:
     assert table["foot_traffic"].to_pylist() == [90.0]
 
 
+BREAK_CONFIG = {
+    "break_date": "2025-09-01",
+    "before": ["2025-03-01", "2025-08-01"],
+    "after": ["2025-10-01", "2026-06-01"],
+    "hour_from": 9,
+    "hour_to": 14,
+    "min_rows": 3,
+    "drop_ratio": 0.7,
+    "rise_ratio": 1.3,
+}
+
+
+def traffic_table(rows: list[tuple[int, str, float]]) -> pa.Table:
+    """(센서, 구간 시작 시각, 유동인구) → 13단계 hourly 표(hour_end 는 한 시간 뒤)."""
+    starts = np.array([r[1] for r in rows], dtype="datetime64[s]")
+    return pa.table(
+        {
+            "sensor_code": pa.array([r[0] for r in rows], type=pa.int32()),
+            "hour_end": pa.array(
+                starts + np.timedelta64(1, "h"), type=pa.timestamp("s")
+            ),
+            "foot_traffic": pa.array([r[2] for r in rows], type=pa.float32()),
+        }
+    )
+
+
+def level_break_rows() -> list[tuple[int, str, float]]:
+    rows = []
+    for day in range(1, 6):
+        before, after = f"2025-04-0{day}T10:00", f"2025-11-0{day}T10:00"
+        rows += [(1, before, 2000.0), (1, after, 1000.0)]  # 절반으로 하락
+        rows += [(2, before, 2000.0), (2, after, 1900.0)]  # 거의 그대로
+        rows += [(4, before, 1000.0), (4, after, 1500.0)]  # 1.5배 상승
+    rows.append((1, "2025-08-20T10:00", 500.0))  # 단절 구간의 불안정한 값
+    rows.append((3, "2025-04-01T10:00", 2000.0))  # 이후 구간 행이 모자란 센서
+    rows.append((3, "2025-11-01T10:00", 100.0))
+    return rows
+
+
+def test_level_ratios_use_daytime_windows_and_min_rows() -> None:
+    ratios = training.level_ratios(traffic_table(level_break_rows()), BREAK_CONFIG)
+    assert ratios == {1: 0.5, 2: 0.95, 4: 1.5}  # 센서 3 은 행이 모자라 비교하지 않는다.
+
+
+def test_level_ratios_ignore_night_hours() -> None:
+    rows = [(1, f"2025-04-0{d}T02:00", 5000.0) for d in range(1, 6)]
+    rows += [(1, f"2025-11-0{d}T02:00", 10.0) for d in range(1, 6)]
+    assert training.level_ratios(traffic_table(rows), BREAK_CONFIG) == {}
+
+
+def test_drop_before_level_break_only_for_dropped_sensors() -> None:
+    hourly = traffic_table(level_break_rows())
+    ratios = training.level_ratios(hourly, BREAK_CONFIG)
+    kept, flagged, dropped = training.drop_before_level_break(
+        hourly, ratios, BREAK_CONFIG
+    )
+    assert flagged == [1]
+    # 센서 1 의 이전 구간 5행과 단절 구간 1행
+    assert dropped == 6
+    assert kept.num_rows == hourly.num_rows - 6
+    sensor_1 = kept.filter(pa.array(kept["sensor_code"].to_numpy() == 1))
+    assert set(sensor_1["foot_traffic"].to_pylist()) == {1000.0}
+
+
 def test_keep_majority_district_drops_other_district_rows() -> None:
     history = pa.table(
         {

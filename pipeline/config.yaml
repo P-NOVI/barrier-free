@@ -226,3 +226,19 @@ training_set:
   # 한 시간에 10분 값이 6개 있다. 이만큼 이상 있어야 그 시간의 유동인구를 만든다.
   bins_per_hour: 6
   min_bins: 4
+  # 2025-08 전후로 평균 유동인구가 꺾인 센서(수집 방식이 바뀐 것으로 보인다)를 찾아 그 전
+  # 구간을 뺀다. 낮 시간(hour_from ~ hour_to시) 평균을 before·after 구간([시작, 끝) 날짜)에서
+  # 비교해 이후/이전이 drop_ratio 미만이면 break_date 앞 행을 버린다. 두 구간 모두
+  # min_rows 행 이상인 센서만 비교한다. after 는 학습 구간 안에서 잡는다. 이후/이전이
+  # rise_ratio 를 넘게 오른 센서는 버리지 않고 보고서에만 남긴다.
+  level_break:
+    break_date: "2025-09-01"
+    before: ["2025-03-01", "2025-08-01"]
+    after: ["2025-10-01", "2026-06-01"]
+    hour_from: 9
+    hour_to: 14
+    min_rows: 200
+    # 검증 구간 baseline MAE 가 0.85 부근에서 더 줄지 않아 0.85 로 잡았다(0.7 이면 오른쪽 센서가
+    # 남아 baseline 이 나쁘다).
+    drop_ratio: 0.85
+    rise_ratio: 1.3
