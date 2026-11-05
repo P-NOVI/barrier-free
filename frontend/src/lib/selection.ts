@@ -18,6 +18,24 @@ export const NO_ENDPOINTS: Endpoints = { start: null, goal: null };
 export const MAP_CLICK_LABEL = '지도에서 고른 위치';
 export const CURRENT_LOCATION_LABEL = '현재 위치';
 
+export function isEndpointRole(value: unknown): value is EndpointRole {
+    return value === 'start' || value === 'goal';
+}
+
+/**
+ * 내 장소(집·회사) 버튼을 눌렀을 때 넣을 칸. 누르고 있던 칸이 있으면 그 칸,
+ * 없으면 빈 칸(출발지 먼저), 둘 다 차 있으면 도착지.
+ */
+export function shortcutRole(
+    focused: EndpointRole | null,
+    endpoints: Endpoints,
+): EndpointRole {
+    if (focused) {
+        return focused;
+    }
+    return endpoints.start ? 'goal' : 'start';
+}
+
 /** 지도를 눌러 고르거나 검색해서 고른 장소. 이름·주소를 찾은 뒤에 만든다. */
 export type PickedPlace = {
     position: LngLat;

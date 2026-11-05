@@ -9,7 +9,10 @@ import {
     type SavedPlace,
     type SavedPlaceRequest,
 } from '../lib/savedPlacesApi';
-import { MY_LIST_ICONS as ICONS } from '../lib/myListIcons';
+import {
+    MY_LIST_ICONS as ICONS,
+    MY_PLACE_SLOTS as SLOTS,
+} from '../lib/myListIcons';
 import MyListRow from './MyListRow';
 import { SearchResults } from './PlaceSearch';
 
@@ -19,11 +22,6 @@ const SEARCH_DELAY_MS = 300;
 const FREQUENT_MAX = 5;
 const EMPTY_DETAIL = '주소를 등록하시면 길찾기가 쉬워집니다';
 
-// 늘 보이는 칸. label 은 장소 카드 북마크의 이름(MY_PLACE_LABELS)과 같다.
-const SLOTS = [
-    { label: '집', title: '집', icon: ICONS.home },
-    { label: '회사', title: '회사/학교', icon: ICONS.work },
-];
 const SLOT_LABELS = SLOTS.map((slot) => slot.label);
 
 type MyPlacesProps = {
