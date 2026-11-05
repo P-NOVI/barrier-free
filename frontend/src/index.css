@@ -593,6 +593,12 @@ input::placeholder {
         appearance: base-select;
     }
 
+    /* 고른 조건 글자를 알약 세로 가운데에 둔다. */
+    .route-panel__preset select {
+        display: inline-flex;
+        align-items: center;
+    }
+
     .route-panel__preset select::picker-icon {
         display: none;
     }
