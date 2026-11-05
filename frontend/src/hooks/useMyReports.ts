@@ -15,7 +15,8 @@ export type MyReports = {
     error: string | null;
     /** 실패하면 오류를 던진다. 부르는 폼이 안내 문구를 보인다. */
     update: (id: number, update: ReportUpdate) => Promise<void>;
-    remove: (id: number) => void;
+    /** 지웠으면 true. 실패하면 error 에 문구를 담고 false */
+    remove: (id: number) => Promise<boolean>;
     /** 제보를 새로 올렸거나 로그인·로그아웃으로 사용자가 바뀌면 다시 불러온다. */
     reload: () => void;
 };
@@ -58,15 +59,16 @@ export function useMyReports(): MyReports {
         );
     }, []);
 
-    const remove = useCallback((id: number) => {
+    const remove = useCallback(async (id: number) => {
         setError(null);
-        deleteReport(id)
-            .then(() =>
-                setReports((current) =>
-                    current.filter((report) => report.id !== id),
-                ),
-            )
-            .catch((reason: unknown) => setError(messageOf(reason)));
+        try {
+            await deleteReport(id);
+        } catch (reason) {
+            setError(messageOf(reason));
+            return false;
+        }
+        setReports((current) => current.filter((report) => report.id !== id));
+        return true;
     }, []);
 
     const reload = useCallback(() => setVersion((current) => current + 1), []);

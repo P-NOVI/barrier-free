@@ -107,8 +107,9 @@ export default function ReportEditForm({
                 </span>
             </label>
             <p className="report-form__hint">
-                위치와 사진은 고칠 수 없어요. 바꾸려면 지우고 다시 제보해
-                주세요.
+                위치와 사진은 수정이 불가능해요.
+                <br />
+                수정을 원할 시 삭제 후 다시 제보해 주세요.
             </p>
             {error && (
                 <p role="alert" className="place-info__error">
@@ -118,7 +119,7 @@ export default function ReportEditForm({
             <div className="report-form__actions">
                 <button
                     type="button"
-                    className="place-info__chip"
+                    className="place-info__chip report-form__cancel"
                     onClick={onCancel}
                 >
                     취소

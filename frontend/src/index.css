@@ -1927,6 +1927,11 @@ input::placeholder {
     cursor: pointer;
 }
 
+/* 취소 버튼: 칩 모양에서 모서리만 저장 버튼과 같게 */
+.report-form__cancel {
+    border-radius: 8px;
+}
+
 .report-form__submit:disabled {
     opacity: 0.5;
     cursor: default;

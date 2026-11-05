@@ -36,77 +36,111 @@ export default function MyReports({
     const [editingId, setEditingId] = useState<number | null>(null);
     // 지울지 한 번 더 묻고 있는 제보
     const [confirmingId, setConfirmingId] = useState<number | null>(null);
+    // 수정·삭제를 마쳤다고 알리는 팝업의 문구
+    const [notice, setNotice] = useState<string | null>(null);
 
-    if (reports.length === 0) {
-        return (
+    const list =
+        reports.length === 0 ? (
             <p className="my-tab__status">
                 지도에서 장소를 눌러 길 위 문제를 제보하면 여기에 모여요.
             </p>
+        ) : (
+            <ul className="my-list">
+                {reports.map((report) => {
+                    if (report.id === editingId) {
+                        return (
+                            <li key={report.id} className="my-report__edit">
+                                <ReportEditForm
+                                    report={report}
+                                    onCancel={() => setEditingId(null)}
+                                    onSave={(update) =>
+                                        onUpdate(report.id, update).then(() => {
+                                            setEditingId(null);
+                                            setNotice('수정되었습니다');
+                                        })
+                                    }
+                                />
+                            </li>
+                        );
+                    }
+                    if (report.id === confirmingId) {
+                        return (
+                            <li
+                                key={report.id}
+                                className="my-list__row my-report__confirm"
+                            >
+                                <span className="my-report__question">
+                                    {titleOf(report)} 제보를 지울까요?
+                                </span>
+                                <button
+                                    type="button"
+                                    className="place-info__chip report-form__cancel"
+                                    onClick={() => setConfirmingId(null)}
+                                >
+                                    취소
+                                </button>
+                                <button
+                                    type="button"
+                                    className="report-form__submit"
+                                    onClick={() => {
+                                        setConfirmingId(null);
+                                        void onDelete(report.id).then(
+                                            (deleted) => {
+                                                if (deleted) {
+                                                    setNotice('삭제되었습니다');
+                                                }
+                                            },
+                                        );
+                                    }}
+                                >
+                                    지우기
+                                </button>
+                            </li>
+                        );
+                    }
+                    return (
+                        <MyListRow
+                            key={report.id}
+                            icon={ICONS.flag}
+                            title={titleOf(report)}
+                            detail={detailOf(report)}
+                            onPick={() => {
+                                if (report.status === 'pending') {
+                                    setEditingId(report.id);
+                                }
+                            }}
+                            onDelete={() => setConfirmingId(report.id)}
+                        />
+                    );
+                })}
+            </ul>
         );
-    }
 
     return (
-        <ul className="my-list">
-            {reports.map((report) => {
-                if (report.id === editingId) {
-                    return (
-                        <li key={report.id} className="my-report__edit">
-                            <ReportEditForm
-                                report={report}
-                                onCancel={() => setEditingId(null)}
-                                onSave={(update) =>
-                                    onUpdate(report.id, update).then(() =>
-                                        setEditingId(null),
-                                    )
-                                }
-                            />
-                        </li>
-                    );
-                }
-                if (report.id === confirmingId) {
-                    return (
-                        <li
-                            key={report.id}
-                            className="my-list__row my-report__confirm"
-                        >
-                            <span className="my-report__question">
-                                {titleOf(report)} 제보를 지울까요?
-                            </span>
-                            <button
-                                type="button"
-                                className="place-info__chip"
-                                onClick={() => setConfirmingId(null)}
-                            >
-                                취소
-                            </button>
+        <>
+            {list}
+            {notice && (
+                <div className="report-backdrop">
+                    <section
+                        className="report-form"
+                        role="dialog"
+                        aria-modal="true"
+                        aria-label={notice}
+                    >
+                        <h2 className="report-form__title">{notice}</h2>
+                        <div className="report-form__actions">
                             <button
                                 type="button"
                                 className="report-form__submit"
-                                onClick={() => {
-                                    setConfirmingId(null);
-                                    onDelete(report.id);
-                                }}
+                                autoFocus
+                                onClick={() => setNotice(null)}
                             >
-                                지우기
+                                확인
                             </button>
-                        </li>
-                    );
-                }
-                return (
-                    <MyListRow
-                        key={report.id}
-                        icon={ICONS.flag}
-                        title={titleOf(report)}
-                        detail={detailOf(report)}
-                        onPick={() => {
-                            if (report.status === 'pending') {
-                                setEditingId(report.id);
-                            }
-                        }}
-                        onDelete={() => setConfirmingId(report.id)}
-                    />
-                );
-            })}
-        </ul>
+                        </div>
+                    </section>
+                </div>
+            )}
+        </>
     );
 }
