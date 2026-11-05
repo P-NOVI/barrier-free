@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { createPortal } from 'react-dom';
 
 import type { MyReports as MyReportsState } from '../hooks/useMyReports';
 import { MY_LIST_ICONS as ICONS } from '../lib/myListIcons';
@@ -119,28 +120,32 @@ export default function MyReports({
     return (
         <>
             {list}
-            {notice && (
-                <div className="report-backdrop">
-                    <section
-                        className="report-form"
-                        role="dialog"
-                        aria-modal="true"
-                        aria-label={notice}
-                    >
-                        <div className="my-report__notice">
-                            <h2 className="report-form__title">{notice}</h2>
-                            <button
-                                type="button"
-                                className="report-form__submit"
-                                autoFocus
-                                onClick={() => setNotice(null)}
-                            >
-                                확인
-                            </button>
-                        </div>
-                    </section>
-                </div>
-            )}
+            {notice &&
+                // 아래 시트는 transform 으로 움직여서, 그 안의 position: fixed 는 화면이 아니라
+                // 시트를 기준으로 놓인다. 화면 가운데에 뜨도록 body 에 그린다.
+                createPortal(
+                    <div className="report-backdrop">
+                        <section
+                            className="report-form"
+                            role="dialog"
+                            aria-modal="true"
+                            aria-label={notice}
+                        >
+                            <div className="my-report__notice">
+                                <h2 className="report-form__title">{notice}</h2>
+                                <button
+                                    type="button"
+                                    className="report-form__submit"
+                                    autoFocus
+                                    onClick={() => setNotice(null)}
+                                >
+                                    확인
+                                </button>
+                            </div>
+                        </section>
+                    </div>,
+                    document.body,
+                )}
         </>
     );
 }
