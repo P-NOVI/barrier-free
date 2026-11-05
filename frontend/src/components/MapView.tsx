@@ -1,4 +1,11 @@
-import { type ReactNode, useEffect, useMemo, useRef, useState } from 'react';
+import {
+    type ReactNode,
+    useEffect,
+    useLayoutEffect,
+    useMemo,
+    useRef,
+    useState,
+} from 'react';
 import { createPortal } from 'react-dom';
 
 import type { LocationFix } from '../lib/geolocation';
@@ -113,6 +120,8 @@ type MapViewProps = {
     fitPadding?: FitPadding;
     /** 경로가 바뀌면 경로 전체가 보이게 맞출지. 안내 중에는 내 위치를 따라가므로 끈다. */
     fitRoute?: boolean;
+    /** 시트가 움직여 지도 크기가 잠깐 바뀌는 중. 그동안은 경로에 다시 맞추지 않고 멈춘 뒤 맞춘다. */
+    resizing?: boolean;
     /** 지도 가운데에 계속 둘 위치 (안내 중 내 위치) */
     follow?: LngLat | null;
     onMapClick?: (position: LngLat) => void;
@@ -394,7 +403,17 @@ function useRouteLine(
     goalEntrance: LngLat | null | undefined,
     padding: FitPadding,
     fit: boolean,
+    resizing: boolean,
 ) {
+    // 크기가 잠깐 바뀌는 동안 미뤄 둔 맞춤을, 멈출 때 크기가 달라졌으면 한다.
+    const resizingRef = useRef(resizing);
+    const refit = useRef<(() => void) | null>(null);
+    useLayoutEffect(() => {
+        resizingRef.current = resizing;
+        if (!resizing) {
+            refit.current?.();
+        }
+    }, [resizing]);
     useEffect(() => {
         if (!map || !path || path.length < 2) {
             return;
@@ -437,8 +456,18 @@ function useRouteLine(
         [...path, ...gaps.flat()].forEach((point) =>
             bounds.extend(toLatLng(point)),
         );
+        const node = map.getNode();
+        let fitted: { width: number; height: number } | null = null;
         const fitBounds = () => {
             // 시트를 여닫아 지도 크기가 바뀌면 바뀐 크기로 다시 맞춘다.
+            const size = { width: node.clientWidth, height: node.clientHeight };
+            if (
+                resizingRef.current ||
+                (fitted?.width === size.width && fitted.height === size.height)
+            ) {
+                return;
+            }
+            fitted = size;
             map.relayout();
             map.setBounds(
                 bounds,
@@ -449,9 +478,11 @@ function useRouteLine(
             );
         };
         fitBounds();
+        refit.current = fitBounds;
         const observer = new ResizeObserver(fitBounds);
-        observer.observe(map.getNode());
+        observer.observe(node);
         return () => {
+            refit.current = null;
             observer.disconnect();
             removeLines();
         };
@@ -532,6 +563,7 @@ export default function MapView({
     myLocation,
     fitPadding = DEFAULT_FIT_PADDING,
     fitRoute = true,
+    resizing = false,
     follow,
     onMapClick,
     onSavedPlaceClick,
@@ -601,9 +633,14 @@ export default function MapView({
             return;
         }
         // 화면 배치가 바뀌어 지도 크기가 달라지면 카카오맵에 알려야 지도가 빈칸 없이 그려진다.
-        // 시트를 열어 지도가 줄어도 보던 곳이 가운데에 남게 중심을 지킨다.
+        // 시트가 지도를 덮거나 비켜 높이가 바뀌어도 보이던 곳이 화면에서 움직이지 않게 위쪽을 기준으로 둔다.
         const observer = new ResizeObserver(() => {
-            const center = map.getCenter();
+            // relayout 전 투영은 바뀌기 전 크기 기준이다. 이미 맞춰져 있으면 중심이 그대로다.
+            const projection = map.getProjection();
+            const { x } = projection.containerPointFromCoords(map.getCenter());
+            const center = projection.coordsFromContainerPoint(
+                new kakao.maps.Point(x, container.clientHeight / 2),
+            );
             map.relayout();
             map.setCenter(center);
         });
@@ -622,6 +659,7 @@ export default function MapView({
         goalEntrance,
         fitPadding,
         fitRoute,
+        resizing,
     );
     useFollow(map, follow);
     useRouteArrows(map, routeShape);

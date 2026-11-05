@@ -58,11 +58,17 @@ input::placeholder {
 
 /* 아래 메뉴·시트 크기. 좁은 화면은 지도가 그 위에서 끝나 카카오 로고·축척이 가리지 않는다. */
 .app {
-    --nav-height: 60px;
+    /* 화면 아래에 띄운 메뉴 막대 높이와 둘레 여백 */
+    --nav-bar: 64px;
+    --nav-gap: 10px;
+    /* 메뉴가 차지하는 아래 영역 */
+    --nav-height: calc(
+        var(--nav-bar) + var(--nav-gap) * 2 + env(safe-area-inset-bottom)
+    );
     /* 접힌 시트에 보이는 손잡이·제목 높이 */
     --sheet-peek: 52px;
-    /* 펼친 시트는 화면 가운데까지 올라온다. */
-    --sheet-half: calc(50% - var(--nav-height));
+    /* 끝까지 올린 시트 위에 남기는 틈 */
+    --sheet-top-gap: calc(env(safe-area-inset-top) + 8px);
     --map-bottom: var(--nav-height);
 
     position: relative;
@@ -73,8 +79,15 @@ input::placeholder {
     --map-bottom: calc(var(--nav-height) + var(--sheet-peek));
 }
 
-.app[data-sheet='half'] {
-    --map-bottom: calc(var(--nav-height) + var(--sheet-half));
+/* 절반·전체로 편 시트는 화면 가운데부터 덮는다(전체는 지도를 다 가린다). */
+.app[data-sheet='half'],
+.app[data-sheet='full'] {
+    --map-bottom: 50%;
+}
+
+/* 시트가 움직이는 동안은 지도를 화면 아래까지 늘려, 시트가 지나간 자리가 비지 않게 한다. */
+.app[data-sheet-moving] {
+    --map-bottom: 0px;
 }
 
 /* 고른 장소 시트가 메뉴 자리를 덮으므로 지도는 그 시트 위에서 끝난다. 높이는 App.tsx 가 잰다. */
@@ -337,8 +350,23 @@ input::placeholder {
 
 /* My 탭: 위에 즐겨찾기·내 장소·내 경로 탭, 좁은 화면은 맨 아래 계정 */
 .my-tab__tabs {
+    position: relative;
     display: flex;
     border-bottom: 1px solid var(--border);
+}
+
+/* 고른 탭 밑줄. 고른 탭 자리로 미끄러진다(--my-index 는 MyTab 이 정함). */
+.my-tab__tabs::after {
+    content: '';
+    position: absolute;
+    bottom: -1px;
+    left: 0;
+    width: calc(100% / var(--my-count));
+    height: 3px;
+    border-radius: 3px 3px 0 0;
+    background: var(--brand);
+    transform: translateX(calc(var(--my-index) * 100%));
+    transition: transform 0.28s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 .my-tab__tab {
@@ -346,15 +374,14 @@ input::placeholder {
     min-height: 44px;
     padding: 0;
     border: 0;
-    border-bottom: 3px solid transparent;
     font: inherit;
     color: var(--muted);
     background: none;
     cursor: pointer;
+    transition: color 0.2s ease;
 }
 
 .my-tab__tab[aria-selected='true'] {
-    border-bottom-color: var(--brand);
     font-weight: 600;
     color: var(--brand);
 }
@@ -921,15 +948,11 @@ input::placeholder {
     cursor: pointer;
 }
 
-.place-search__results button:hover,
+/* 마우스를 올리거나 터치할 때는 테두리를 두지 않는다(터치 기기는 손을 뗀 뒤에도 hover 가 남는다).
+   키보드로 옮겨 갈 때만 테두리로 위치를 보여 준다. */
 .place-search__results button:focus-visible {
-    background: var(--overlay-bg);
-    outline: 2px solid var(--border);
+    outline: 2px solid var(--text);
     outline-offset: -2px;
-}
-
-.place-search__results button:focus-visible {
-    outline-color: var(--text);
 }
 
 /* 검색어가 없을 때 검색창 아래에 보이는 최근 경로·검색 */
@@ -1454,45 +1477,67 @@ input::placeholder {
     display: none;
 }
 
-/* 화면 아래 메뉴 바 */
+/*
+ * 화면 아래에 띄운 둥근 메뉴 막대. 시트는 이 막대 뒤로 화면 아래까지 이어진다.
+ * 고른 메뉴 뒤 회색 알약은 고른 자리로 미끄러진다(--menu-index 는 MenuBar 가 정함).
+ */
 .menu-bar {
+    --menu-pad: 6px;
+
     position: absolute;
-    right: 0;
-    bottom: 0;
-    left: 0;
-    z-index: 25;
+    right: var(--nav-gap);
+    bottom: calc(var(--nav-gap) + env(safe-area-inset-bottom));
+    left: var(--nav-gap);
+    z-index: 35;
     display: grid;
     /* 메뉴 수와 상관없이 같은 폭으로 나눈다. */
     grid-auto-columns: 1fr;
     grid-auto-flow: column;
     box-sizing: border-box;
-    height: var(--nav-height);
-    box-shadow: 0 -1px 0 var(--border);
+    height: var(--nav-bar);
+    padding: var(--menu-pad);
+    border-radius: 26px;
     background: var(--bg);
+    box-shadow:
+        0 1px 3px rgba(24, 33, 47, 0.1),
+        0 6px 20px rgba(24, 33, 47, 0.14);
+}
+
+.menu-bar::before {
+    content: '';
+    position: absolute;
+    top: var(--menu-pad);
+    bottom: var(--menu-pad);
+    left: var(--menu-pad);
+    width: calc((100% - var(--menu-pad) * 2) / var(--menu-count));
+    border-radius: 20px;
+    background: var(--soft-bg);
+    transform: translateX(calc(var(--menu-index) * 100%));
+    transition: transform 0.32s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 .menu-bar__item {
+    position: relative;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 4px;
+    gap: 2px;
     padding: 0;
     border: 0;
+    border-radius: 20px;
     font: inherit;
     font-size: 12px;
+    font-weight: 500;
     color: var(--muted);
     background: none;
     cursor: pointer;
+    transition: color 0.2s ease;
 }
 
-/* 고른 메뉴는 아이콘 뒤에 알약을 둔다. */
 .menu-bar__item svg {
-    box-sizing: content-box;
-    width: 22px;
-    height: 22px;
-    padding: 4px 18px;
-    border-radius: 999px;
+    width: 24px;
+    height: 24px;
     fill: none;
     stroke: currentColor;
     stroke-width: 1.8;
@@ -1501,42 +1546,48 @@ input::placeholder {
 }
 
 .menu-bar__item[aria-current='page'] {
-    font-weight: 600;
+    font-weight: 700;
     color: var(--brand);
 }
 
 .menu-bar__item[aria-current='page'] svg {
-    background: var(--border);
+    stroke-width: 2.2;
 }
 
 /*
- * 메뉴 위에서 올라오는 시트. 접으면 손잡이·제목만 남기고 아래로 내린다.
- * --shift 만큼 내리고 그만큼 아래를 잘라, 메뉴 아래로 비어져 나오지 않게 한다.
+ * 아래에서 올라오는 시트. 끝까지 올린 높이로 그려 두고, 단계마다 아래로 내려 보이는 높이를
+ * 바꾼다(BottomSheet.tsx 가 transform 을 정함). 아래 여백은 떠 있는 메뉴 자리다.
  */
 .bottom-sheet {
-    --shift: var(--drag);
-
     position: absolute;
     right: 0;
-    bottom: var(--nav-height);
+    bottom: 0;
     left: 0;
     z-index: 15;
     display: flex;
     flex-direction: column;
-    height: var(--sheet-half);
-    border-radius: 20px 20px 0 0;
+    box-sizing: border-box;
+    height: calc(100% - var(--sheet-top-gap));
+    padding-bottom: var(--nav-height);
+    border-radius: 24px 24px 0 0;
     background: var(--bg);
     box-shadow: var(--sheet-shadow);
-    transform: translateY(var(--shift));
-    /* 위·옆은 그림자가 보이게 조금 넓게 남긴다. */
-    clip-path: inset(-16px -16px var(--shift) -16px);
-    transition:
-        transform 0.2s ease,
-        clip-path 0.2s ease;
+    /* 처음 잴 때까지는 화면 밖에 둔다. */
+    transform: translateY(100%);
+    transition: transform 0.42s cubic-bezier(0.22, 1, 0.36, 1);
+    will-change: transform;
 }
 
-.bottom-sheet[data-snap='collapsed'] {
-    --shift: calc(100% - var(--sheet-peek) + var(--drag));
+/* 잴 때 바로 제자리에 놓고, 그 뒤부터 움직임을 보인다. */
+.bottom-sheet:not([data-ready]) {
+    visibility: hidden;
+    transition: none;
+}
+
+/* 끝까지 올리거나 끄는 중에는 위 검색창도 덮는다. 메뉴(35)는 그 위에 남는다. */
+.bottom-sheet[data-snap='full'],
+.bottom-sheet[data-dragging] {
+    z-index: 31;
 }
 
 /* 끄는 동안은 손가락을 바로 따라온다. */
@@ -1585,6 +1636,21 @@ input::placeholder {
     padding: 0 16px 16px;
     overflow-y: auto;
     overscroll-behavior: contain;
+    transition: opacity 0.2s ease;
+}
+
+/* 시트 아래쪽이 화면 밖에 있는 만큼(--sheet-hidden 은 BottomSheet.tsx 가 정함) 내용 끝에 여백을 둬,
+   시트를 움직이지 않고 보이는 칸 안에서 내용 끝까지 스크롤된다. */
+.bottom-sheet__body::after {
+    content: '';
+    display: block;
+    height: var(--sheet-hidden, 0px);
+}
+
+/* 접힌 시트는 내용이 메뉴 둘레로 비쳐 보이지 않게 감춘다. 끄는 동안은 다시 보인다. */
+.bottom-sheet[data-snap='collapsed']:not([data-dragging]) .bottom-sheet__body {
+    opacity: 0;
+    visibility: hidden;
 }
 
 /* 넓은 화면 왼쪽 위에 띄운 패널: 위에 이름과 메뉴, 아래에 고른 탭 내용 */
@@ -1632,6 +1698,8 @@ input::placeholder {
 /* 회색 트랙 위 흰 알약 탭. 알약은 고른 탭 자리로 미끄러진다(--menu-index 는 MenuBar 가 정함). */
 .side-panel .menu-bar {
     position: relative;
+    inset: auto;
+    z-index: auto;
     display: flex;
     gap: 2px;
     height: auto;
@@ -1760,11 +1828,14 @@ input::placeholder {
  * 넓은 화면: 지도는 화면 전체, 패널은 왼쪽 위에 띄운 카드 하나.
  * App.tsx 의 WIDE_LAYOUT 과 같은 값
  */
-/* 움직임 줄이기를 켠 사용자에게는 시트와 탭 알약을 애니메이션 없이 옮긴다. */
+/* 움직임 줄이기를 켠 사용자에게는 시트와 탭 알약·밑줄을 애니메이션 없이 옮긴다. */
 @media (prefers-reduced-motion: reduce) {
     .bottom-sheet,
-    .side-panel .menu-bar::before,
-    .side-panel .menu-bar__item {
+    .bottom-sheet__body,
+    .menu-bar::before,
+    .menu-bar__item,
+    .my-tab__tabs::after,
+    .my-tab__tab {
         transition: none;
     }
 }

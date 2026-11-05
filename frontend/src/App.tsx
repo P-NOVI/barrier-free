@@ -121,6 +121,9 @@ export default function App() {
     const placeSheet = !wide && !navigating && picked !== null;
     const sheetOpen =
         !navigating && !wide && sheet.tab !== 'search' && !placeSheet;
+    // 시트가 끌리거나 미끄러지는 동안은 지도를 화면 아래까지 늘려 시트가 지나간 자리가 비지 않게 한다.
+    const [sheetMoving, setSheetMoving] = useState(false);
+    const mapStretched = sheetOpen && sheetMoving;
     // 지도는 장소 시트 위에서 끝난다(index.css).
     const [placeSheetRef, placeSheetHeight] =
         useElementHeight<HTMLDivElement>();
@@ -451,6 +454,7 @@ export default function App() {
                 placeSheet ? 'place' : sheetOpen ? sheet.snap : 'closed'
             }
             data-navigating={navigating || undefined}
+            data-sheet-moving={mapStretched || undefined}
             style={
                 placeSheet
                     ? ({
@@ -472,6 +476,7 @@ export default function App() {
                 savedPlaces={savedPlaces.places}
                 fitPadding={wide ? FIT_PADDING.wide : FIT_PADDING.narrow}
                 fitRoute={!navigating}
+                resizing={mapStretched}
                 follow={
                     navigating && following
                         ? (navigationFix?.position ?? null)
@@ -519,6 +524,7 @@ export default function App() {
                     onSnapChange={(snap) =>
                         setSheet((current) => ({ ...current, snap }))
                     }
+                    onMovingChange={setSheetMoving}
                 >
                     {tabContent[sheet.tab]}
                 </BottomSheet>

@@ -1,4 +1,4 @@
-import { type ReactNode, useId, useState } from 'react';
+import { type CSSProperties, type ReactNode, useId, useState } from 'react';
 
 import type { MyReports as MyReportsState } from '../hooks/useMyReports';
 import type { SavedPlaces } from '../hooks/useSavedPlaces';
@@ -58,7 +58,20 @@ export default function MyTab({
 
     return (
         <div className="my-tab">
-            <div role="tablist" className="my-tab__tabs" aria-label="My">
+            <div
+                role="tablist"
+                className="my-tab__tabs"
+                aria-label="My"
+                // 밑줄이 고른 탭 자리로 미끄러지게 순서를 넘긴다.
+                style={
+                    {
+                        '--my-count': SECTIONS.length,
+                        '--my-index': SECTIONS.findIndex(
+                            (item) => item.id === section,
+                        ),
+                    } as CSSProperties
+                }
+            >
                 {SECTIONS.map((item) => (
                     <button
                         key={item.id}
