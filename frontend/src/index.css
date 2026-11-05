@@ -85,6 +85,11 @@ input::placeholder {
     --map-bottom: 50%;
 }
 
+/* 시트가 움직이는 동안은 지도를 화면 아래까지 늘려, 시트가 지나간 자리가 비지 않게 한다. */
+.app[data-sheet-moving] {
+    --map-bottom: 0px;
+}
+
 /* 고른 장소 시트가 메뉴 자리를 덮으므로 지도는 그 시트 위에서 끝난다. 높이는 App.tsx 가 잰다. */
 .app[data-sheet='place'] {
     --map-bottom: var(--place-sheet-height, 0px);

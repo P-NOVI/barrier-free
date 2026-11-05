@@ -22,6 +22,8 @@ type BottomSheetProps = {
     title: string;
     snap: SheetSnap;
     onSnapChange: (snap: SheetSnap) => void;
+    /** 끌거나 단계 자리로 미끄러지는 동안 true, 멈추면 false */
+    onMovingChange?: (moving: boolean) => void;
     children: ReactNode;
 };
 
@@ -78,6 +80,7 @@ export default function BottomSheet({
     title,
     snap,
     onSnapChange,
+    onMovingChange,
     children,
 }: BottomSheetProps) {
     const sheetRef = useRef<HTMLElement>(null);
@@ -86,6 +89,8 @@ export default function BottomSheet({
     const heights = useSnapHeights(sheetRef, headerRef);
     const drag = useRef<Drag | null>(null);
     const [dragging, setDragging] = useState(false);
+    // 움직임마다 번호를 매겨, 끝난 애니메이션이 지금 움직임의 것인지 가린다.
+    const motion = useRef(0);
 
     const place = useCallback(
         (height: number) => {
@@ -98,11 +103,28 @@ export default function BottomSheet({
     );
 
     // 끄는 중이 아니면 단계 자리에 둔다. 같은 단계로 돌아와도 끈 자리에서 되돌린다.
+    // 미끄러지는 애니메이션이 생기면 끝날 때까지 움직이는 중으로 알린다.
     useLayoutEffect(() => {
-        if (!dragging && heights) {
-            place(heights[snap]);
+        const sheet = sheetRef.current;
+        if (dragging || !heights || !sheet) {
+            return;
         }
-    }, [dragging, heights, snap, place]);
+        place(heights[snap]);
+        motion.current += 1;
+        const id = motion.current;
+        const animations = sheet.getAnimations();
+        onMovingChange?.(animations.length > 0);
+        if (animations.length > 0) {
+            // 중간에 끊긴 애니메이션도 끝난 것으로 보고, 그 사이 새 움직임이 없을 때만 멈췄다고 알린다.
+            void Promise.allSettled(
+                animations.map((animation) => animation.finished),
+            ).then(() => {
+                if (motion.current === id) {
+                    onMovingChange?.(false);
+                }
+            });
+        }
+    }, [dragging, heights, snap, place, onMovingChange]);
 
     const begin = useCallback(
         (y: number) => {
@@ -132,7 +154,9 @@ export default function BottomSheet({
             }
             if (!current.moved) {
                 current.moved = true;
+                motion.current += 1;
                 setDragging(true);
+                onMovingChange?.(true);
             }
             const now = performance.now();
             current.samples.push({ y, t: now });
@@ -142,7 +166,7 @@ export default function BottomSheet({
             current.height = dragHeight(current.startHeight, dy, heights);
             place(current.height);
         },
-        [heights, place],
+        [heights, place, onMovingChange],
     );
 
     /** 손을 뗐다. 끌지 않고 눌렀으면 tapped 를 부른다. */
