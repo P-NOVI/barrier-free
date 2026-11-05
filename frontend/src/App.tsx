@@ -1,4 +1,5 @@
 import {
+    type CSSProperties,
     type ReactNode,
     useCallback,
     useEffect,
@@ -19,6 +20,7 @@ import PlaceInfoCard from './components/PlaceInfoCard';
 import PlaceSearch from './components/PlaceSearch';
 import RoutePanel from './components/RoutePanel';
 import TopSearch from './components/TopSearch';
+import { useElementHeight } from './hooks/useElementHeight';
 import { useMediaQuery } from './hooks/useMediaQuery';
 import { useNavigation } from './hooks/useNavigation';
 import { useRoute } from './hooks/useRoute';
@@ -111,7 +113,13 @@ export default function App() {
         tab: loginFailed && !wide ? 'my' : 'search',
         snap: 'half',
     }));
-    const sheetOpen = !navigating && !wide && sheet.tab !== 'search';
+    // 좁은 화면에서 고른 장소는 메뉴·시트 대신 아래에 붙은 장소 시트로 보인다.
+    const placeSheet = !wide && !navigating && picked !== null;
+    const sheetOpen =
+        !navigating && !wide && sheet.tab !== 'search' && !placeSheet;
+    // 지도는 장소 시트 위에서 끝난다(index.css).
+    const [placeSheetRef, placeSheetHeight] =
+        useElementHeight<HTMLDivElement>();
     const searchInput = useRef<HTMLInputElement>(null);
     const [elevatorError, setElevatorError] = useState<string | null>(null);
     // 즐겨찾기·내 장소. 지도에 별 아이콘으로 보인다.
@@ -400,13 +408,47 @@ export default function App() {
         ),
     };
     const showPanel = wide && !navigating;
+    // 넓은 화면은 지도 위 말풍선, 좁은 화면은 아래 장소 시트로 보인다.
+    const placeCard = picked && (
+        <PlaceInfoCard
+            variant={wide ? 'popup' : 'sheet'}
+            // 다른 장소를 고르면 펼친 이름 칸을 닫는다.
+            key={picked.position.join(',')}
+            place={picked}
+            note={elevatorExitsText(
+                stationElevators(picked.name ?? '', picked.position, elevators),
+            )}
+            saved={placesAt(savedPlaces.places, picked.position)}
+            onSave={
+                savedPlaces.available
+                    ? (kind, label) =>
+                          savedPlaces.add(
+                              toSavedPlaceRequest(picked, kind, label),
+                          )
+                    : undefined
+            }
+            onUnsave={savedPlaces.remove}
+            saveError={savedPlaces.error}
+            onPick={handlePick}
+            onClose={() => setPicked(null)}
+        />
+    );
 
     return (
         <div
             className="app"
             // 좁은 화면은 지도가 메뉴·시트 위에서 끝난다(index.css).
-            data-sheet={sheetOpen ? sheet.snap : 'closed'}
+            data-sheet={
+                placeSheet ? 'place' : sheetOpen ? sheet.snap : 'closed'
+            }
             data-navigating={navigating || undefined}
+            style={
+                placeSheet
+                    ? ({
+                          '--place-sheet-height': `${placeSheetHeight}px`,
+                      } as CSSProperties)
+                    : undefined
+            }
         >
             {!showPanel && <h1 className="visually-hidden">베리어프리</h1>}
             <MapView
@@ -414,42 +456,7 @@ export default function App() {
                 start={start}
                 goal={goal}
                 picked={picked?.position}
-                popup={
-                    picked && (
-                        <PlaceInfoCard
-                            // 다른 장소를 고르면 펼친 이름 칸을 닫는다.
-                            key={picked.position.join(',')}
-                            place={picked}
-                            note={elevatorExitsText(
-                                stationElevators(
-                                    picked.name ?? '',
-                                    picked.position,
-                                    elevators,
-                                ),
-                            )}
-                            saved={placesAt(
-                                savedPlaces.places,
-                                picked.position,
-                            )}
-                            onSave={
-                                savedPlaces.available
-                                    ? (kind, label) =>
-                                          savedPlaces.add(
-                                              toSavedPlaceRequest(
-                                                  picked,
-                                                  kind,
-                                                  label,
-                                              ),
-                                          )
-                                    : undefined
-                            }
-                            onUnsave={savedPlaces.remove}
-                            saveError={savedPlaces.error}
-                            onPick={handlePick}
-                            onClose={() => setPicked(null)}
-                        />
-                    )
-                }
+                popup={wide ? placeCard : null}
                 path={shownRoute?.coordinates ?? null}
                 startEntrance={shownRoute?.start_entrance}
                 goalEntrance={shownRoute?.goal_entrance}
@@ -507,7 +514,12 @@ export default function App() {
                     {tabContent[sheet.tab]}
                 </BottomSheet>
             )}
-            {!wide && !navigating && (
+            {placeSheet && (
+                <div ref={placeSheetRef} className="place-sheet">
+                    {placeCard}
+                </div>
+            )}
+            {!wide && !navigating && !placeSheet && (
                 <MenuBar tab={sheet.tab} onSelect={handleSelectTab} />
             )}
             <MyLocationControl
