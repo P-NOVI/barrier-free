@@ -580,6 +580,58 @@ input::placeholder {
     cursor: pointer;
 }
 
+/* 펼친 목록: 흰 카드, 고른 조건은 옅은 노랑과 오른쪽 체크. base-select 를 못 쓰는 브라우저는 기본 목록을 흰 바탕으로 보인다. */
+.route-panel__preset option {
+    font-weight: 500;
+    color: var(--text);
+    background: var(--bg);
+}
+
+@supports (appearance: base-select) {
+    .route-panel__preset select,
+    .route-panel__preset select::picker(select) {
+        appearance: base-select;
+    }
+
+    .route-panel__preset select::picker-icon {
+        display: none;
+    }
+
+    .route-panel__preset select::picker(select) {
+        min-width: 180px;
+        margin-block: 6px;
+        padding: 6px;
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        background: var(--bg);
+        box-shadow: var(--panel-shadow);
+    }
+
+    .route-panel__preset option {
+        min-height: 44px;
+        padding: 0 12px;
+        border-radius: 10px;
+        font-size: 15px;
+        outline-offset: -2px;
+        cursor: pointer;
+    }
+
+    .route-panel__preset option:hover {
+        background: var(--soft-bg);
+    }
+
+    .route-panel__preset option:checked {
+        font-weight: 700;
+        background: var(--tactile-soft);
+    }
+
+    .route-panel__preset option::checkmark {
+        order: 1;
+        margin-left: auto;
+        color: var(--tactile-text);
+    }
+}
+
 .route-panel__preset::after {
     content: '';
     position: absolute;
@@ -1550,9 +1602,9 @@ input::placeholder {
     background: url('/favicon.svg') center / contain no-repeat;
 }
 
-/* 회색 트랙 위 흰 알약 탭 */
+/* 회색 트랙 위 흰 알약 탭. 알약은 고른 탭 자리로 미끄러진다(--menu-index 는 MenuBar 가 정함). */
 .side-panel .menu-bar {
-    position: static;
+    position: relative;
     display: flex;
     gap: 2px;
     height: auto;
@@ -1562,12 +1614,30 @@ input::placeholder {
     box-shadow: none;
 }
 
+.side-panel .menu-bar::before {
+    content: '';
+    position: absolute;
+    top: 3px;
+    bottom: 3px;
+    left: 3px;
+    width: calc(
+        (100% - 6px - (var(--menu-count) - 1) * 2px) / var(--menu-count)
+    );
+    border-radius: 9px;
+    background: var(--bg);
+    box-shadow: 0 1px 2px rgba(24, 33, 47, 0.14);
+    transform: translateX(calc(var(--menu-index) * (100% + 2px)));
+    transition: transform 0.28s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
 .side-panel .menu-bar__item {
+    position: relative;
     flex: 1;
     min-height: 34px;
     border-radius: 9px;
     font-size: 14px;
     font-weight: 500;
+    transition: color 0.2s ease;
 }
 
 .side-panel .menu-bar__item svg {
@@ -1576,8 +1646,6 @@ input::placeholder {
 
 .side-panel .menu-bar__item[aria-current='page'] {
     font-weight: 600;
-    background: var(--bg);
-    box-shadow: 0 1px 2px rgba(24, 33, 47, 0.14);
 }
 
 .side-panel__body {
@@ -1665,9 +1733,11 @@ input::placeholder {
  * 넓은 화면: 지도는 화면 전체, 패널은 왼쪽 위에 띄운 카드 하나.
  * App.tsx 의 WIDE_LAYOUT 과 같은 값
  */
-/* 움직임 줄이기를 켠 사용자에게는 시트를 애니메이션 없이 옮긴다. */
+/* 움직임 줄이기를 켠 사용자에게는 시트와 탭 알약을 애니메이션 없이 옮긴다. */
 @media (prefers-reduced-motion: reduce) {
-    .bottom-sheet {
+    .bottom-sheet,
+    .side-panel .menu-bar::before,
+    .side-panel .menu-bar__item {
         transition: none;
     }
 }
