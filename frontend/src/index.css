@@ -1,29 +1,37 @@
 :root {
-    --text: #1f1d24;
+    --text: #18212f;
     --bg: #fff;
     --overlay-bg: rgba(255, 255, 255, 0.85);
     --error-bg: #fdecea;
     --error-text: #8a1c12;
-    --muted: #5f6368;
-    --border: #dadce0;
-    --pin-start: #1e8e3e;
-    --pin-goal: #d93025;
-    --panel-shadow: 0 2px 12px rgba(0, 0, 0, 0.18);
-    --brand: #1a73e8;
+    --muted: #5b6472;
+    --border: #e2e6eb;
+    /* 출발·도착은 색 대신 핀 모양(속 빈·속 찬)으로 구분한다. */
+    --pin-start: #18212f;
+    --pin-goal: #18212f;
+    --panel-shadow:
+        0 1px 2px rgba(24, 33, 47, 0.08), 0 4px 14px rgba(24, 33, 47, 0.1);
+    --sheet-shadow: 0 -2px 18px rgba(24, 33, 47, 0.12);
+    --brand: #18212f;
     --my-location: #1a73e8;
     --route-arrow: rgba(255, 255, 255, 0.6);
-    --saved-place: #0070dd;
-    --icon-bg: #bdc1c6;
-    --soft-bg: #f1f3f4;
+    --saved-place: #2b3a8c;
+    --icon-bg: #c5cbd3;
+    --soft-bg: #f1f3f6;
+    /* 점자블록 노랑: 이동 조건과 접근성 안내에만 쓴다. */
+    --tactile: #ffc21a;
+    --tactile-soft: #fff4d1;
+    --tactile-text: #6b4e00;
     /* 카카오 로그인 버튼 색(카카오 디자인 가이드) */
     --kakao-yellow: #fee500;
     --kakao-label: rgba(0, 0, 0, 0.85);
 
     font:
-        16px/1.5 system-ui,
-        'Segoe UI',
-        Roboto,
+        16px/1.5 'Pretendard Variable',
+        Pretendard,
+        system-ui,
         sans-serif;
+    letter-spacing: -0.01em;
     color: var(--text);
     background: var(--bg);
 }
@@ -34,6 +42,18 @@ body,
 .app {
     height: 100%;
     margin: 0;
+}
+
+/* 키보드로 옮긴 포커스는 잉크색 테두리로 보인다. */
+:focus-visible {
+    outline: 2px solid var(--text);
+    outline-offset: 2px;
+}
+
+/* 입력칸 안내 문구도 본문처럼 대비 4.5:1 이상 */
+input::placeholder {
+    color: var(--muted);
+    opacity: 1;
 }
 
 /* 아래 메뉴·시트 크기. 좁은 화면은 지도가 그 위에서 끝나 카카오 로고·축척이 가리지 않는다. */
@@ -152,6 +172,7 @@ body,
     display: block;
     width: 100%;
     height: 100%;
+    overflow: visible;
     fill: currentColor;
 }
 
@@ -176,11 +197,22 @@ body,
     color: var(--pin-start);
 }
 
+/* 출발 핀은 속이 빈 모양 */
+.map-pin--start svg {
+    fill: var(--bg);
+    stroke: currentColor;
+    stroke-width: 2;
+}
+
+.map-pin--start .map-pin__label {
+    color: var(--pin-start);
+}
+
 .map-pin--goal {
     color: var(--pin-goal);
 }
 
-/* 좁은 화면에서 고른 장소: 머리 가운데 흰 점 */
+/* 좁은 화면에서 고른 장소: 머리 가운데 노란 점 */
 .map-pin--picked {
     color: var(--brand);
 }
@@ -190,7 +222,7 @@ body,
     width: 12px;
     height: 12px;
     border-radius: 50%;
-    background: #fff;
+    background: var(--tactile);
 }
 
 /* 경로 선 안 진행 방향 화살표. 오른쪽을 가리키게 그리고 --angle(MapView 가 정함)만큼 돌린다. */
@@ -273,6 +305,21 @@ body,
     margin: 0;
     font-size: 14px;
     color: var(--muted);
+}
+
+/* 문장·칩 안에 글자 크기로 넣는 아이콘 */
+.inline-icon {
+    width: 1em;
+    height: 1em;
+    vertical-align: -0.15em;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.8;
+    stroke-linejoin: round;
+}
+
+.place-info__chip[aria-pressed='true'] .inline-icon {
+    fill: currentColor;
 }
 
 .account-panel__error,
@@ -453,7 +500,7 @@ body,
     min-height: 44px;
     padding: 0 12px;
     border: 1px solid var(--border);
-    border-radius: 8px;
+    border-radius: 10px;
     font: inherit;
 }
 
@@ -468,7 +515,7 @@ body,
     justify-content: center;
     height: 44px;
     border: 1px solid var(--border);
-    border-radius: 8px;
+    border-radius: 10px;
     font: inherit;
     font-weight: 600;
     color: var(--text);
@@ -511,6 +558,7 @@ body,
 }
 
 .route-panel__preset {
+    position: relative;
     display: flex;
     align-items: center;
     gap: 8px;
@@ -518,27 +566,108 @@ body,
     color: var(--muted);
 }
 
-.route-panel__preset select,
-.route-panel__reset {
+/* 이동 조건은 점자 노랑 알약. 기본 화살표는 끝에 붙어서 안쪽에 직접 그린다. */
+.route-panel__preset select {
     min-height: 36px;
-    padding: 0 10px;
-    border: 1px solid var(--border);
-    border-radius: 8px;
+    padding: 0 34px 0 14px;
+    border: 0;
+    border-radius: 999px;
     font: inherit;
+    font-weight: 600;
+    color: var(--text);
+    background: var(--tactile);
+    appearance: none;
+    cursor: pointer;
+}
+
+/* 펼친 목록: 흰 카드, 고른 조건은 옅은 노랑과 오른쪽 체크. base-select 를 못 쓰는 브라우저는 기본 목록을 흰 바탕으로 보인다. */
+.route-panel__preset option {
+    font-weight: 500;
     color: var(--text);
     background: var(--bg);
 }
 
+@supports (appearance: base-select) {
+    .route-panel__preset select,
+    .route-panel__preset select::picker(select) {
+        appearance: base-select;
+    }
+
+    /* 고른 조건 글자를 알약 세로 가운데에 둔다. */
+    .route-panel__preset select {
+        display: inline-flex;
+        align-items: center;
+    }
+
+    .route-panel__preset select::picker-icon {
+        display: none;
+    }
+
+    .route-panel__preset select::picker(select) {
+        min-width: 180px;
+        margin-block: 6px;
+        padding: 6px;
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        background: var(--bg);
+        box-shadow: var(--panel-shadow);
+    }
+
+    .route-panel__preset option {
+        min-height: 44px;
+        padding: 0 12px;
+        border-radius: 10px;
+        font-size: 15px;
+        outline-offset: -2px;
+        cursor: pointer;
+    }
+
+    .route-panel__preset option:hover {
+        background: var(--soft-bg);
+    }
+
+    .route-panel__preset option:checked {
+        font-weight: 700;
+        background: var(--tactile-soft);
+    }
+
+    .route-panel__preset option::checkmark {
+        order: 1;
+        margin-left: auto;
+        color: var(--tactile-text);
+    }
+}
+
+.route-panel__preset::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    right: 15px;
+    width: 6px;
+    height: 6px;
+    border-right: 2px solid var(--text);
+    border-bottom: 2px solid var(--text);
+    transform: translateY(-70%) rotate(45deg);
+    pointer-events: none;
+}
+
 .route-panel__reset {
+    min-height: 36px;
+    padding: 0 10px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    font: inherit;
+    color: var(--text);
+    background: var(--bg);
     cursor: pointer;
 }
 
 .route-panel__start {
     width: 100%;
-    min-height: 44px;
+    min-height: 48px;
     margin-top: 12px;
     border: 0;
-    border-radius: 8px;
+    border-radius: 10px;
     font: inherit;
     font-weight: 600;
     color: #fff;
@@ -671,6 +800,7 @@ body,
     padding-left: 10px;
     border-left: 1px solid var(--border);
     font-size: 18px;
+    font-variant-numeric: tabular-nums;
 }
 
 .route-panel__summary {
@@ -711,12 +841,14 @@ body,
     align-items: center;
     min-width: 0;
     padding: 0 12px;
-    border: 1px solid var(--border);
-    border-radius: 8px;
+    border: 1px solid transparent;
+    border-radius: 10px;
+    background: var(--soft-bg);
 }
 
 .place-search__label:focus-within {
     border-color: var(--text);
+    background: var(--bg);
 }
 
 .place-search__label input {
@@ -734,12 +866,12 @@ body,
     flex: none;
     min-height: 42px;
     padding: 0 10px;
-    border: 1px solid var(--border);
-    border-radius: 8px;
+    border: 1px solid transparent;
+    border-radius: 10px;
     font: inherit;
     font-size: 14px;
     color: var(--text);
-    background: var(--bg);
+    background: var(--soft-bg);
     cursor: pointer;
 }
 
@@ -772,6 +904,11 @@ body,
 .place-search__results button:focus-visible {
     background: var(--overlay-bg);
     outline: 2px solid var(--border);
+    outline-offset: -2px;
+}
+
+.place-search__results button:focus-visible {
+    outline-color: var(--text);
 }
 
 /* 검색어가 없을 때 검색창 아래에 보이는 최근 경로·검색 */
@@ -845,7 +982,7 @@ body,
     /* 지도 오버레이가 줄바꿈을 막아 두는 경우가 있어 되돌린다. */
     white-space: normal;
     word-break: keep-all;
-    border-radius: 8px;
+    border-radius: 16px;
     background: var(--bg);
     box-shadow: var(--panel-shadow);
 }
@@ -900,10 +1037,16 @@ body,
     overflow-wrap: anywhere;
 }
 
+/* 역 엘리베이터 출구 같은 접근성 안내는 노란 칩 */
 .place-info__note {
-    margin: 2px 0 0;
+    display: inline-block;
+    margin: 8px 0 0;
+    padding: 4px 10px;
+    border-radius: 999px;
     font-size: 12px;
-    color: var(--muted);
+    font-weight: 600;
+    color: var(--tactile-text);
+    background: var(--tactile-soft);
 }
 
 .place-info__error {
@@ -928,7 +1071,7 @@ body,
     align-items: center;
     justify-content: center;
     height: 40px;
-    border-radius: 4px;
+    border-radius: 10px;
     font: inherit;
     font-weight: 600;
     cursor: pointer;
@@ -1011,7 +1154,7 @@ body,
     min-height: 36px;
     padding: 0 12px;
     border: 1px solid var(--border);
-    border-radius: 18px;
+    border-radius: 999px;
     font: inherit;
     font-size: 14px;
     color: var(--text);
@@ -1047,11 +1190,11 @@ body,
     font-size: 14px;
 }
 
-/* 출발·도착: 기본은 흰 바탕. 올리거나(마우스) 누르는 동안(터치) 출발은 초록, 도착은 빨강 */
+/* 출발·도착: 기본은 흰 바탕. 올리거나(마우스) 누르는 동안(터치) 핀 색으로 채운다. */
 .place-info__endpoint {
     min-height: 40px;
     border: 1px solid var(--border);
-    border-radius: 4px;
+    border-radius: 10px;
     font: inherit;
     font-weight: 600;
     color: var(--text);
@@ -1086,9 +1229,9 @@ body,
     max-height: 70%;
     padding: 20px 16px calc(16px + env(safe-area-inset-bottom));
     overflow-y: auto;
-    border-radius: 16px 16px 0 0;
+    border-radius: 20px 20px 0 0;
     background: var(--bg);
-    box-shadow: var(--panel-shadow);
+    box-shadow: var(--sheet-shadow);
 }
 
 .place-info-sheet__head {
@@ -1238,7 +1381,7 @@ body,
     left: 12px;
     right: 12px;
     z-index: 30;
-    border-radius: 12px;
+    border-radius: 16px;
     background: var(--bg);
     box-shadow: var(--panel-shadow);
 }
@@ -1303,7 +1446,7 @@ body,
     grid-auto-flow: column;
     box-sizing: border-box;
     height: var(--nav-height);
-    border-top: 1px solid var(--border);
+    box-shadow: 0 -1px 0 var(--border);
     background: var(--bg);
 }
 
@@ -1312,7 +1455,7 @@ body,
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 2px;
+    gap: 4px;
     padding: 0;
     border: 0;
     font: inherit;
@@ -1322,9 +1465,13 @@ body,
     cursor: pointer;
 }
 
+/* 고른 메뉴는 아이콘 뒤에 알약을 둔다. */
 .menu-bar__item svg {
-    width: 24px;
-    height: 24px;
+    box-sizing: content-box;
+    width: 22px;
+    height: 22px;
+    padding: 4px 18px;
+    border-radius: 999px;
     fill: none;
     stroke: currentColor;
     stroke-width: 1.8;
@@ -1335,6 +1482,10 @@ body,
 .menu-bar__item[aria-current='page'] {
     font-weight: 600;
     color: var(--brand);
+}
+
+.menu-bar__item[aria-current='page'] svg {
+    background: var(--border);
 }
 
 /*
@@ -1352,9 +1503,9 @@ body,
     display: flex;
     flex-direction: column;
     height: var(--sheet-half);
-    border-radius: 16px 16px 0 0;
+    border-radius: 20px 20px 0 0;
     background: var(--bg);
-    box-shadow: var(--panel-shadow);
+    box-shadow: var(--sheet-shadow);
     transform: translateY(var(--shift));
     /* 위·옆은 그림자가 보이게 조금 넓게 남긴다. */
     clip-path: inset(-16px -16px var(--shift) -16px);
@@ -1403,7 +1554,8 @@ body,
 }
 
 .bottom-sheet__title {
-    font-weight: 600;
+    font-size: 17px;
+    font-weight: 700;
 }
 
 .bottom-sheet__body {
@@ -1426,38 +1578,72 @@ body,
     /* 아래 40px 은 카카오 로고·축척이 가리지 않게 비운다. */
     max-height: calc(100% - 52px);
     overflow: hidden;
-    border-radius: 12px;
+    border-radius: 16px;
     background: var(--bg);
     box-shadow: var(--panel-shadow);
 }
 
 .side-panel__header {
     flex: none;
-    padding: 14px 16px 10px;
-    color: #fff;
-    background: var(--brand);
+    padding: 18px 16px 12px;
+    border-bottom: 1px solid var(--border);
 }
 
+/* 이름 앞 팀 로고(사이트 아이콘과 같은 그림) */
 .side-panel__title {
-    margin: 0 0 8px;
-    font-size: 20px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0 0 12px;
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
 }
 
+.side-panel__title::before {
+    content: '';
+    flex: none;
+    width: 24px;
+    height: 24px;
+    background: url('/favicon.svg') center / contain no-repeat;
+}
+
+/* 회색 트랙 위 흰 알약 탭. 알약은 고른 탭 자리로 미끄러진다(--menu-index 는 MenuBar 가 정함). */
 .side-panel .menu-bar {
-    position: static;
+    position: relative;
     display: flex;
-    gap: 4px;
+    gap: 2px;
     height: auto;
-    border: 0;
-    background: none;
+    padding: 3px;
+    border-radius: 12px;
+    background: var(--soft-bg);
+    box-shadow: none;
+}
+
+.side-panel .menu-bar::before {
+    content: '';
+    position: absolute;
+    top: 3px;
+    bottom: 3px;
+    left: 3px;
+    width: calc(
+        (100% - 6px - (var(--menu-count) - 1) * 2px) / var(--menu-count)
+    );
+    border-radius: 9px;
+    background: var(--bg);
+    box-shadow: 0 1px 2px rgba(24, 33, 47, 0.14);
+    transform: translateX(calc(var(--menu-index) * (100% + 2px)));
+    transition: transform 0.28s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 .side-panel .menu-bar__item {
+    position: relative;
     flex: 1;
-    min-height: 36px;
-    border-radius: 6px;
-    font-size: 16px;
-    color: rgba(255, 255, 255, 0.85);
+    min-height: 34px;
+    border-radius: 9px;
+    font-size: 14px;
+    font-weight: 500;
+    transition: color 0.2s ease;
 }
 
 .side-panel .menu-bar__item svg {
@@ -1465,8 +1651,7 @@ body,
 }
 
 .side-panel .menu-bar__item[aria-current='page'] {
-    color: #fff;
-    background: rgba(0, 0, 0, 0.22);
+    font-weight: 600;
 }
 
 .side-panel__body {
@@ -1545,7 +1730,7 @@ body,
     box-sizing: border-box;
     width: 280px;
     padding: 16px;
-    border-radius: 12px;
+    border-radius: 16px;
     background: var(--bg);
     box-shadow: var(--panel-shadow);
 }
@@ -1554,6 +1739,39 @@ body,
  * 넓은 화면: 지도는 화면 전체, 패널은 왼쪽 위에 띄운 카드 하나.
  * App.tsx 의 WIDE_LAYOUT 과 같은 값
  */
+/* 움직임 줄이기를 켠 사용자에게는 시트와 탭 알약을 애니메이션 없이 옮긴다. */
+@media (prefers-reduced-motion: reduce) {
+    .bottom-sheet,
+    .side-panel .menu-bar::before,
+    .side-panel .menu-bar__item {
+        transition: none;
+    }
+}
+
+/* 좁은 화면(터치)에서는 누르는 칸을 44px 이상으로 둔다. */
+@media (max-width: 767.98px) {
+    .route-panel__preset select,
+    .route-panel__reset,
+    .place-search__locate,
+    .place-info__chip,
+    .place-info__custom-input,
+    .navigation-panel__stop,
+    .navigation-panel__voice {
+        min-height: 44px;
+    }
+
+    /* 위아래 테두리 1px 씩을 더해 44px */
+    .place-search__label input {
+        min-height: 42px;
+    }
+
+    .route-panel__save,
+    .my-register__back {
+        width: 44px;
+        height: 44px;
+    }
+}
+
 @media (min-width: 768px) {
     .app {
         --panel-width: 380px;

@@ -110,6 +110,15 @@ export default function MyTab({
     );
 }
 
+// 빈 목록 안내 문장 안의 별
+function StarIcon() {
+    return (
+        <svg className="inline-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path d={ICONS.star} />
+        </svg>
+    );
+}
+
 function FavoriteList({
     places,
     onSelect,
@@ -122,7 +131,8 @@ function FavoriteList({
     if (places.length === 0) {
         return (
             <p className="my-tab__status">
-                장소 카드의 북마크에서 ☆ 즐겨찾기를 눌러 추가해 보세요.
+                장소 카드의 북마크에서 <StarIcon /> 즐겨찾기를 눌러 추가해
+                보세요.
             </p>
         );
     }
@@ -154,7 +164,7 @@ function SavedRouteList({
     if (routes.length === 0) {
         return (
             <p className="my-tab__status">
-                길찾기에서 경로를 찾은 뒤 ☆ 를 눌러 저장해 보세요.
+                길찾기에서 경로를 찾은 뒤 <StarIcon /> 를 눌러 저장해 보세요.
             </p>
         );
     }

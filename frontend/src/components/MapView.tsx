@@ -19,17 +19,17 @@ const DEFAULT_LEVEL = 4;
 // 안내를 시작할 때 확대 수준. 걸으며 골목이 보이게 기본보다 한 단계 확대한다.
 const FOLLOW_LEVEL = 3;
 
-// 경로 선: 진한 테두리 위에 밝은 선을 겹쳐 지도 도로·노선과 구분한다.
+// 경로 선: 흰 테두리 위에 남색 선을 겹쳐 지도 도로·노선과 구분한다.
 const ROUTE_OUTLINE: Omit<kakao.maps.PolylineOptions, 'path'> = {
     strokeWeight: 12,
-    strokeColor: '#0d47a1',
+    strokeColor: '#ffffff',
     strokeOpacity: 1,
     strokeStyle: 'solid',
     zIndex: 1,
 };
 const ROUTE_LINE: Omit<kakao.maps.PolylineOptions, 'path'> = {
     strokeWeight: 8,
-    strokeColor: '#1a73e8',
+    strokeColor: '#2b3a8c',
     strokeOpacity: 1,
     strokeStyle: 'solid',
     zIndex: 2,
