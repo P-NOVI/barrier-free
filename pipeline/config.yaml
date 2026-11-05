@@ -236,7 +236,8 @@ subway_ridership:
   # 서울 열린데이터광장 서울시 지하철 호선별 역별 시간대별 승하차 인원 정보(OA-12252)
   url: http://openapi.seoul.go.kr:8088
   service: CardSubwayTime
-  # 한 달치는 호선·역 약 620행이라 한 번에 다 받는다.
+  # 한 번에 받을 행 수. API 는 한 번에 1000행까지 준다. 한 달은 보통 약 620행이고,
+  # 같은 행이 두 번 들어간 달(2026-03, 1240행)은 나눠 받는다.
   page_size: 1000
   timeout_s: 30
   attempts: 3

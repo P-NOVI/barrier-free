@@ -72,14 +72,14 @@ def test_period_uses_end_month_and_rejects_empty_range() -> None:
 
 def test_parse_response_ok() -> None:
     rows = [api_row("202610", "1호선", "서울역", 10.0, 20.0)]
-    assert subway.parse_response(ok_body(rows), SERVICE, 1000) == rows
+    assert subway.parse_response(ok_body(rows, total=1240), SERVICE) == (rows, 1240)
 
 
 def test_parse_response_no_data_is_none() -> None:
     body = json.dumps(
         {"RESULT": {"CODE": "INFO-200", "MESSAGE": "해당하는 데이터가 없습니다."}}
     )
-    assert subway.parse_response(body, SERVICE, 1000) is None
+    assert subway.parse_response(body, SERVICE) is None
 
 
 def test_parse_response_stops_on_xml_key_error() -> None:
@@ -88,13 +88,44 @@ def test_parse_response_stops_on_xml_key_error() -> None:
         "<MESSAGE>인증키가 유효하지 않습니다.</MESSAGE></RESULT>"
     )
     with pytest.raises(SystemExit, match="INFO-100"):
-        subway.parse_response(body, SERVICE, 1000)
+        subway.parse_response(body, SERVICE)
 
 
-def test_parse_response_stops_when_month_exceeds_page_size() -> None:
-    rows = [api_row("202610", "1호선", "서울역", 1.0, 1.0)]
+def test_fetch_pages_reads_until_total() -> None:
+    all_rows = [api_row("202603", "1호선", f"역{i}", 1.0, 1.0) for i in range(5)]
+    asked: list[tuple[int, int]] = []
+
+    def get_page(start: int, end: int):
+        asked.append((start, end))
+        return all_rows[start - 1 : end], len(all_rows)
+
+    assert subway.fetch_pages(get_page, 2) == all_rows
+    assert asked == [(1, 2), (3, 4), (5, 6)]
+
+
+def test_fetch_pages_no_data_is_none_and_short_page_stops() -> None:
+    assert subway.fetch_pages(lambda start, end: None, 1000) is None
     with pytest.raises(SystemExit):
-        subway.parse_response(ok_body(rows, total=1001), SERVICE, 1000)
+        subway.fetch_pages(lambda start, end: ([], 3), 1000)
+    first = [api_row("202603", "1호선", "서울역", 1.0, 1.0)]
+    with pytest.raises(SystemExit):
+        subway.fetch_pages(lambda start, end: (first, 3) if start == 1 else None, 1)
+
+
+def test_drop_duplicates_keeps_one_of_identical_rows() -> None:
+    a = api_row("202603", "1호선", "서울역", 1.0, 2.0)
+    b = api_row("202603", "1호선", "시청", 3.0, 4.0)
+    loaded = {"2026-03": [a, b, dict(a), dict(b)], "2026-04": [a]}
+    unique, dropped = subway.drop_duplicates(loaded)
+    assert unique == {"2026-03": [a, b], "2026-04": [a]}
+    assert dropped == {"2026-03": 2}
+
+
+def test_drop_duplicates_stops_on_conflicting_rows() -> None:
+    a = api_row("202603", "1호선", "서울역", 1.0, 2.0)
+    other = api_row("202603", "1호선", "서울역", 9.0, 2.0)
+    with pytest.raises(SystemExit, match="서울역"):
+        subway.drop_duplicates({"2026-03": [a, other]})
 
 
 def test_to_rows_spreads_hours_and_sorts_by_month() -> None:
@@ -169,8 +200,11 @@ def test_write_parquet_and_report(tmp_path: Path) -> None:
     ]
     assert table.num_rows == 48
 
-    report = subway.make_report(rows, ["2026-10", "2026-11"], ["2026-11"], 1)
+    report = subway.make_report(
+        rows, ["2026-10", "2026-11"], ["2026-11"], 1, {"2026-10": 3}
+    )
     assert report["months"] == 2
+    assert report["duplicate_rows_dropped"] == {"2026-10": 3}
     assert report["months_with_data"] == 1
     assert report["missing_months"] == ["2026-11"]
     assert report["stations"] == 2
