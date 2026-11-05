@@ -690,32 +690,14 @@ body,
     display: flex;
     flex: 1;
     align-items: center;
-    gap: 8px;
     min-width: 0;
-    padding: 0 8px;
+    padding: 0 12px;
     border: 1px solid var(--border);
     border-radius: 8px;
 }
 
 .place-search__label:focus-within {
     border-color: var(--text);
-}
-
-.place-search__badge {
-    flex: none;
-    padding: 0 8px;
-    border-radius: 10px;
-    font-size: 13px;
-    font-weight: 600;
-    color: #fff;
-}
-
-.place-search__label--start .place-search__badge {
-    background: var(--pin-start);
-}
-
-.place-search__label--goal .place-search__badge {
-    background: var(--pin-goal);
 }
 
 .place-search__label input {

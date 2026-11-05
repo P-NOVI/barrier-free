@@ -33,8 +33,8 @@ const RECENT_ROUTES = 3;
 const RECENT_PLACES = 5;
 
 const FIELD_LABELS: Record<EndpointRole, string> = {
-    start: '출발',
-    goal: '도착',
+    start: '출발지',
+    goal: '도착지',
 };
 
 type PlaceSearchProps = {
@@ -266,14 +266,12 @@ function PlaceField({
             }}
         >
             <div className="place-search__row">
-                <label
-                    className={`place-search__label place-search__label--${role}`}
-                >
-                    <span className="place-search__badge">{label}</span>
+                <label className="place-search__label">
                     <input
                         type="search"
                         value={text}
-                        placeholder={`${label}지 이름이나 주소`}
+                        placeholder={`${label} 입력`}
+                        aria-label={label}
                         autoComplete="off"
                         aria-controls={listId}
                         onFocus={() => setListOpen(true)}
