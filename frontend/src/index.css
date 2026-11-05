@@ -1912,7 +1912,8 @@ input::placeholder {
 .report-backdrop {
     position: fixed;
     inset: 0;
-    z-index: 30;
+    /* 끝까지 올린 시트(31)와 아래 메뉴(35)보다 위 */
+    z-index: 40;
     display: flex;
     align-items: center;
     justify-content: center;
