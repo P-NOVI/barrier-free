@@ -179,6 +179,19 @@ class RouteHistoryListResponse(BaseModel):
     routes: list[RouteHistoryResponse] = Field(description="최근 것부터")
 
 
+class SavedRouteRequest(RouteHistoryRequest):
+    """즐겨찾기할 경로. 출발·도착 위치와 이동 조건이 같으면 바꿔 저장한다."""
+
+
+class SavedRouteResponse(SavedRouteRequest):
+    id: int
+    created_at: datetime
+
+
+class SavedRouteListResponse(BaseModel):
+    routes: list[SavedRouteResponse] = Field(description="최근 것부터")
+
+
 class SavedPlaceRequest(BaseModel):
     kind: Literal["favorite", "mine"] = Field(
         description="favorite 는 즐겨찾기, mine 은 이름을 붙인 내 장소"

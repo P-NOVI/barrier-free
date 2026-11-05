@@ -69,6 +69,8 @@ class Settings(BaseSettings):
     history_keep: int = 50
     # 사용자마다 즐겨찾기·내 장소를 합쳐 이만큼까지 저장한다.
     saved_places_max: int = 100
+    # 사용자마다 즐겨찾기한 경로(내 경로)를 이만큼까지 저장한다.
+    saved_routes_max: int = 100
     # 게스트·회원 토큰을 담는 쿠키. 자바스크립트로 읽을 수 없게(HttpOnly) 준다.
     auth_cookie_name: str = "bf_token"
     # https 에서만 쿠키를 보낸다. 배포 환경에서는 AUTH_COOKIE_SECURE=true

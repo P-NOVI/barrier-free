@@ -112,6 +112,24 @@ class RouteHistory(Base):
     created_at: Mapped[datetime] = created_at_column()
 
 
+class SavedRoute(Base):
+    """즐겨찾기한 경로(내 경로). 최근 경로와 같은 칸을 둔다."""
+
+    __tablename__ = "saved_routes"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = user_id_column(index=True)
+    start_name: Mapped[str] = mapped_column(String(NAME_MAX_LENGTH))
+    start_lon: Mapped[float]
+    start_lat: Mapped[float]
+    goal_name: Mapped[str] = mapped_column(String(NAME_MAX_LENGTH))
+    goal_lon: Mapped[float]
+    goal_lat: Mapped[float]
+    preset: Mapped[str] = mapped_column(String(40))
+    distance_m: Mapped[float]
+    created_at: Mapped[datetime] = created_at_column()
+
+
 class SavedPlace(Base):
     """즐겨찾기(kind=favorite)와 이름을 붙인 내 장소(kind=mine. 집, 회사 등)."""
 
