@@ -230,3 +230,22 @@ training_set:
   train_start: "2024-01-01"
   train_end: "2026-07-31"
   quantile: 0.95
+
+# 14 단계. 05 단계처럼 run_all.py 에 넣지 않고 따로 실행한다.
+subway_ridership:
+  # 서울 열린데이터광장 서울시 지하철 호선별 역별 시간대별 승하차 인원 정보(OA-12252)
+  url: http://openapi.seoul.go.kr:8088
+  service: CardSubwayTime
+  # 한 달치는 호선·역 약 620행이라 한 번에 다 받는다.
+  page_size: 1000
+  timeout_s: 30
+  attempts: 3
+  retry_wait_s: 5
+  # 받을 달(끝 달 포함). end_month 가 null 이면 지난달까지 받는다.
+  # 전월 자료는 매월 5일에 올라온다. 그 전에 돌리면 지난달은 자료 없는 달로 남는다.
+  # API 는 2015-01 부터 자료가 있다(2026-11-05 확인). 시작은 학습 기간(train_start)에 맞춘다.
+  start_month: "2024-01"
+  end_month: null
+  raw_dir: raw/subway/ridership_hourly
+  output: interim/subway/hourly.parquet
+  report: interim/subway/hourly_report.json
