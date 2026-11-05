@@ -127,8 +127,8 @@ export default function MyReports({
                         aria-modal="true"
                         aria-label={notice}
                     >
-                        <h2 className="report-form__title">{notice}</h2>
-                        <div className="report-form__actions">
+                        <div className="my-report__notice">
+                            <h2 className="report-form__title">{notice}</h2>
                             <button
                                 type="button"
                                 className="report-form__submit"

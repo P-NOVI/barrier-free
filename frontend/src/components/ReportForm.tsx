@@ -171,7 +171,7 @@ export default function ReportForm({
                         <div className="report-form__actions">
                             <button
                                 type="button"
-                                className="place-info__chip"
+                                className="place-info__chip report-form__cancel"
                                 onClick={onClose}
                             >
                                 취소
