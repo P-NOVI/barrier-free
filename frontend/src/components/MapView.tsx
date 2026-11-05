@@ -60,6 +60,9 @@ const PIN_Z_INDEX = 3;
 const POPUP_Z_INDEX = 4;
 // 카드 아래 꼬리 높이(px). index.css 의 .place-info::after 와 같은 값.
 const POPUP_TAIL = 10;
+// 핀 크기(px). index.css 의 .map-pin 과 같은 값.
+const PIN_WIDTH = 32;
+const PIN_HEIGHT = 47;
 // 출발·도착 핀: 둥근 머리에 글자를 넣고, 아래 뾰족한 끝이 지점을 가리킨다. 색은 CSS 가 정한다.
 const PIN_SVG =
     '<svg viewBox="0 0 24 35" aria-hidden="true">' +
@@ -94,7 +97,7 @@ type MapViewProps = {
     center?: LngLat;
     start?: LngLat | null;
     goal?: LngLat | null;
-    /** 지도를 눌러 고른 장소. 카드가 이 위치를 가리킨다. */
+    /** 지도를 눌러 고른 장소. popup 이 있으면 카드가, 없으면 핀이 이 위치를 가리킨다. */
     picked?: LngLat | null;
     /** picked 위치 위에 띄울 카드. 아래 꼬리가 그 위치를 가리킨다. */
     popup?: ReactNode;
@@ -235,6 +238,45 @@ function usePopup(
         };
     }, [map, position, content, inset]);
     return content;
+}
+
+/**
+ * 핀만 둔 고른 장소(좁은 화면)가 지도 가장자리나 inset 밖에 있으면 보이게 지도를 옮긴다.
+ * 아래 시트가 커지거나 줄어 지도 크기가 바뀔 때도 다시 본다.
+ */
+function useKeepInView(
+    map: kakao.maps.Map | null,
+    position: LngLat | null | undefined,
+    inset: FitPadding,
+) {
+    useEffect(() => {
+        if (!map || !position) {
+            return;
+        }
+        const node = map.getNode();
+        const keepInView = () => {
+            const { x, y } = map
+                .getProjection()
+                .containerPointFromCoords(toLatLng(position));
+            const [dx, dy] = panToFit(
+                {
+                    left: x - PIN_WIDTH / 2,
+                    right: x + PIN_WIDTH / 2,
+                    top: y - PIN_HEIGHT,
+                    bottom: y,
+                },
+                { width: node.clientWidth, height: node.clientHeight },
+                inset,
+            );
+            if (dx || dy) {
+                map.panBy(dx, dy);
+            }
+        };
+        // 처음 붙일 때 한 번, 그 뒤로는 지도 크기가 바뀔 때마다 본다.
+        const observer = new ResizeObserver(keepInView);
+        observer.observe(node);
+        return () => observer.disconnect();
+    }, [map, position, inset]);
 }
 
 /** 즐겨찾기·내 장소마다 별 아이콘을 그린다. 내 장소는 이름(집, 회사 등)을 아래에 붙인다. */
@@ -587,7 +629,10 @@ export default function MapView({
     useSavedPlaceMarkers(map, savedPlaces, onSavedPlaceClick);
     usePin(map, start, '출발', 'start');
     usePin(map, goal, '도착', 'goal');
-    const popupContainer = usePopup(map, picked, fitPadding);
+    // 넓은 화면은 고른 자리 위에 카드를 띄운다. 좁은 화면은 카드를 아래 시트로 보이고 지도에는 핀만 둔다.
+    const popupContainer = usePopup(map, popup ? picked : null, fitPadding);
+    usePin(map, popup ? null : picked, '', 'picked');
+    useKeepInView(map, popup ? null : picked, fitPadding);
 
     return (
         <div className="map-view">

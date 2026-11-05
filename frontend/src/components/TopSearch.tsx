@@ -11,7 +11,7 @@ import {
 } from '../lib/historyApi';
 import type { LngLat } from '../lib/kakaoMap';
 import type { Place } from '../lib/placeApi';
-import type { PickedPlace } from '../lib/selection';
+import { categoryLabel, type PickedPlace } from '../lib/selection';
 import { RecentList, SearchResults } from './PlaceSearch';
 
 // 입력을 멈추고 이만큼 지나면 검색한다.
@@ -69,6 +69,7 @@ export default function TopSearch({
             position: place.position,
             name: place.name,
             address: place.road_address || place.address,
+            category: categoryLabel(place.category, place.name),
         });
     };
 
