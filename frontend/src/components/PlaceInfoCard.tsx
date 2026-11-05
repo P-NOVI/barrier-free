@@ -38,6 +38,9 @@ const CLOSE_ICON = (
     </svg>
 );
 
+const STAR_PATH =
+    'M12 3.2l2.7 5.5 6 .9-4.35 4.25 1.03 6L12 17l-5.38 2.85 1.03-6L3.3 9.6l6-.9Z';
+
 /** 즐겨찾기와 내 장소(집·회사·직접 입력한 이름)를 켜고 끄는 칸 */
 function SavePanel({
     saved,
@@ -92,7 +95,14 @@ function SavePanel({
                         : onSave('favorite', null)
                 }
             >
-                {favorite ? '★' : '☆'} 즐겨찾기
+                <svg
+                    className="inline-icon"
+                    viewBox="0 0 24 24"
+                    aria-hidden="true"
+                >
+                    <path d={STAR_PATH} />
+                </svg>{' '}
+                즐겨찾기
             </button>
             <p className="place-info__panel-title">내 장소</p>
             <div className="place-info__chips">
@@ -192,7 +202,7 @@ export default function PlaceInfoCard({
                             onClick={() => toggle('save')}
                         >
                             <svg viewBox="0 0 24 24" aria-hidden="true">
-                                <path d="M12 3.2l2.7 5.5 6 .9-4.35 4.25 1.03 6L12 17l-5.38 2.85 1.03-6L3.3 9.6l6-.9Z" />
+                                <path d={STAR_PATH} />
                             </svg>
                         </button>
                     )}

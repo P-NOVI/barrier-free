@@ -44,6 +44,18 @@ body,
     margin: 0;
 }
 
+/* 키보드로 옮긴 포커스는 잉크색 테두리로 보인다. */
+:focus-visible {
+    outline: 2px solid var(--text);
+    outline-offset: 2px;
+}
+
+/* 입력칸 안내 문구도 본문처럼 대비 4.5:1 이상 */
+input::placeholder {
+    color: var(--muted);
+    opacity: 1;
+}
+
 /* 아래 메뉴·시트 크기. 좁은 화면은 지도가 그 위에서 끝나 카카오 로고·축척이 가리지 않는다. */
 .app {
     --nav-height: 60px;
@@ -293,6 +305,21 @@ body,
     margin: 0;
     font-size: 14px;
     color: var(--muted);
+}
+
+/* 문장·칩 안에 글자 크기로 넣는 아이콘 */
+.inline-icon {
+    width: 1em;
+    height: 1em;
+    vertical-align: -0.15em;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.8;
+    stroke-linejoin: round;
+}
+
+.place-info__chip[aria-pressed='true'] .inline-icon {
+    fill: currentColor;
 }
 
 .account-panel__error,
@@ -819,6 +846,11 @@ body,
 .place-search__results button:focus-visible {
     background: var(--overlay-bg);
     outline: 2px solid var(--border);
+    outline-offset: -2px;
+}
+
+.place-search__results button:focus-visible {
+    outline-color: var(--text);
 }
 
 /* 검색어가 없을 때 검색창 아래에 보이는 최근 경로·검색 */
@@ -1499,7 +1531,7 @@ body,
     border-bottom: 1px solid var(--border);
 }
 
-/* 이름 앞 노란 네모: 점자블록 */
+/* 이름 앞 팀 로고(사이트 아이콘과 같은 그림) */
 .side-panel__title {
     display: flex;
     align-items: center;
@@ -1512,10 +1544,10 @@ body,
 
 .side-panel__title::before {
     content: '';
-    width: 12px;
-    height: 12px;
-    border-radius: 3px;
-    background: var(--tactile);
+    flex: none;
+    width: 24px;
+    height: 24px;
+    background: url('/favicon.svg') center / contain no-repeat;
 }
 
 /* 회색 트랙 위 흰 알약 탭 */
@@ -1633,6 +1665,37 @@ body,
  * 넓은 화면: 지도는 화면 전체, 패널은 왼쪽 위에 띄운 카드 하나.
  * App.tsx 의 WIDE_LAYOUT 과 같은 값
  */
+/* 움직임 줄이기를 켠 사용자에게는 시트를 애니메이션 없이 옮긴다. */
+@media (prefers-reduced-motion: reduce) {
+    .bottom-sheet {
+        transition: none;
+    }
+}
+
+/* 좁은 화면(터치)에서는 누르는 칸을 44px 이상으로 둔다. */
+@media (max-width: 767.98px) {
+    .route-panel__preset select,
+    .route-panel__reset,
+    .place-search__locate,
+    .place-info__chip,
+    .place-info__custom-input,
+    .navigation-panel__stop,
+    .navigation-panel__voice {
+        min-height: 44px;
+    }
+
+    /* 위아래 테두리 1px 씩을 더해 44px */
+    .place-search__label input {
+        min-height: 42px;
+    }
+
+    .route-panel__save,
+    .my-register__back {
+        width: 44px;
+        height: 44px;
+    }
+}
+
 @media (min-width: 768px) {
     .app {
         --panel-width: 380px;
