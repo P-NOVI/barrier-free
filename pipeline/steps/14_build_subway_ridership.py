@@ -2,10 +2,13 @@
 
 실행: pipeline/ 에서 uv run python steps/14_build_subway_ridership.py
 - 출처: 서울 열린데이터광장 서울시 지하철 호선별 역별 시간대별 승하차 인원 정보
-  (OA-12252, CardSubwayTime). 교통카드 기준, 1~9호선 중 서울시 관할 역.
+  (OA-12252, CardSubwayTime). 교통카드 기준. 1~9호선 말고도 경부선·분당선·신림선 등
+  27개 노선이 있다(2026-02~04 확인).
 - 키는 pipeline/.env 의 SEOUL_API_KEY(서울 열린데이터광장 인증키, S-DoT 와 같은 키)다.
 - 달마다 raw/subway/ridership_hourly/YYYY-MM.json 으로 저장하고, 있는 달은 건너뛴다.
   자료가 없는 달(아직 올라오기 전)은 저장하지 않고 보고서에 남긴다.
+- 한 달 행이 page_size 를 넘으면 나눠 받는다. 원본은 받은 그대로 두고, 모든 값이 같은
+  행은 표를 만들 때 하나만 남긴다(2026-03 은 API 가 같은 행을 두 번 준다).
 - 출력: interim/subway/hourly.parquet 과 hourly_report.json
   열: month(YYYY-MM), line, station, hour, boardings(승차), alightings(하차)
   - 값은 그 달 그 시간대의 한 달 합계다. 날짜·요일로는 나뉘지 않는다.
@@ -39,6 +42,10 @@ HOURS = range(24)
 XML_CODE = re.compile(r"<CODE>\s*([^<]+?)\s*</CODE>")
 
 Row = dict[str, Any]
+# (이 쪽 행 목록, 그달 전체 행 수)
+Page = tuple[list[Row], int]
+# (시작 행, 끝 행) → 그 범위. 자료가 없으면 None
+GetPage = Callable[[int, int], Page | None]
 # 'YYYY-MM' → 그달 행 목록. 자료가 없으면 None
 FetchMonth = Callable[[str], list[Row] | None]
 
@@ -66,8 +73,8 @@ def period(config: dict[str, Any], today: date) -> list[str]:
     return months
 
 
-def parse_response(text: str, service: str, page_size: int) -> list[Row] | None:
-    """응답 본문 → 행 목록. 그달 자료가 없으면 None, 그 밖의 오류 코드는 멈춘다."""
+def parse_response(text: str, service: str) -> Page | None:
+    """응답 본문 → (행 목록, 전체 행 수). 자료가 없으면 None, 다른 오류는 멈춘다."""
     if text.lstrip().startswith("<"):
         match = XML_CODE.search(text)
         code = match.group(1) if match else "XML"
@@ -79,22 +86,36 @@ def parse_response(text: str, service: str, page_size: int) -> list[Row] | None:
         return None
     if result["CODE"] != OK_CODE:
         raise SystemExit(f"응답 코드 {result['CODE']}: {result['MESSAGE']}")
-    if body["list_total_count"] > page_size:
-        raise SystemExit("한 달 행 수가 page_size 를 넘습니다. page_size 를 늘리세요.")
-    return body["row"]
+    return body["row"], body["list_total_count"]
+
+
+def fetch_pages(get_page: GetPage, page_size: int) -> list[Row] | None:
+    """API 는 한 번에 정해진 행 수까지만 주므로 page_size 씩 나눠 끝까지 받는다."""
+    rows: list[Row] = []
+    total: int | None = None
+    while total is None or len(rows) < total:
+        start = len(rows) + 1
+        page = get_page(start, start + page_size - 1)
+        if page is None and total is None:
+            return None
+        if page is None or not page[0]:
+            raise SystemExit(f"{total}행 중 {len(rows)}행까지만 받았습니다.")
+        part, total = page
+        rows += part
+    return rows
 
 
 def month_fetcher(config: dict[str, Any], key: str) -> FetchMonth:
-    def fetch_month(month: str) -> list[Row] | None:
+    def get_page(month: str, start: int, end: int) -> Page | None:
         url = (
             f"{config['url']}/{key}/json/{config['service']}/"
-            f"1/{config['page_size']}/{month.replace('-', '')}"
+            f"{start}/{end}/{month.replace('-', '')}"
         )
         for attempt in range(1, config["attempts"] + 1):
             try:
                 with urllib.request.urlopen(url, timeout=config["timeout_s"]) as r:
                     text = r.read().decode("utf-8")
-                return parse_response(text, config["service"], config["page_size"])
+                return parse_response(text, config["service"])
             except (OSError, KeyError, ValueError) as error:
                 # 키가 담긴 URL 이 보이지 않게 오류 종류만 남긴다.
                 if attempt == config["attempts"]:
@@ -103,6 +124,11 @@ def month_fetcher(config: dict[str, Any], key: str) -> FetchMonth:
                     ) from None
                 time.sleep(config["retry_wait_s"])
         raise AssertionError("unreachable")
+
+    def fetch_month(month: str) -> list[Row] | None:
+        return fetch_pages(
+            lambda start, end: get_page(month, start, end), config["page_size"]
+        )
 
     return fetch_month
 
@@ -133,6 +159,32 @@ def load_months(
         fetched += 1
         print(f"{month}: {len(rows)}행", flush=True)
     return loaded, missing, fetched
+
+
+def drop_duplicates(
+    loaded: dict[str, list[Row]],
+) -> tuple[dict[str, list[Row]], dict[str, int]]:
+    """모든 값이 같은 행은 하나만 남긴다(2026-03 은 API 가 같은 행을 두 번 준다).
+
+    같은 호선·역인데 값이 다르면 어느 쪽이 맞는지 알 수 없어 멈춘다.
+    반환: 달별 행, 달별 버린 행 수(버린 행이 있는 달만)
+    """
+    unique: dict[str, list[Row]] = {}
+    dropped: dict[str, int] = {}
+    for month, rows in loaded.items():
+        kept: dict[tuple[str, str], Row] = {}
+        for row in rows:
+            station = (row["SBWY_ROUT_LN_NM"], row["STTN"])
+            if station not in kept:
+                kept[station] = row
+            elif kept[station] != row:
+                raise SystemExit(
+                    f"{month} {station[0]} {station[1]}: 값이 다른 행이 둘 있습니다."
+                )
+        unique[month] = list(kept.values())
+        if len(rows) > len(kept):
+            dropped[month] = len(rows) - len(kept)
+    return unique, dropped
 
 
 def count(value: str | int | float) -> int:
@@ -176,7 +228,11 @@ def write_parquet(rows: list[Row], path: Path) -> None:
 
 
 def make_report(
-    rows: list[Row], months: list[str], missing: list[str], fetched: int
+    rows: list[Row],
+    months: list[str],
+    missing: list[str],
+    fetched: int,
+    dropped: dict[str, int],
 ) -> dict[str, Any]:
     return {
         "first_month": months[0],
@@ -185,6 +241,7 @@ def make_report(
         "months_with_data": len({row["month"] for row in rows}),
         "months_fetched_now": fetched,
         "missing_months": missing,
+        "duplicate_rows_dropped": dropped,
         "rows": len(rows),
         "stations": len({(row["line"], row["station"]) for row in rows}),
         "lines": sorted({row["line"] for row in rows}),
@@ -202,6 +259,7 @@ def main() -> None:
         raise SystemExit(f"pipeline/.env 에 {KEY_ENV} 가 없습니다.")
     started = time.time()
     loaded, missing, fetched = load_months(config, months, month_fetcher(config, key))
+    loaded, dropped = drop_duplicates(loaded)
     rows = to_rows(loaded)
     if not rows:
         raise SystemExit(
@@ -210,7 +268,7 @@ def main() -> None:
 
     output = data_path(config["output"])
     write_parquet(rows, output)
-    report = make_report(rows, months, missing, fetched)
+    report = make_report(rows, months, missing, fetched, dropped)
     report_path = data_path(config["report"])
     report_path.write_text(
         json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8"
