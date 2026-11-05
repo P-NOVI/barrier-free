@@ -31,6 +31,15 @@ describe('제보 폼 데이터', () => {
         expect((form.get('photo') as File).name).toBe('a.jpg');
     });
 
+    it('사진 설명은 앞뒤 공백을 자르고, 없으면 빈 값을 보낸다', () => {
+        expect(
+            toReportForm(request({ description: '  턱이 높아요 ' })).get(
+                'description',
+            ),
+        ).toBe('턱이 높아요');
+        expect(toReportForm(request()).get('description')).toBe('');
+    });
+
     it('공사만 통행 불가를 보낸다', () => {
         expect(
             toReportForm(request({ kind: 'construction', blocked: true })).get(

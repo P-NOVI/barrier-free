@@ -8,7 +8,7 @@ from enum import StrEnum
 from sqlalchemy.orm import Session
 
 from app.config import Settings
-from app.models import Report, utc_now
+from app.models import REPORT_DESCRIPTION_MAX_LENGTH, Report, utc_now
 from core.graph import Graph
 from core.road_point import nearby_road_points
 
@@ -31,6 +31,7 @@ class ReportFailure(StrEnum):
     BLOCKED_NOT_CONSTRUCTION = "blocked_not_construction"
     BAD_PHOTO = "bad_photo"
     PHOTO_TOO_LARGE = "photo_too_large"
+    DESCRIPTION_TOO_LONG = "description_too_long"
     OFF_NETWORK = "off_network"
 
 
@@ -47,6 +48,7 @@ class ReportInput:
     lon: float
     lat: float
     photo: bytes
+    description: str = ""
 
 
 def photo_extension(photo: bytes) -> str | None:
@@ -74,6 +76,9 @@ def create_report(
         raise ReportError(ReportFailure.BLOCKED_NOT_CONSTRUCTION)
     if len(data.photo) > settings.report_photo_max_bytes:
         raise ReportError(ReportFailure.PHOTO_TOO_LARGE)
+    description = data.description.strip()
+    if len(description) > REPORT_DESCRIPTION_MAX_LENGTH:
+        raise ReportError(ReportFailure.DESCRIPTION_TOO_LONG)
     extension = photo_extension(data.photo)
     if extension is None:
         raise ReportError(ReportFailure.BAD_PHOTO)
@@ -94,6 +99,7 @@ def create_report(
         blocked=data.blocked,
         status=PENDING,
         photo_name=photo_name,
+        description=description or None,
         lon=data.lon,
         lat=data.lat,
         edge_id=points[0].edge.edge_id,

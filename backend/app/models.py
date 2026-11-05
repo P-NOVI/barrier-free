@@ -10,6 +10,7 @@ QUERY_MAX_LENGTH = 100
 NAME_MAX_LENGTH = 200
 ADDRESS_MAX_LENGTH = 300
 LABEL_MAX_LENGTH = 20
+REPORT_DESCRIPTION_MAX_LENGTH = 200
 
 
 def utc_now() -> datetime:
@@ -145,6 +146,10 @@ class Report(Base):
     status: Mapped[str] = mapped_column(String(20), default="pending", index=True)
     # 사진 저장 폴더 안의 파일 이름. 관리자에게만 보여 준다.
     photo_name: Mapped[str] = mapped_column(String(100))
+    # 제보자가 사진에 붙인 설명. 쓰지 않았으면 None
+    description: Mapped[str | None] = mapped_column(
+        String(REPORT_DESCRIPTION_MAX_LENGTH)
+    )
     lon: Mapped[float]
     lat: Mapped[float]
     # 제보 좌표를 붙인 가장 가까운 길(core.graph.Arc.edge_id)

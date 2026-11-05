@@ -214,6 +214,7 @@ class ReportResponse(BaseModel):
     kind: str
     blocked: bool
     status: str
+    description: str | None
     lon: float
     lat: float
     created_at: datetime

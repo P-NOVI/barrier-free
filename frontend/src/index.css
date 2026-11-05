@@ -1140,6 +1140,26 @@ body,
     font-weight: 600;
 }
 
+.report-form__textarea {
+    box-sizing: border-box;
+    width: 100%;
+    padding: 8px;
+    border: 1px solid var(--muted);
+    border-radius: 8px;
+    font: inherit;
+    color: inherit;
+    background: var(--bg);
+    resize: vertical;
+}
+
+.report-form__field > .report-form__count {
+    margin: 4px 0 0;
+    font-size: 12px;
+    font-weight: 400;
+    text-align: right;
+    color: var(--muted);
+}
+
 .report-form__chips,
 .report-form__actions {
     display: flex;

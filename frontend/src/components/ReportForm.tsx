@@ -3,6 +3,7 @@ import { type ChangeEvent, type FormEvent, useState } from 'react';
 import type { LngLat } from '../lib/kakaoMap';
 import {
     BLOCKABLE_KIND,
+    DESCRIPTION_MAX_LENGTH,
     PHOTO_MAX_BYTES,
     REPORT_KINDS,
     type ReportKind,
@@ -26,6 +27,7 @@ export default function ReportForm({
     const [kind, setKind] = useState<ReportKind>('curb');
     const [blocked, setBlocked] = useState(false);
     const [photo, setPhoto] = useState<File | null>(null);
+    const [description, setDescription] = useState('');
     const [error, setError] = useState<string | null>(null);
     const [sending, setSending] = useState(false);
     const [done, setDone] = useState(false);
@@ -52,7 +54,7 @@ export default function ReportForm({
         }
         setSending(true);
         setError(null);
-        submitReport({ kind, blocked, position, photo })
+        submitReport({ kind, blocked, position, photo, description })
             .then(() => setDone(true))
             .catch((reason: unknown) =>
                 setError(
@@ -138,6 +140,22 @@ export default function ReportForm({
                                 accept={PHOTO_TYPES.join(',')}
                                 onChange={handlePhoto}
                             />
+                        </label>
+                        <label className="report-form__field">
+                            <span>사진 설명 (선택)</span>
+                            <textarea
+                                className="report-form__textarea"
+                                rows={3}
+                                maxLength={DESCRIPTION_MAX_LENGTH}
+                                value={description}
+                                placeholder="예: 보도 끝에 10cm 턱이 있어요"
+                                onChange={(event) =>
+                                    setDescription(event.target.value)
+                                }
+                            />
+                            <span className="report-form__count">
+                                {description.length}/{DESCRIPTION_MAX_LENGTH}
+                            </span>
                         </label>
                         <p className="report-form__hint">
                             얼굴이나 차량 번호판이 나오지 않게 찍어 주세요.

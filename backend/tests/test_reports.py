@@ -70,6 +70,36 @@ def test_report_is_saved_as_pending(
     assert (report.expires_at - report.created_at).days == EXPIRY_DAYS["obstacle"]
 
 
+def test_description_is_saved_trimmed(client: TestClient, db_session: Session) -> None:
+    response = post_report(client, description="  인도 턱이 높아요  ")
+
+    assert response.status_code == 201
+    assert response.json()["description"] == "인도 턱이 높아요"
+    assert db_session.scalars(select(Report)).one().description == "인도 턱이 높아요"
+
+
+@pytest.mark.parametrize("fields", [{}, {"description": "   "}])
+def test_description_is_optional(
+    client: TestClient, db_session: Session, fields: dict[str, str]
+) -> None:
+    response = post_report(client, **fields)
+
+    assert response.status_code == 201
+    assert response.json()["description"] is None
+    assert db_session.scalars(select(Report)).one().description is None
+
+
+def test_long_description_is_rejected(
+    client: TestClient, db_session: Session, photo_dir: Path
+) -> None:
+    response = post_report(client, description="가" * 201)
+
+    assert response.status_code == 422
+    assert response.json()["detail"]["reason"] == "description_too_long"
+    assert db_session.scalars(select(Report)).all() == []
+    assert not photo_dir.exists()
+
+
 def test_report_requires_photo(client: TestClient, db_session: Session) -> None:
     response = post_report(client, photo=None)
 

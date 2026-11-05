@@ -19,12 +19,17 @@ export const BLOCKABLE_KIND: ReportKind = 'construction';
 // backend/app/config.py 의 report_photo_max_bytes 와 같다.
 export const PHOTO_MAX_BYTES = 5 * 1024 * 1024;
 
+// backend/app/models.py 의 REPORT_DESCRIPTION_MAX_LENGTH 와 같다.
+export const DESCRIPTION_MAX_LENGTH = 200;
+
 export type ReportRequest = {
     kind: ReportKind;
     /** 지나갈 수 없는 공사인지. 공사가 아니면 false */
     blocked: boolean;
     position: LngLat;
     photo: File;
+    /** 사진 설명. 비워도 된다. */
+    description?: string;
 };
 
 export type Report = {
@@ -32,6 +37,7 @@ export type Report = {
     kind: ReportKind;
     blocked: boolean;
     status: 'pending' | 'approved' | 'rejected';
+    description: string | null;
     lon: number;
     lat: number;
     created_at: string;
@@ -43,6 +49,7 @@ export function toReportForm({
     blocked,
     position,
     photo,
+    description,
 }: ReportRequest): FormData {
     const form = new FormData();
     form.set('kind', kind);
@@ -50,6 +57,7 @@ export function toReportForm({
     form.set('lon', String(position[0]));
     form.set('lat', String(position[1]));
     form.set('photo', photo);
+    form.set('description', description?.trim() ?? '');
     return form;
 }
 
