@@ -24,9 +24,9 @@ type MenuBarProps = {
     onSelect: (tab: Tab) => void;
 };
 
-/** 메뉴: 검색, 길찾기, My. 좁은 화면은 화면 아래, 넓은 화면은 왼쪽 패널 위에 둔다. */
+/** 메뉴: 검색, 길찾기, My. 좁은 화면은 화면 아래에 띄우고, 넓은 화면은 왼쪽 패널 위에 둔다. */
 export default function MenuBar({ tab, onSelect }: MenuBarProps) {
-    // 넓은 화면에서 흰 알약이 고른 탭 자리로 미끄러지게 순서를 넘긴다.
+    // 고른 메뉴 뒤 알약(좁은 화면은 회색, 넓은 화면은 흰색)이 고른 자리로 미끄러지게 순서를 넘긴다.
     const style = {
         '--menu-count': ITEMS.length,
         '--menu-index': ITEMS.findIndex((item) => item.tab === tab),
