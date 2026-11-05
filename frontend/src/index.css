@@ -1805,3 +1805,111 @@ input::placeholder {
         bottom: 32px;
     }
 }
+
+/* 길 위 문제 제보 */
+.place-info__report {
+    width: 100%;
+    margin-top: 8px;
+    padding: 8px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font: inherit;
+    font-size: 14px;
+    color: var(--muted);
+    background: var(--bg);
+    cursor: pointer;
+}
+
+.report-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 30;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    background: rgba(0, 0, 0, 0.4);
+}
+
+.report-form {
+    box-sizing: border-box;
+    width: min(360px, 100%);
+    max-height: 100%;
+    overflow-y: auto;
+    padding: 16px;
+    border-radius: 8px;
+    background: var(--bg);
+    box-shadow: var(--panel-shadow);
+}
+
+.report-form__title {
+    margin: 0 0 4px;
+    font-size: 18px;
+}
+
+.report-form__hint {
+    margin: 0 0 12px;
+    font-size: 13px;
+    color: var(--muted);
+}
+
+.report-form__field {
+    display: block;
+    margin: 0 0 12px;
+    padding: 0;
+    border: 0;
+    font-size: 14px;
+}
+
+.report-form__field legend,
+.report-form__field > span {
+    display: block;
+    margin-bottom: 4px;
+    font-weight: 600;
+}
+
+.report-form__textarea {
+    box-sizing: border-box;
+    width: 100%;
+    padding: 8px;
+    border: 1px solid var(--muted);
+    border-radius: 8px;
+    font: inherit;
+    color: inherit;
+    background: var(--bg);
+    resize: vertical;
+}
+
+.report-form__field > .report-form__count {
+    margin: 4px 0 0;
+    font-size: 12px;
+    font-weight: 400;
+    text-align: right;
+    color: var(--muted);
+}
+
+.report-form__chips,
+.report-form__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.report-form__actions {
+    justify-content: flex-end;
+}
+
+.report-form__submit {
+    padding: 8px 16px;
+    border: 0;
+    border-radius: 8px;
+    font: inherit;
+    color: #fff;
+    background: var(--brand);
+    cursor: pointer;
+}
+
+.report-form__submit:disabled {
+    opacity: 0.5;
+    cursor: default;
+}

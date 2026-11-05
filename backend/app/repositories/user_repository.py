@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session, aliased
 
 from app.models import (
     AuthSession,
+    Report,
     RouteHistory,
     SavedPlace,
     SavedRoute,
@@ -133,13 +134,14 @@ def sign_in_with_social(
 
 
 def merge_guest(session: Session, guest_id: int, user_id: int) -> None:
-    """게스트의 이력·장소를 회원으로 옮기고 게스트를 지운다.
+    """게스트의 이력·장소·제보를 회원으로 옮기고 게스트를 지운다.
 
     이동 조건, 같은 이름의 내 장소, 같은 위치의 즐겨찾기, 같은 내 경로는 회원 것이 우선.
     """
     drop_duplicate_places(session, guest_id, user_id)
     drop_duplicate_routes(session, guest_id, user_id)
-    for model in (SearchHistory, RouteHistory, SavedPlace, SavedRoute):
+    # 제보는 USER_OWNED 가 아니라 게스트를 지우면 user_id 가 비므로 먼저 옮긴다.
+    for model in (SearchHistory, RouteHistory, SavedPlace, SavedRoute, Report):
         session.execute(
             update(model).where(model.user_id == guest_id).values(user_id=user_id)
         )

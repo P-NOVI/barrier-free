@@ -26,6 +26,8 @@ type PlaceInfoCardProps = {
     /** 저장·삭제에 실패했을 때 알림 */
     saveError?: string | null;
     onPick: (role: EndpointRole) => void;
+    /** 이 위치의 길 위 문제를 제보한다. 없으면 제보 버튼을 숨긴다. */
+    onReport?: () => void;
     onClose: () => void;
 };
 
@@ -154,6 +156,7 @@ export default function PlaceInfoCard({
     onUnsave,
     saveError,
     onPick,
+    onReport,
     onClose,
 }: PlaceInfoCardProps) {
     const [panel, setPanel] = useState<Panel>(null);
@@ -186,6 +189,11 @@ export default function PlaceInfoCard({
     const savePanel = onSave && panel === 'save' && (
         <SavePanel saved={saved} onSave={onSave} onUnsave={onUnsave} />
     );
+    const reportButton = onReport && (
+        <button type="button" className="place-info__report" onClick={onReport}>
+            이 위치 제보하기
+        </button>
+    );
 
     if (variant === 'sheet') {
         return (
@@ -217,6 +225,7 @@ export default function PlaceInfoCard({
                 </div>
                 {error}
                 {savePanel}
+                {reportButton}
                 <div className="place-info-sheet__actions">
                     <button
                         type="button"
@@ -286,6 +295,7 @@ export default function PlaceInfoCard({
                 </button>
             </div>
             {savePanel}
+            {reportButton}
             {panel === 'route' && (
                 <div className="place-info__panel">
                     <button

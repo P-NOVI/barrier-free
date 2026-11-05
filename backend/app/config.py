@@ -103,6 +103,12 @@ class Settings(BaseSettings):
     same_spot_m: float = 5.0
     landmark_radius_m: int = 60
     landmark_on_spot_m: float = 30.0
+    # 길 위 문제 제보 사진을 저장하는 폴더. 사진에 사람 얼굴·번호판이 있을 수 있어
+    # 저장소에 커밋하지 않고(.gitignore) 관리자에게만 보여 준다.
+    report_photo_dir: Path = REPO_ROOT / "data" / "report_photos"
+    report_photo_max_bytes: int = 5 * 1024 * 1024
+    # 제보 좌표가 도로망에서 이보다 멀면 제보를 받지 않는다. 초안 값이다.
+    report_snap_radius_m: float = 30.0
 
 
 @cache

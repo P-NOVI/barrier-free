@@ -18,6 +18,7 @@ import MyLocationControl from './components/MyLocationControl';
 import NavigationPanel from './components/NavigationPanel';
 import PlaceInfoCard from './components/PlaceInfoCard';
 import PlaceSearch from './components/PlaceSearch';
+import ReportForm from './components/ReportForm';
 import RoutePanel from './components/RoutePanel';
 import TopSearch from './components/TopSearch';
 import { useElementHeight } from './hooks/useElementHeight';
@@ -98,6 +99,8 @@ export default function App() {
     const [mapCenter, setMapCenter] = useState<LngLat>(SEOUL_CITY_HALL);
     // 마지막으로 찾은 내 위치. 지도에 파란 점으로 보인다.
     const [myLocation, setMyLocation] = useState<LocationFix | null>(null);
+    // 길 위 문제를 제보하는 중인 장소
+    const [reporting, setReporting] = useState<PickedPlace | null>(null);
     const [navigating, setNavigating] = useState(false);
     // 안내 중 지도가 내 위치를 따라가는지. 지도를 끌면 멈추고, 내 위치 버튼을 누르면 다시 따라간다.
     const [following, setFollowing] = useState(true);
@@ -430,6 +433,7 @@ export default function App() {
             onUnsave={savedPlaces.remove}
             saveError={savedPlaces.error}
             onPick={handlePick}
+            onReport={() => setReporting(picked)}
             onClose={() => setPicked(null)}
         />
     );
@@ -530,6 +534,13 @@ export default function App() {
                         : undefined
                 }
             />
+            {reporting && (
+                <ReportForm
+                    position={reporting.position}
+                    address={reporting.address}
+                    onClose={() => setReporting(null)}
+                />
+            )}
             {elevatorError && (
                 <p role="alert" className="map-view__error">
                     {elevatorError}

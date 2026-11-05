@@ -1,0 +1,111 @@
+"""길 위 문제 제보를 검사하고 저장한다. 승인은 관리자 API(다른 이슈)가 맡는다."""
+
+import secrets
+from dataclasses import dataclass
+from datetime import datetime, timedelta
+from enum import StrEnum
+
+from sqlalchemy.orm import Session
+
+from app.config import Settings
+from app.models import REPORT_DESCRIPTION_MAX_LENGTH, Report, utc_now
+from core.graph import Graph
+from core.road_point import nearby_road_points
+
+REPORT_KINDS = ("curb", "construction", "obstacle", "damage")
+CONSTRUCTION = "construction"
+PENDING = "pending"
+
+# 유형별로 제보가 유효한 기간. 공사는 길게, 치워질 수 있는 장애물은 짧게 둔다.
+EXPIRY_DAYS = {"curb": 90, "construction": 7, "obstacle": 1, "damage": 30}
+
+# 확장자는 사진 내용(맨 앞 바이트)으로 정한다. 사용자가 보낸 파일 이름은 쓰지 않는다.
+PHOTO_SIGNATURES = (
+    (b"\xff\xd8\xff", ".jpg"),
+    (b"\x89PNG\r\n\x1a\n", ".png"),
+)
+
+
+class ReportFailure(StrEnum):
+    UNKNOWN_KIND = "unknown_kind"
+    BLOCKED_NOT_CONSTRUCTION = "blocked_not_construction"
+    BAD_PHOTO = "bad_photo"
+    PHOTO_TOO_LARGE = "photo_too_large"
+    DESCRIPTION_TOO_LONG = "description_too_long"
+    OFF_NETWORK = "off_network"
+
+
+class ReportError(Exception):
+    def __init__(self, reason: ReportFailure) -> None:
+        super().__init__(reason)
+        self.reason = reason
+
+
+@dataclass(frozen=True)
+class ReportInput:
+    kind: str
+    blocked: bool
+    lon: float
+    lat: float
+    photo: bytes
+    description: str = ""
+
+
+def photo_extension(photo: bytes) -> str | None:
+    for signature, extension in PHOTO_SIGNATURES:
+        if photo.startswith(signature):
+            return extension
+    # WebP 는 RIFF....WEBP 모양이다.
+    if photo[:4] == b"RIFF" and photo[8:12] == b"WEBP":
+        return ".webp"
+    return None
+
+
+def create_report(
+    session: Session,
+    graph: Graph,
+    settings: Settings,
+    user_id: int,
+    data: ReportInput,
+    now: datetime | None = None,
+) -> Report:
+    """검사를 모두 통과해야 사진을 쓰고 제보를 넣는다. commit 은 부르는 쪽이 한다."""
+    if data.kind not in REPORT_KINDS:
+        raise ReportError(ReportFailure.UNKNOWN_KIND)
+    if data.blocked and data.kind != CONSTRUCTION:
+        raise ReportError(ReportFailure.BLOCKED_NOT_CONSTRUCTION)
+    if len(data.photo) > settings.report_photo_max_bytes:
+        raise ReportError(ReportFailure.PHOTO_TOO_LARGE)
+    description = data.description.strip()
+    if len(description) > REPORT_DESCRIPTION_MAX_LENGTH:
+        raise ReportError(ReportFailure.DESCRIPTION_TOO_LONG)
+    extension = photo_extension(data.photo)
+    if extension is None:
+        raise ReportError(ReportFailure.BAD_PHOTO)
+    points = nearby_road_points(
+        graph, data.lon, data.lat, settings.report_snap_radius_m
+    )
+    if not points:
+        raise ReportError(ReportFailure.OFF_NETWORK)
+
+    photo_name = f"{secrets.token_hex(16)}{extension}"
+    settings.report_photo_dir.mkdir(parents=True, exist_ok=True)
+    (settings.report_photo_dir / photo_name).write_bytes(data.photo)
+
+    created = now or utc_now()
+    report = Report(
+        user_id=user_id,
+        kind=data.kind,
+        blocked=data.blocked,
+        status=PENDING,
+        photo_name=photo_name,
+        description=description or None,
+        lon=data.lon,
+        lat=data.lat,
+        edge_id=points[0].edge.edge_id,
+        created_at=created,
+        expires_at=created + timedelta(days=EXPIRY_DAYS[data.kind]),
+    )
+    session.add(report)
+    session.flush()
+    return report

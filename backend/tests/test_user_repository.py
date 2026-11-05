@@ -3,7 +3,7 @@ from datetime import timedelta
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.models import AuthSession, SearchHistory, User, utc_now
+from app.models import AuthSession, Report, SearchHistory, User, utc_now
 from app.repositories.history_repository import add_search, list_searches
 from app.repositories.user_repository import (
     create_guest,
@@ -99,6 +99,29 @@ def test_existing_member_takes_over_guest_history(db_session: Session) -> None:
     # 이동 조건은 회원이 저장해 둔 것을 쓴다.
     assert load_preset(db_session, member_id) == "stroller"
     assert db_session.get(User, guest.id) is None
+
+
+def test_existing_member_takes_over_guest_reports(db_session: Session) -> None:
+    member_id, _ = sign_in_with_social(db_session, None, "kakao", "k1", None)
+    guest, _ = create_guest(db_session)
+    report = Report(
+        user_id=guest.id,
+        kind="curb",
+        blocked=False,
+        status="pending",
+        photo_name="a.jpg",
+        lon=126.97,
+        lat=37.56,
+        edge_id=1,
+        expires_at=utc_now() + timedelta(days=1),
+    )
+    db_session.add(report)
+    db_session.flush()
+
+    sign_in_with_social(db_session, guest.id, "kakao", "k1", None)
+
+    db_session.refresh(report)
+    assert report.user_id == member_id
 
 
 def test_member_without_preset_takes_guest_preset(db_session: Session) -> None:

@@ -18,7 +18,7 @@ type ApiRequest = {
     query?: Record<string, string>;
     /** 없으면 body 가 있을 때 POST, 없을 때 GET */
     method?: 'POST' | 'PUT' | 'DELETE';
-    /** 있으면 JSON 으로 보낸다. */
+    /** 있으면 JSON 으로 보낸다. FormData 면 그대로 보낸다(사진 업로드). */
     body?: unknown;
     /** 오류 응답에 detail 안내 문구가 없을 때 쓰는 문구 */
     failureMessage: string;
@@ -79,13 +79,16 @@ export async function requestJson<T>(
     const init: RequestInit =
         body === undefined
             ? { method, signal, credentials }
-            : {
-                  method: method ?? 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify(body),
-                  signal,
-                  credentials,
-              };
+            : body instanceof FormData
+              ? // Content-Type 은 브라우저가 경계(boundary)와 함께 정한다.
+                { method: method ?? 'POST', body, signal, credentials }
+              : {
+                    method: method ?? 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body),
+                    signal,
+                    credentials,
+                };
     let response: Response;
     try {
         response = await fetch(url, init);
