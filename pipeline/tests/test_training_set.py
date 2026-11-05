@@ -4,6 +4,7 @@ from pathlib import Path
 
 import numpy as np
 import pyarrow as pa
+import pytest
 
 STEPS = Path(__file__).resolve().parents[1] / "steps"
 
@@ -155,3 +156,91 @@ def test_build_training_set_joins_and_normalizes() -> None:
     assert second["rain_mm"] == 1.5
     assert second["congestion"] == 1.0
     assert second["district"] == "Gangnam-gu"
+
+
+def test_sensor_stations_within_radius() -> None:
+    stations = pa.table(
+        {
+            "line": ["1호선", "2호선", "3호선"],
+            "station": ["가", "가", "나"],
+            "lon": [127.0000, 127.0030, 127.0300],
+            "lat": [37.5000, 37.5000, 37.5000],
+        }
+    )
+    near = training.sensor_stations({1: (127.0, 37.5), 2: (126.9, 37.5)}, stations, 500)
+    assert near.to_pylist() == [
+        {"sensor_code": 1, "line": "1호선", "station": "가"},
+        {"sensor_code": 1, "line": "2호선", "station": "가"},
+    ]
+
+
+def test_daily_ridership_divides_by_days_in_month() -> None:
+    subway = pa.table(
+        {
+            "month": ["2024-02", "2023-04"],
+            "line": ["1호선", "1호선"],
+            "station": ["가", "가"],
+            "hour": pa.array([8, 8], type=pa.int8()),
+            "boardings": pa.array([290, 300], type=pa.int32()),
+            "alightings": pa.array([58, 60], type=pa.int32()),
+        }
+    )
+    daily = training.daily_ridership(subway)
+    assert daily["boardings"].to_pylist() == pytest.approx([10.0, 10.0])
+    assert daily["alightings"].to_pylist() == pytest.approx([2.0, 2.0])
+
+
+def test_add_subway_uses_last_year_and_fills_zero_or_null() -> None:
+    near = pa.table(
+        {
+            "sensor_code": pa.array([1, 1], type=pa.int32()),
+            "line": ["1호선", "2호선"],
+            "station": ["가", "가"],
+        }
+    )
+    daily = pa.table(
+        {
+            "line": ["1호선", "2호선", "1호선"],
+            "station": ["가", "가", "가"],
+            "month": ["2023-03", "2023-03", "2023-03"],
+            "hour": pa.array([8, 8, 9], type=pa.int8()),
+            "boardings": [10.0, 5.0, 7.0],
+            "alightings": [1.0, 2.0, 3.0],
+        }
+    )
+    table = pa.table(
+        {
+            "sensor_code": pa.array([1, 1, 2, 1], type=pa.int32()),
+            "slot_start": pa.array(
+                stamps(
+                    "2024-03-04T08:00",
+                    "2024-03-04T10:00",
+                    "2024-03-04T08:00",
+                    "2024-01-04T08:00",
+                ),
+                type=pa.timestamp("s"),
+            ),
+            "hour_of_day": pa.array([8, 10, 8, 8], type=pa.int8()),
+            "visitor_mean": pa.array([1.0, 2.0, 3.0, 4.0], type=pa.float32()),
+            "congestion": pa.array([0.1, 0.2, 0.3, 0.4], type=pa.float32()),
+        }
+    )
+    out = training.add_subway(
+        table, training.subway_features(near, daily), ["2023-02", "2023-03"], 12
+    )
+    assert out.column_names == [
+        "sensor_code",
+        "slot_start",
+        "hour_of_day",
+        "subway_boardings",
+        "subway_alightings",
+        "visitor_mean",
+        "congestion",
+    ]
+    rows = [
+        (r["sensor_code"], r["hour_of_day"], r["subway_boardings"])
+        for r in out.to_pylist()
+    ]
+    # 두 호선을 더한다. 그 시각 자료가 없거나 역이 없는 센서는 0,
+    # 자료가 없는 달(2023-01)은 null 이다.
+    assert rows == [(1, 8, None), (1, 8, 15.0), (1, 10, 0.0), (2, 8, 0.0)]
