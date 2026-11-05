@@ -225,10 +225,13 @@ input::placeholder {
     background: var(--tactile);
 }
 
-/* 경로 선 안 진행 방향 화살표. 오른쪽을 가리키게 그리고 --angle(MapView 가 정함)만큼 돌린다. */
+/*
+ * 경로 선 안 진행 방향 화살표. 오른쪽을 가리키게 그리고 --angle(MapView 가 정함)만큼 돌린다.
+ * 높이는 선 폭(8px)보다 작게 둬서 위아래에 파란 여백을 남긴다.
+ */
 .route-arrow {
-    width: 9px;
-    height: 8px;
+    width: 7px;
+    height: 6px;
     background: var(--route-arrow);
     /* 앞 끝, 뒤 아래, 뒤쪽 홈, 뒤 위 */
     clip-path: polygon(100% 50%, 0 100%, 28% 50%, 0 0);
