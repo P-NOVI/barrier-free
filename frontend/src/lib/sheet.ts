@@ -58,11 +58,6 @@ export function snapAfterRelease(
     );
 }
 
-/** 한 단계 위. 끝까지 편 시트는 그대로 둔다. */
-export function snapAbove(snap: SheetSnap): SheetSnap {
-    return SNAPS[Math.min(SNAPS.indexOf(snap) + 1, SNAPS.length - 1)];
-}
-
 /** 손잡이를 눌렀을 때: 접혀 있으면 절반으로 펴고, 펼쳐 있으면 한 단계 내린다. */
 export function toggleSnap(snap: SheetSnap): SheetSnap {
     return snap === 'half' ? 'collapsed' : 'half';

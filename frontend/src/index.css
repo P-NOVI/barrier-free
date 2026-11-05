@@ -1625,6 +1625,14 @@ input::placeholder {
     transition: opacity 0.2s ease;
 }
 
+/* 시트 아래쪽이 화면 밖에 있는 만큼(--sheet-hidden 은 BottomSheet.tsx 가 정함) 내용 끝에 여백을 둬,
+   시트를 움직이지 않고 보이는 칸 안에서 내용 끝까지 스크롤된다. */
+.bottom-sheet__body::after {
+    content: '';
+    display: block;
+    height: var(--sheet-hidden, 0px);
+}
+
 /* 접힌 시트는 내용이 메뉴 둘레로 비쳐 보이지 않게 감춘다. 끄는 동안은 다시 보인다. */
 .bottom-sheet[data-snap='collapsed']:not([data-dragging]) .bottom-sheet__body {
     opacity: 0;

@@ -5,7 +5,6 @@ import {
     FLICK_SPEED,
     RUBBER_BAND,
     selectTab,
-    snapAbove,
     snapAfterRelease,
     toggleSnap,
 } from './sheet';
@@ -42,14 +41,6 @@ describe('snapAfterRelease', () => {
         expect(snapAfterRelease(120, -FLICK_SPEED * 2, HEIGHTS)).toBe(
             'collapsed',
         );
-    });
-});
-
-describe('snapAbove', () => {
-    it('한 단계 위로 가고, 끝까지 편 시트는 그대로 둔다', () => {
-        expect(snapAbove('collapsed')).toBe('half');
-        expect(snapAbove('half')).toBe('full');
-        expect(snapAbove('full')).toBe('full');
     });
 });
 

@@ -13,7 +13,6 @@ import {
     dragHeight,
     type SheetSnap,
     type SnapHeights,
-    snapAbove,
     snapAfterRelease,
     TAP_SLOP_PX,
     toggleSnap,
@@ -92,14 +91,6 @@ export default function BottomSheet({
     const [dragging, setDragging] = useState(false);
     // 움직임마다 번호를 매겨, 끝난 애니메이션이 지금 움직임의 것인지 가린다.
     const motion = useRef(0);
-    const moving = useRef(false);
-    const reportMoving = useCallback(
-        (value: boolean) => {
-            moving.current = value;
-            onMovingChange?.(value);
-        },
-        [onMovingChange],
-    );
 
     const place = useCallback(
         (height: number) => {
@@ -119,21 +110,27 @@ export default function BottomSheet({
             return;
         }
         place(heights[snap]);
+        // 화면 아래로 내려가 안 보이는 높이. 내용 끝에 그만큼 여백을 붙여(index.css)
+        // 시트를 그대로 둔 채 내용 끝까지 스크롤해 볼 수 있게 한다.
+        sheet.style.setProperty(
+            '--sheet-hidden',
+            `${heights.full - heights[snap]}px`,
+        );
         motion.current += 1;
         const id = motion.current;
         const animations = sheet.getAnimations();
-        reportMoving(animations.length > 0);
+        onMovingChange?.(animations.length > 0);
         if (animations.length > 0) {
             // 중간에 끊긴 애니메이션도 끝난 것으로 보고, 그 사이 새 움직임이 없을 때만 멈췄다고 알린다.
             void Promise.allSettled(
                 animations.map((animation) => animation.finished),
             ).then(() => {
                 if (motion.current === id) {
-                    reportMoving(false);
+                    onMovingChange?.(false);
                 }
             });
         }
-    }, [dragging, heights, snap, place, reportMoving]);
+    }, [dragging, heights, snap, place, onMovingChange]);
 
     const begin = useCallback(
         (y: number) => {
@@ -165,7 +162,7 @@ export default function BottomSheet({
                 current.moved = true;
                 motion.current += 1;
                 setDragging(true);
-                reportMoving(true);
+                onMovingChange?.(true);
             }
             const now = performance.now();
             current.samples.push({ y, t: now });
@@ -175,7 +172,7 @@ export default function BottomSheet({
             current.height = dragHeight(current.startHeight, dy, heights);
             place(current.height);
         },
-        [heights, place, reportMoving],
+        [heights, place, onMovingChange],
     );
 
     /** 손을 뗐다. 끌지 않고 눌렀으면 tapped 를 부른다. */
@@ -200,11 +197,12 @@ export default function BottomSheet({
         [heights, onSnapChange],
     );
 
-    // 내용에서 끌기(터치). 전체가 아닐 때 위로, 내용이 맨 위일 때 아래로 끌면 시트가 움직이고,
-    // 그 밖에는 내용이 스크롤된다. 스크롤을 막아야 해서 passive 가 아닌 리스너를 쓴다.
-    const latest = useRef({ snap, begin, move, end, onSnapChange });
+    // 내용에서 끌기(터치). 내용이 먼저 스크롤되고, 더 스크롤할 수 없을 때만 시트가 움직인다.
+    // 내용 끝에서 위로(전체가 아닐 때), 맨 위에서 아래로 끌 때다.
+    // 스크롤을 막아야 해서 passive 가 아닌 리스너를 쓴다.
+    const latest = useRef({ snap, begin, move, end });
     useLayoutEffect(() => {
-        latest.current = { snap, begin, move, end, onSnapChange };
+        latest.current = { snap, begin, move, end };
     });
     useEffect(() => {
         const body = bodyRef.current;
@@ -226,7 +224,9 @@ export default function BottomSheet({
             const y = event.touches[0].clientY;
             const dy = y - startY;
             if (mode === null && dy !== 0) {
-                const up = dy < 0 && latest.current.snap !== 'full';
+                const atEnd =
+                    body.scrollTop >= body.scrollHeight - body.clientHeight - 1;
+                const up = dy < 0 && atEnd && latest.current.snap !== 'full';
                 const down = dy > 0 && body.scrollTop <= 0;
                 mode = up || down ? 'sheet' : 'scroll';
                 if (mode === 'sheet') {
@@ -254,27 +254,6 @@ export default function BottomSheet({
             body.removeEventListener('touchend', onEnd);
             body.removeEventListener('touchcancel', onEnd);
         };
-    }, []);
-
-    // 휠·트랙패드로 내용을 내리면 터치로 위로 끌 때처럼, 끝까지 편 시트가 아니면 시트를 한 단계 올린다.
-    // 펴지는 동안 오는 휠은 막아 한 번에 한 단계씩만 가고, 끝까지 편 뒤에는 내용이 스크롤된다.
-    useEffect(() => {
-        const sheet = sheetRef.current;
-        if (!sheet) {
-            return;
-        }
-        const onWheel = (event: WheelEvent) => {
-            const { snap: current, onSnapChange: change } = latest.current;
-            if (event.ctrlKey || event.deltaY <= 0 || current === 'full') {
-                return;
-            }
-            event.preventDefault();
-            if (!moving.current) {
-                change(snapAbove(current));
-            }
-        };
-        sheet.addEventListener('wheel', onWheel, { passive: false });
-        return () => sheet.removeEventListener('wheel', onWheel);
     }, []);
 
     const handlePointerDown = (event: PointerEvent<HTMLButtonElement>) => {
