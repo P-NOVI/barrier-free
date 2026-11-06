@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.config import Settings
@@ -187,3 +188,33 @@ def resolve_report(report: Report) -> Report:
         raise ReportError(ReportFailure.NOT_APPROVED)
     report.status = RESOLVED
     return report
+
+
+@dataclass(frozen=True)
+class ResnapResult:
+    moved: int
+    kept: int
+    # 반경 안에 길이 없어 길 번호를 그대로 둔 제보 id
+    off_network: list[int]
+
+
+def resnap_reports(session: Session, graph: Graph, radius_m: float) -> ResnapResult:
+    """모든 제보의 길 번호를 제보 좌표에서 가장 가까운 길로 다시 정한다.
+
+    길 번호는 그래프를 내보낸 순서라 그래프를 다시 만들면 바뀐다. commit 은 부르는 쪽이
+    한다.
+    """
+    moved = kept = 0
+    off_network = []
+    for report in session.scalars(select(Report).order_by(Report.id)):
+        points = nearby_road_points(graph, report.lon, report.lat, radius_m)
+        if not points:
+            off_network.append(report.id)
+            continue
+        edge_id = points[0].edge.edge_id
+        if edge_id == report.edge_id:
+            kept += 1
+        else:
+            report.edge_id = edge_id
+            moved += 1
+    return ResnapResult(moved, kept, off_network)
