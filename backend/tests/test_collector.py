@@ -347,7 +347,8 @@ def test_collect_weather_daily_keeps_24_hours_after_issue(session: Session) -> N
         assert request.url.params["base_time"] == "0500"
         return httpx.Response(200, json=kma_page(items))
 
-    settings = Settings(kma_api_key="k")
+    # 발표 뒤 collector_daily_hours 만 남기는 규칙을 본다(기본값은 67시간).
+    settings = Settings(kma_api_key="k", collector_daily_hours=24)
     with create_kma_client(settings, httpx.MockTransport(handler)) as client:
         first = collect_weather_daily(
             session, client, {"Jung-gu": GRID}, settings, NOW, KeyedTtlCache(60)

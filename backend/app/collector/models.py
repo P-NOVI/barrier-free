@@ -1,8 +1,8 @@
 """수집 DB(COLLECTOR_DATABASE_URL)의 테이블. 앱 DB 테이블(app.models)과 따로 만든다."""
 
-from datetime import datetime
+from datetime import date, datetime
 
-from sqlalchemy import DateTime, Float, Integer, SmallInteger, String
+from sqlalchemy import Date, DateTime, Float, Integer, SmallInteger, String
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
@@ -78,3 +78,29 @@ class WeatherDaily(CollectorBase):
     humidity: Mapped[float | None] = mapped_column(Float)
     wind_ms: Mapped[float | None] = mapped_column(Float)
     collected_at: Mapped[datetime] = collected_at()
+
+
+class FootTrafficForecast(CollectorBase):
+    """센서·시간별 유동인구 예측. ml 의 매일 배치(foot_traffic.daily)가 쓴다.
+
+    배치는 날마다 오늘·내일·모레를 예측하므로 같은 시각이 issued_on 별로 여러 번 남는다.
+    실측(sdot_readings)과 맞춰 며칠 전 예측이 얼마나 맞았는지 볼 수 있다.
+    """
+
+    __tablename__ = "foot_traffic_forecasts"
+
+    sensor_code: Mapped[int] = mapped_column(Integer, primary_key=True)
+    # 예측한 날(배치 날짜, 한국 날짜)
+    issued_on: Mapped[date] = mapped_column(Date, primary_key=True, index=True)
+    # 한 시간 구간의 시작 시각. 학습셋(13 단계)의 slot_start 와 같은 뜻이다.
+    slot_start: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), primary_key=True
+    )
+    # 예측 유동인구(명/시간)
+    foot_traffic: Mapped[float] = mapped_column(Float)
+    # 예측에 넣은 단기예보(없으면 빈 값)
+    temp_c: Mapped[float | None] = mapped_column(Float)
+    rain_mm: Mapped[float | None] = mapped_column(Float)
+    # 서비스 모델이 학습한 마지막 시간(메타 train_last_slot)
+    model_trained_until: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
