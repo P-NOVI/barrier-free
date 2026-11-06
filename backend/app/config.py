@@ -65,7 +65,13 @@ class Settings(BaseSettings):
     collector_database_url: SecretStr = SecretStr("")
     # 외부 DB라 로컬 앱 DB보다 길게 기다린다.
     collector_connect_timeout_s: int = 10
-    # 한 번에 받는 S-DoT 최신 행 수. 1000행이 약 2시간치라, 실행이 몇 번 빠져도 메운다.
+    # S-DoT 는 DB의 최신 측정 시각에서 이만큼 앞까지 최신 쪽부터 거슬러 받는다.
+    # 늦게 올라온 행도 받으려고 겹쳐 받는다(이미 있는 행은 건너뛴다).
+    collector_sdot_overlap_minutes: int = 60
+    # 한 번에 받는 최대 쪽 수. 1000행이 약 1.5시간치라 하루가 약 12쪽, 300쪽은 약 25일.
+    # 여기에 걸리면 넣지 않고 실패로 끝나 다음 실행이 같은 지점부터 다시 받는다.
+    collector_sdot_max_pages: int = 300
+    # 수집 DB가 비었을 때만 받는 S-DoT 최신 행 수.
     collector_sdot_rows: int = 2000
     # 실황은 지난 이 시간 안에서 DB에 없는 정시만 받는다. 기상청은 24시간 안만 준다.
     collector_backfill_hours: int = 12
@@ -73,7 +79,9 @@ class Settings(BaseSettings):
     collector_daily_issue_hour: int = 5
     collector_daily_hours: int = 24
     # 자치구 날씨 위치(센서 위치 평균)는 지난 이 기간에 모은 센서·자치구 짝으로 구한다.
-    collector_district_days: int = 2
+    # 유동인구는 하루 한 번 받으므로, 그 실행이 며칠 빠져도 날씨가 멈추지 않게
+    # 넉넉히 둔다.
+    collector_district_days: int = 7
     # 마지막 접속 후 이 기간이 지난 게스트는 이력과 함께 지운다.
     # 경로 이력은 위치 정보이므로 기한 없이 쌓아 두지 않는다.
     guest_retention_days: int = 30

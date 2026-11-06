@@ -1,3 +1,5 @@
+import sys
+
 import pytest
 from alembic import command
 from alembic.autogenerate import compare_metadata
@@ -6,6 +8,7 @@ from sqlalchemy import MetaData, create_engine, inspect
 from sqlalchemy.pool import StaticPool
 
 from app.collector import __main__ as collector
+from app.collector import import_sqlite
 from app.collector.models import CollectorBase
 from app.config import get_settings
 from app.db import Base
@@ -57,7 +60,20 @@ def test_is_up_to_date_after_upgrade(migrate, name: str) -> None:
 
 def test_collector_stops_when_not_migrated(tmp_path, monkeypatch, capsys) -> None:
     monkeypatch.setenv("COLLECTOR_DATABASE_URL", f"sqlite:///{tmp_path / 'c.db'}")
+    # main() 은 명령줄 인자로 작업을 고른다. pytest 인자가 섞이지 않게 비운다.
+    monkeypatch.setattr(sys, "argv", ["collector"])
     get_settings.cache_clear()
 
     assert collector.main() == 1
+    assert "alembic -n collector upgrade head" in capsys.readouterr().out
+
+
+def test_import_sqlite_stops_when_not_migrated(tmp_path, monkeypatch, capsys) -> None:
+    source = tmp_path / "local.db"
+    source.touch()
+    monkeypatch.setenv("COLLECTOR_DATABASE_URL", f"sqlite:///{tmp_path / 'c.db'}")
+    monkeypatch.setattr(sys, "argv", ["import_sqlite", str(source)])
+    get_settings.cache_clear()
+
+    assert import_sqlite.main() == 1
     assert "alembic -n collector upgrade head" in capsys.readouterr().out
