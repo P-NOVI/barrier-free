@@ -1,3 +1,4 @@
+import logging
 from collections.abc import Iterator
 from datetime import timedelta
 from functools import cache
@@ -5,11 +6,13 @@ from typing import Annotated
 
 import httpx
 from fastapi import Depends, HTTPException, Request, Response, status
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.config import Settings, get_settings
 from app.db import get_engine
-from app.models import User
+from app.models import User, utc_now
+from app.repositories.closure_repository import closed_edge_ids
 from app.repositories.road_repository import load_entrances, load_graph, load_sites
 from app.repositories.sensor_repository import Sensor, load_sensors
 from app.repositories.user_repository import (
@@ -26,9 +29,12 @@ from app.services.congestion_service import (
 from app.services.oauth_service import create_oauth_client
 from app.services.place_service import create_kakao_client
 from app.services.weather_service import ItemCache, KeyedTtlCache, create_kma_client
+from core.closure import close_edges
 from core.entrance import EntranceIndex
 from core.graph import Graph
 from core.site import SiteIndex
+
+logger = logging.getLogger(__name__)
 
 SettingsDep = Annotated[Settings, Depends(get_settings)]
 
@@ -152,6 +158,53 @@ def get_road_congestion(
 
 
 RoadCongestionDep = Annotated[dict[int, float], Depends(get_road_congestion)]
+
+
+@cache
+def get_closed_road_cache() -> TtlCache[frozenset[int]]:
+    return TtlCache(get_settings().closed_road_cache_ttl_s)
+
+
+ClosedRoadCacheDep = Annotated[TtlCache[frozenset[int]], Depends(get_closed_road_cache)]
+
+
+def get_closed_edges(
+    settings: SettingsDep, cache: ClosedRoadCacheDep
+) -> frozenset[int]:
+    """경로 탐색에서 뺄 길(승인된 통행 불가 제보).
+
+    DB가 없거나 읽지 못하면 비워서, 경로는 지금처럼 막힌 길 없이 찾는다.
+    읽지 못한 결과도 캐시해 DB가 꺼진 동안 요청마다 접속을 기다리지 않는다.
+    """
+    cached = cache.get()
+    if cached is not None:
+        return cached
+    edge_ids: frozenset[int] = frozenset()
+    database_url = settings.database_url.get_secret_value()
+    if database_url:
+        engine = get_engine(database_url, settings.database_connect_timeout_s)
+        try:
+            with Session(engine) as session:
+                edge_ids = closed_edge_ids(session, utc_now())
+        except SQLAlchemyError as error:
+            # 오류 문구에 접속 정보가 섞일 수 있어 종류만 남긴다.
+            logger.warning(
+                "막힌 길을 읽지 못해 빼지 않고 경로를 찾습니다 (%s).",
+                type(error).__name__,
+            )
+    cache.set(edge_ids)
+    return edge_ids
+
+
+ClosedEdgesDep = Annotated[frozenset[int], Depends(get_closed_edges)]
+
+
+def get_route_graph(graph: GraphDep, closed: ClosedEdgesDep) -> Graph:
+    """경로 탐색용 그래프. 승인된 통행 불가 제보의 길은 지나갈 수 없다."""
+    return close_edges(graph, closed)
+
+
+RouteGraphDep = Annotated[Graph, Depends(get_route_graph)]
 
 
 def get_kma_client(settings: SettingsDep) -> Iterator[httpx.Client]:
