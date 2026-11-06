@@ -1,5 +1,6 @@
 // 걷기 안내를 소리로 읽어 준다. 같은 안내는 한 번만 읽는다.
 
+import type { GoalGap } from './navigation';
 import {
     DIRECTION_LABELS,
     type NextTurn,
@@ -46,11 +47,24 @@ function turnKey({ position: [lng, lat], direction }: Turn): string {
     return `${lng.toFixed(5)},${lat.toFixed(5)},${direction}`;
 }
 
-/** 지금 읽을 안내. 이미 읽은 것(announced)이거나 아직 멀면 null */
+/** 길 위 경로가 끝나 점선 구간에 들어섰을 때 알림 */
+export function goalGapText(goalGap: GoalGap, distanceM: number): string {
+    const where =
+        goalGap === 'entrance'
+            ? '건물 출입구 앞입니다.'
+            : '길 안내가 끝났습니다.';
+    return `${where} 점선을 따라 ${spokenDistance(distanceM)} 더 가면 목적지입니다.`;
+}
+
+/**
+ * 지금 읽을 안내. 이미 읽은 것(announced)이거나 아직 멀면 null.
+ * goalGap 은 길 위 경로가 끝나 점선을 따라 도착지로 가는 중인지다.
+ */
 export function announcement(
     next: NextTurn,
     arrived: boolean,
     announced: ReadonlySet<string>,
+    goalGap: GoalGap | null = null,
 ): Announcement | null {
     if (arrived) {
         return announced.has('goal:arrived')
@@ -58,6 +72,15 @@ export function announcement(
             : { keys: ['goal:arrived'], text: ARRIVED_TEXT };
     }
     const { turn, distanceM } = next;
+    if (goalGap && !turn) {
+        // 점선 구간 알림이 목적지 미리 알림을 겸한다.
+        return announced.has('goal:gap')
+            ? null
+            : {
+                  keys: ['goal:gap', 'goal:prepare'],
+                  text: goalGapText(goalGap, distanceM),
+              };
+    }
     const id = turn ? turnKey(turn) : 'goal';
     const prepareKey = `${id}:prepare`;
     const nowKey = `${id}:now`;

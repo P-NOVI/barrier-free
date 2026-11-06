@@ -44,10 +44,10 @@ function gapNotices(route: RouteResponse): string[] {
         );
     }
     if (route.goal_entrance) {
-        notices.push('도착지 건물 출입구 앞 길까지 안내합니다.');
+        notices.push('도착지 건물 출입구 앞 길부터는 점선을 따라 안내합니다.');
     } else if (route.goal_gap_m >= GAP_NOTICE_M) {
         notices.push(
-            `도착지 ${formatDistance(route.goal_gap_m)} 앞 길까지 안내합니다.`,
+            `도착지 ${formatDistance(route.goal_gap_m)} 앞 길부터는 점선을 따라 안내합니다.`,
         );
     }
     return notices;
