@@ -16,13 +16,14 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.collector.sdot import collect_sdot
-from app.collector.store import collector_engine
+from app.collector.store import STALE_SCHEMA, collector_engine
 from app.collector.weather import (
     collect_weather_daily,
     collect_weather_now,
     district_grids,
 )
 from app.config import Settings, get_settings
+from app.migrate import COLLECTOR_DB, is_up_to_date
 from app.repositories.sensor_repository import load_sensors
 from app.services.congestion_service import CongestionError, create_sdot_client
 from app.services.weather_service import (
@@ -96,8 +97,12 @@ def main() -> int:
         return 1
     try:
         engine = collector_engine(database_url, settings.collector_connect_timeout_s)
+        up_to_date = is_up_to_date(engine, COLLECTOR_DB)
     except SQLAlchemyError as error:
         print(f"수집 DB 연결 실패 ({type(error).__name__})")
+        return 1
+    if not up_to_date:
+        print(STALE_SCHEMA)
         return 1
     with Session(engine) as session:
         ok = collect(session, settings, datetime.now(KST), jobs)

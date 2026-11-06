@@ -1,8 +1,8 @@
 """로컬 SQLite 에 모아 둔 S-DoT 원본 행을 수집 DB의 sdot_readings 로 옮긴다(일회용).
 
 실행: backend/ 에서 uv run python -m app.collector.import_sqlite <SQLite 파일>
-- 원본 파일에는 sdot_readings(raw, collected_at) 표가 있어야 한다. raw 는 API 한 행의 JSON,
-  collected_at 은 받은 시각(ISO 8601)이다.
+- 원본 파일에는 sdot_readings(raw, collected_at) 표가 있어야 한다.
+  raw 는 API 한 행의 JSON, collected_at 은 받은 시각(ISO 8601)이다.
 - 수집기와 같은 규칙(to_record)으로 바꾸고, 이미 있는 (센서, 측정 시각)은 건너뛴다.
   여러 번 실행해도 된다.
 """
@@ -22,8 +22,9 @@ from sqlalchemy.orm import Session
 
 from app.collector.models import SdotReading
 from app.collector.sdot import to_record
-from app.collector.store import collector_engine, insert_new
+from app.collector.store import STALE_SCHEMA, collector_engine, insert_new
 from app.config import get_settings
+from app.migrate import COLLECTOR_DB, is_up_to_date
 
 # 한 번에 읽어 넣고 커밋하는 행 수
 BATCH_ROWS = 10_000
@@ -70,6 +71,9 @@ def main() -> int:
         return 1
     try:
         engine = collector_engine(database_url, settings.collector_connect_timeout_s)
+        if not is_up_to_date(engine, COLLECTOR_DB):
+            print(STALE_SCHEMA)
+            return 1
         with Session(engine) as session:
             inserted = import_rows(session, args.source)
     except SQLAlchemyError as error:

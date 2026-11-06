@@ -1,15 +1,18 @@
 import json
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from pathlib import Path
 
 import pytest
-from sqlalchemy import create_engine
+from alembic import command
+from sqlalchemy import Engine, create_engine
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
+import app.models  # noqa: F401  모델을 불러와야 Base.metadata 에 테이블이 등록된다.
 from app import deps
 from app.config import get_settings
-from app.db import create_tables
+from app.db import Base
+from app.migrate import alembic_config
 from core.entrance import NO_ENTRANCES
 from core.graph import Graph, build_graph
 from core.site import NO_SITES
@@ -51,6 +54,20 @@ def db_session() -> Iterator[Session]:
         poolclass=StaticPool,
         connect_args={"check_same_thread": False},
     )
-    create_tables(engine)
+    # 마이그레이션이 모델과 같은지는 test_migrations 가 본다. 여기서는 모델로 만든다.
+    Base.metadata.create_all(engine)
     with Session(engine) as session:
         yield session
+
+
+@pytest.fixture
+def migrate() -> Callable[[Engine, str], None]:
+    """.env 의 주소 대신 넘긴 엔진에 마지막 마이그레이션까지 적용한다."""
+
+    def upgrade(engine: Engine, name: str) -> None:
+        config = alembic_config(name)
+        with engine.begin() as connection:
+            config.attributes["connection"] = connection
+            command.upgrade(config, "head")
+
+    return upgrade

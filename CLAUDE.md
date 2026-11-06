@@ -24,6 +24,8 @@
 | `backend/` | 설치 | `uv sync` |
 | `backend/` | 린트 · 포맷 | `uv run ruff check .` · `uv run ruff format .` |
 | `backend/` | 테스트 | `uv run pytest` |
+| `backend/` | 앱 DB 테이블 최신화 (`dev`를 받은 뒤) | `uv run alembic upgrade head` |
+| `backend/` | 모델을 바꾼 뒤 마이그레이션 만들기 | `uv run alembic revision --autogenerate -m "설명"` (수집 DB는 `-n collector`) |
 | `pipeline/` | 설치 | `uv sync` |
 | `pipeline/` | 전체 실행 (결과 있는 단계는 건너뜀) | `uv run python steps/run_all.py` · `--from 02` · `--force` |
 | `pipeline/` | 테스트 | `uv run pytest` |
@@ -39,6 +41,8 @@
 - Python 도구는 uv + ruff + pytest로 통일한다. pip, poetry, black은 쓰지 않는다.
 - 프론트 도구는 npm + ESLint + Prettier + Vitest로 통일한다. yarn, pnpm은 쓰지 않는다.
 - `uv run fastapi dev`는 `fastapi[standard]`가 설치되어 있어야 한다.
+- 테이블 모델(`app/models.py`, `app/collector/models.py`)을 바꾸면 같은 PR에 마이그레이션을 넣는다. 자동으로 만든 파일은 열어서 확인한다. 빠뜨리면 `tests/test_migrations.py`가 실패한다.
+- `backend/alembic.ini`에는 한글을 쓰지 않는다. Alembic이 OS 기본 인코딩(cp949)으로 읽어 멈춘다.
 
 ## 코드 스타일
 
@@ -100,6 +104,8 @@ main   ← 배포용 (직접 push 금지)
 - `data/processed/`와 `models/*.pkl`은 직접 편집하지 않는다. `pipeline/`, `ml/`로 다시 생성한다.
 - `package-lock.json`, `uv.lock`은 직접 편집하지 않는다. 설치 명령으로만 바꾼다.
 - `*.db` 파일은 커밋하지 않는다.
+- `dev`에 머지된 마이그레이션 파일(`backend/migrations/*/versions/`)은 고치지 않는다. 바꿀 내용은 새 마이그레이션으로 만든다.
+- 공용 수집 DB(Supabase)에는 직접 `upgrade` 하지 않는다. 수집 워크플로가 `dev`의 마이그레이션을 적용한다.
 
 ## 외부 데이터 · API
 
