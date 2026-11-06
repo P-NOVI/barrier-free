@@ -217,6 +217,8 @@ calendar:
 # 13 단계. 05 단계처럼 run_all.py 에 넣지 않고 따로 실행한다.
 training_set:
   history: interim/sdot/history.parquet
+  # 16 단계 결과(수집 DB 유동인구). 없으면 history 만 쓴다.
+  realtime: interim/sdot/realtime.parquet
   weather: interim/weather/hourly.parquet
   calendar: interim/calendar/daily.parquet
   # 저장소 기준. 센서 위치
@@ -245,7 +247,7 @@ training_set:
     # 남아 baseline 이 나쁘다).
     drop_ratio: 0.85
     rise_ratio: 1.3
-  # 지하철 승하차(14 단계)와 역 좌표(15 단계)
+  # 지하철 승하차(14 단계)와 역 좌표(15 단계). 둘 중 하나라도 없으면 승하차 열을 비운다.
   subway: interim/subway/hourly.parquet
   subway_stations: interim/subway/stations.parquet
   # 센서에서 이 거리 안에 있는 역들의 승하차를 더한다.
@@ -303,3 +305,14 @@ subway_stations:
   raw: raw/subway/stations.json
   output: interim/subway/stations.parquet
   report: interim/subway/stations_report.json
+
+# 16 단계. 05 단계처럼 run_all.py 에 넣지 않고 따로 실행한다.
+# 수집 DB(backend 수집기, pipeline/.env 의 COLLECTOR_DATABASE_URL)의 유동인구를 내보낸다.
+sdot_realtime:
+  output: interim/sdot/realtime.parquet
+  report: interim/sdot/realtime_report.json
+  # history.parquet(06 단계)의 측정시간과 같은 한국 시각으로 바꾼다.
+  timezone: Asia/Seoul
+  connect_timeout_s: 10
+  # history 의 source_file 열에 넣는 값. 수집 DB 에서 온 행을 구분한다.
+  source_name: collector_db
