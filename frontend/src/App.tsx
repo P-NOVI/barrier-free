@@ -197,6 +197,7 @@ export default function App() {
         shownRoute,
         route.status === 'loading',
         reroute,
+        goal,
     );
     useWakeLock(navigating);
     useVoiceGuidance(

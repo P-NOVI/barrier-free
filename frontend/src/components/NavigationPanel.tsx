@@ -3,6 +3,7 @@ import { useState } from 'react';
 import type { NavigationState } from '../hooks/useNavigation';
 import type { RouteState } from '../hooks/useRoute';
 import { formatDistance } from '../lib/format';
+import type { GoalGap } from '../lib/navigation';
 import {
     chosenRoute,
     type RouteChoice,
@@ -27,8 +28,13 @@ type NavigationPanelProps = {
 
 type Notice = { text: string; alert: boolean };
 
+const GOAL_GAP_NOTICES: Record<GoalGap, string> = {
+    entrance: '건물 출입구 앞입니다. 점선을 따라 목적지까지 가세요.',
+    gap: '길 안내가 끝났습니다. 점선을 따라 목적지까지 가세요.',
+};
+
 function notice(route: RouteState, navigation: NavigationState): Notice | null {
-    const { fix, progress, judgement, error } = navigation;
+    const { fix, progress, judgement, goalGap, error } = navigation;
     if (error) {
         return { text: error, alert: true };
     }
@@ -55,7 +61,9 @@ function notice(route: RouteState, navigation: NavigationState): Notice | null {
                 alert: false,
             };
         default:
-            return null;
+            return goalGap
+                ? { text: GOAL_GAP_NOTICES[goalGap], alert: false }
+                : null;
     }
 }
 

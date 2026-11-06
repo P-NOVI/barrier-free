@@ -17,6 +17,8 @@ export const OFF_ROUTE_FIXES = 2;
 // 다시 찾은 곳에서 이만큼 움직이기 전에는 또 찾지 않는다.
 // 길이 없는 곳(건물 안 등)에서 같은 요청을 되풀이하지 않게 한다.
 export const REROUTE_MIN_MOVE_M = 30;
+// 경로 끝과 이보다 가까운 점선 지점은 같은 점으로 본다.
+const SAME_POINT_M = 0.5;
 
 /** 따라갈 경로. 경로 응답의 coordinates, distances_m 과 같다. */
 export type RouteLine = {
@@ -37,6 +39,9 @@ export type RouteProgress = {
 };
 
 export type Judgement = 'on_route' | 'off_route' | 'arrived' | 'uncertain';
+
+/** 길 위 경로가 끝나 점선을 따라 도착지로 가는 중. entrance 는 건물 출입구 앞에서 끝난 경우 */
+export type GoalGap = 'entrance' | 'gap';
 
 export type RerouteTracker = {
     /** 연달아 경로를 벗어난 위치 수 */
@@ -107,6 +112,37 @@ export function progressAlong(
         }
     }
     return { ...best, remainingM: total - best.travelledM };
+}
+
+/** 경로 선의 전체 길이(m) */
+export function lineLengthM({ distances_m: distances }: RouteLine): number {
+    return distances[distances.length - 1];
+}
+
+/**
+ * 길 위 경로 끝에 도착 점선(출입구, 찍은 도착지)을 이어 붙인 안내 기준선.
+ * 점선 구간도 걸어가는 길로 보고 남은 거리·도착·이탈을 판단한다.
+ */
+export function withGoalGap(route: RouteLine, gap: LngLat[]): RouteLine {
+    const coordinates = [...route.coordinates];
+    const distances = [...route.distances_m];
+    for (const point of gap) {
+        const stepM = distanceM(coordinates[coordinates.length - 1], point);
+        if (stepM < SAME_POINT_M) {
+            continue;
+        }
+        coordinates.push(point);
+        distances.push(distances[distances.length - 1] + stepM);
+    }
+    return { coordinates, distances_m: distances };
+}
+
+/**
+ * 길 위 경로 끝에 다다라 점선 구간을 걷는 중인지. goalGapM 은 점선 길이다.
+ * 점선이 도착 판정 거리보다 짧으면 따로 보지 않는다.
+ */
+export function onGoalGap(progress: RouteProgress, goalGapM: number): boolean {
+    return goalGapM > ARRIVAL_M && progress.remainingM <= goalGapM + ARRIVAL_M;
 }
 
 /** 오차 반경이 accuracy 인 위치가 경로를 따라가는 중인지, 벗어났는지, 도착했는지 */
