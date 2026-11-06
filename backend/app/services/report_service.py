@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.config import Settings
 from app.models import REPORT_DESCRIPTION_MAX_LENGTH, Report, utc_now
+from app.services.photo_storage import PhotoStorage, PhotoStorageError
 from core.graph import Graph
 from core.road_point import nearby_road_points
 
@@ -29,6 +30,7 @@ PHOTO_SIGNATURES = (
     (b"\xff\xd8\xff", ".jpg"),
     (b"\x89PNG\r\n\x1a\n", ".png"),
 )
+PHOTO_MEDIA_TYPES = {".jpg": "image/jpeg", ".png": "image/png", ".webp": "image/webp"}
 
 
 class ReportFailure(StrEnum):
@@ -44,6 +46,7 @@ class ReportFailure(StrEnum):
     NOT_APPROVED = "report_not_approved"
     NOT_FOUND = "report_not_found"
     NOT_REVIEWABLE = "report_not_reviewable"
+    PHOTO_STORAGE_FAILED = "photo_storage_failed"
 
 
 class ReportError(Exception):
@@ -90,6 +93,7 @@ def create_report(
     session: Session,
     graph: Graph,
     settings: Settings,
+    storage: PhotoStorage,
     user_id: int,
     data: ReportInput,
     now: datetime | None = None,
@@ -109,8 +113,10 @@ def create_report(
         raise ReportError(ReportFailure.OFF_NETWORK)
 
     photo_name = f"{secrets.token_hex(16)}{extension}"
-    settings.report_photo_dir.mkdir(parents=True, exist_ok=True)
-    (settings.report_photo_dir / photo_name).write_bytes(data.photo)
+    try:
+        storage.save(photo_name, data.photo, PHOTO_MEDIA_TYPES[extension])
+    except (PhotoStorageError, OSError) as error:
+        raise ReportError(ReportFailure.PHOTO_STORAGE_FAILED) from error
 
     created = now or utc_now()
     report = Report(

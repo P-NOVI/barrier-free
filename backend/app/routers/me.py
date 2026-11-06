@@ -4,9 +4,11 @@
 게스트를 만든다. 쿠키 없이 조회하면 빈 목록을 준다.
 """
 
+import logging
+
 from fastapi import APIRouter, HTTPException, status
 
-from app.deps import CurrentUserDep, DbSessionDep, SettingsDep, UserDep
+from app.deps import CurrentUserDep, DbSessionDep, PhotoStorageDep, SettingsDep, UserDep
 from app.models import RouteHistory, SavedPlace, SavedRoute, SearchHistory
 from app.repositories import (
     history_repository,
@@ -41,8 +43,11 @@ from app.schemas import (
     SearchHistoryResponse,
     SessionResponse,
 )
+from app.services.photo_storage import PhotoStorageError
 from app.services.report_service import ReportError, update_report
 from core.profiles import DEFAULT_PRESET
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["me"])
 
@@ -377,7 +382,7 @@ def delete_report(
     report_id: int,
     user: CurrentUserDep,
     session: DbSessionDep,
-    settings: SettingsDep,
+    storage: PhotoStorageDep,
 ) -> None:
     photo_name = (
         report_repository.delete_report(session, user.id, report_id) if user else None
@@ -385,8 +390,12 @@ def delete_report(
     if photo_name is None:
         raise report_not_found()
     session.commit()
-    # DB 에서 지운 뒤에 파일을 지워, 커밋이 실패해도 사진만 사라지는 일이 없게 한다.
-    (settings.report_photo_dir / photo_name).unlink(missing_ok=True)
+    # DB 에서 지운 뒤에 사진을 지워, 커밋이 실패해도 사진만 사라지는 일이 없게 한다.
+    # 사진을 못 지워도 제보는 이미 지워졌으니 삭제는 성공으로 답한다.
+    try:
+        storage.delete(photo_name)
+    except (PhotoStorageError, OSError) as error:
+        logger.warning("제보 사진을 지우지 못했습니다 (%s).", type(error).__name__)
 
 
 @router.get("/me/saved-routes", response_model=SavedRouteListResponse)

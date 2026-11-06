@@ -41,6 +41,18 @@ def no_real_sdot_key(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.fixture(autouse=True)
+def no_real_photo_storage(monkeypatch: pytest.MonkeyPatch) -> None:
+    """backend/.env 의 Supabase 키를 비워, 제보 사진이 실제 버킷에 올라가지 않게 한다.
+
+    키가 없으면 사진은 설정의 report_photo_dir 폴더에 저장된다.
+    Supabase 를 쓰는 테스트는 설정을 직접 만들고 transport 를 넘긴다.
+    """
+    monkeypatch.setenv("SUPABASE_URL", "")
+    monkeypatch.setenv("SUPABASE_SERVICE_KEY", "")
+    get_settings.cache_clear()
+
+
+@pytest.fixture(autouse=True)
 def no_real_closed_roads(monkeypatch: pytest.MonkeyPatch) -> None:
     """backend/.env 의 DB에서 막힌 길을 읽지 않게 한다.
 
