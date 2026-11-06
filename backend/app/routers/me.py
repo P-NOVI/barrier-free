@@ -11,6 +11,7 @@ from app.models import RouteHistory, SavedPlace, SavedRoute, SearchHistory
 from app.repositories import (
     history_repository,
     place_repository,
+    report_repository,
     saved_route_repository,
 )
 from app.repositories.user_repository import (
@@ -18,8 +19,12 @@ from app.repositories.user_repository import (
     load_preset,
     save_preset,
 )
+from app.routers.reports import FAILURE_MESSAGES, FAILURE_STATUS
 from app.schemas import (
     PresetRequest,
+    ReportListResponse,
+    ReportResponse,
+    ReportUpdateRequest,
     RouteError,
     RouteHistoryListResponse,
     RouteHistoryRequest,
@@ -35,6 +40,7 @@ from app.schemas import (
     SearchHistoryResponse,
     SessionResponse,
 )
+from app.services.report_service import ReportError, update_report
 from core.profiles import DEFAULT_PRESET
 
 router = APIRouter(tags=["me"])
@@ -300,6 +306,76 @@ def delete_place(place_id: int, user: CurrentUserDep, session: DbSessionDep) -> 
             detail={"reason": "place_not_found", "message": "장소가 없습니다."},
         )
     session.commit()
+
+
+def report_not_found() -> HTTPException:
+    return HTTPException(
+        status.HTTP_404_NOT_FOUND,
+        detail={"reason": "report_not_found", "message": "제보가 없습니다."},
+    )
+
+
+@router.get("/me/reports", response_model=ReportListResponse)
+def get_reports(user: CurrentUserDep, session: DbSessionDep) -> ReportListResponse:
+    rows = report_repository.list_reports(session, user.id) if user else []
+    return ReportListResponse(
+        reports=[
+            ReportResponse.model_validate(row, from_attributes=True) for row in rows
+        ]
+    )
+
+
+@router.patch(
+    "/me/reports/{report_id}",
+    response_model=ReportResponse,
+    responses={
+        404: {"model": RouteError, "description": "내 제보에 없는 id"},
+        409: {"model": RouteError, "description": "검토가 끝나 고칠 수 없음"},
+        422: {"model": RouteError},
+    },
+)
+def patch_report(
+    report_id: int,
+    request: ReportUpdateRequest,
+    user: CurrentUserDep,
+    session: DbSessionDep,
+) -> ReportResponse:
+    report = report_repository.get_report(session, user.id, report_id) if user else None
+    if report is None:
+        raise report_not_found()
+    try:
+        update_report(report, request.kind, request.blocked, request.description)
+    except ReportError as error:
+        raise HTTPException(
+            FAILURE_STATUS[error.reason],
+            detail={
+                "reason": error.reason,
+                "message": FAILURE_MESSAGES[error.reason],
+            },
+        ) from error
+    session.commit()
+    return ReportResponse.model_validate(report, from_attributes=True)
+
+
+@router.delete(
+    "/me/reports/{report_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    responses={404: {"model": RouteError, "description": "내 제보에 없는 id"}},
+)
+def delete_report(
+    report_id: int,
+    user: CurrentUserDep,
+    session: DbSessionDep,
+    settings: SettingsDep,
+) -> None:
+    photo_name = (
+        report_repository.delete_report(session, user.id, report_id) if user else None
+    )
+    if photo_name is None:
+        raise report_not_found()
+    session.commit()
+    # DB 에서 지운 뒤에 파일을 지워, 커밋이 실패해도 사진만 사라지는 일이 없게 한다.
+    (settings.report_photo_dir / photo_name).unlink(missing_ok=True)
 
 
 @router.get("/me/saved-routes", response_model=SavedRouteListResponse)

@@ -33,6 +33,7 @@ class ReportFailure(StrEnum):
     PHOTO_TOO_LARGE = "photo_too_large"
     DESCRIPTION_TOO_LONG = "description_too_long"
     OFF_NETWORK = "off_network"
+    NOT_EDITABLE = "report_not_editable"
 
 
 class ReportError(Exception):
@@ -61,6 +62,20 @@ def photo_extension(photo: bytes) -> str | None:
     return None
 
 
+def check_kind(kind: str, blocked: bool) -> None:
+    if kind not in REPORT_KINDS:
+        raise ReportError(ReportFailure.UNKNOWN_KIND)
+    if blocked and kind != CONSTRUCTION:
+        raise ReportError(ReportFailure.BLOCKED_NOT_CONSTRUCTION)
+
+
+def clean_description(description: str) -> str:
+    description = description.strip()
+    if len(description) > REPORT_DESCRIPTION_MAX_LENGTH:
+        raise ReportError(ReportFailure.DESCRIPTION_TOO_LONG)
+    return description
+
+
 def create_report(
     session: Session,
     graph: Graph,
@@ -70,15 +85,10 @@ def create_report(
     now: datetime | None = None,
 ) -> Report:
     """검사를 모두 통과해야 사진을 쓰고 제보를 넣는다. commit 은 부르는 쪽이 한다."""
-    if data.kind not in REPORT_KINDS:
-        raise ReportError(ReportFailure.UNKNOWN_KIND)
-    if data.blocked and data.kind != CONSTRUCTION:
-        raise ReportError(ReportFailure.BLOCKED_NOT_CONSTRUCTION)
+    check_kind(data.kind, data.blocked)
     if len(data.photo) > settings.report_photo_max_bytes:
         raise ReportError(ReportFailure.PHOTO_TOO_LARGE)
-    description = data.description.strip()
-    if len(description) > REPORT_DESCRIPTION_MAX_LENGTH:
-        raise ReportError(ReportFailure.DESCRIPTION_TOO_LONG)
+    description = clean_description(data.description)
     extension = photo_extension(data.photo)
     if extension is None:
         raise ReportError(ReportFailure.BAD_PHOTO)
@@ -108,4 +118,30 @@ def create_report(
     )
     session.add(report)
     session.flush()
+    return report
+
+
+def update_report(
+    report: Report,
+    kind: str | None = None,
+    blocked: bool | None = None,
+    description: str | None = None,
+) -> Report:
+    """승인 전(pending) 제보의 유형·통행 불가·설명만 바꾼다. None 은 그대로 둔다.
+
+    위치와 사진은 승인 검토의 근거라 바꾸지 않는다. commit 은 부르는 쪽이 한다.
+    """
+    if report.status != PENDING:
+        raise ReportError(ReportFailure.NOT_EDITABLE)
+    new_kind = report.kind if kind is None else kind
+    new_blocked = report.blocked if blocked is None else blocked
+    check_kind(new_kind, new_blocked)
+    new_description = (
+        report.description if description is None else clean_description(description)
+    )
+
+    report.kind = new_kind
+    report.blocked = new_blocked
+    report.description = new_description or None
+    report.expires_at = report.created_at + timedelta(days=EXPIRY_DAYS[new_kind])
     return report

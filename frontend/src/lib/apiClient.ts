@@ -17,7 +17,7 @@ type ApiRequest = {
     path: string;
     query?: Record<string, string>;
     /** 없으면 body 가 있을 때 POST, 없을 때 GET */
-    method?: 'POST' | 'PUT' | 'DELETE';
+    method?: 'POST' | 'PUT' | 'PATCH' | 'DELETE';
     /** 있으면 JSON 으로 보낸다. FormData 면 그대로 보낸다(사진 업로드). */
     body?: unknown;
     /** 오류 응답에 detail 안내 문구가 없을 때 쓰는 문구 */

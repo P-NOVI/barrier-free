@@ -23,6 +23,7 @@ FAILURE_STATUS = {
     ReportFailure.PHOTO_TOO_LARGE: status.HTTP_413_CONTENT_TOO_LARGE,
     ReportFailure.DESCRIPTION_TOO_LONG: status.HTTP_422_UNPROCESSABLE_CONTENT,
     ReportFailure.OFF_NETWORK: status.HTTP_422_UNPROCESSABLE_CONTENT,
+    ReportFailure.NOT_EDITABLE: status.HTTP_409_CONFLICT,
 }
 
 FAILURE_MESSAGES = {
@@ -34,6 +35,7 @@ FAILURE_MESSAGES = {
         f"설명은 {REPORT_DESCRIPTION_MAX_LENGTH}자 이하로 적어 주세요."
     ),
     ReportFailure.OFF_NETWORK: "제보 위치 근처에 보행 도로가 없습니다.",
+    ReportFailure.NOT_EDITABLE: "검토가 끝난 제보는 고칠 수 없습니다.",
 }
 
 

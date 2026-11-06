@@ -1,7 +1,14 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ApiError } from './apiClient';
-import { type ReportRequest, submitReport, toReportForm } from './reportApi';
+import {
+    deleteReport,
+    fetchMyReports,
+    type ReportRequest,
+    submitReport,
+    toReportForm,
+    updateReport,
+} from './reportApi';
 
 const OPTIONS = { baseUrl: 'http://api.test' };
 const CITY_HALL: [number, number] = [126.9779, 37.5663];
@@ -91,5 +98,73 @@ describe('제보 API', () => {
         await expect(submitReport(request(), OPTIONS)).rejects.toEqual(
             new ApiError(detail.message, detail.reason),
         );
+    });
+});
+
+describe('내 제보 API', () => {
+    it('내 제보 목록을 쿠키와 함께 가져온다', async () => {
+        const reports = [{ id: 2 }, { id: 1 }];
+        const fetchMock = vi
+            .fn()
+            .mockResolvedValue(new Response(JSON.stringify({ reports })));
+        vi.stubGlobal('fetch', fetchMock);
+
+        await expect(fetchMyReports(OPTIONS)).resolves.toEqual(reports);
+
+        const [url, init] = fetchMock.mock.calls[0];
+        expect(String(url)).toBe('http://api.test/api/me/reports');
+        expect(init.credentials).toBe('include');
+    });
+
+    it('제보를 PATCH 로 고친다', async () => {
+        const saved = { id: 3, kind: 'damage' };
+        const fetchMock = vi
+            .fn()
+            .mockResolvedValue(new Response(JSON.stringify(saved)));
+        vi.stubGlobal('fetch', fetchMock);
+
+        await expect(
+            updateReport(3, { kind: 'damage', description: '' }, OPTIONS),
+        ).resolves.toEqual(saved);
+
+        const [url, init] = fetchMock.mock.calls[0];
+        expect(String(url)).toBe('http://api.test/api/me/reports/3');
+        expect(init.method).toBe('PATCH');
+        expect(JSON.parse(init.body)).toEqual({
+            kind: 'damage',
+            description: '',
+        });
+    });
+
+    it('검토가 끝난 제보를 고치면 안내 문구를 오류로 던진다', async () => {
+        const detail = {
+            reason: 'report_not_editable',
+            message: '검토가 끝난 제보는 고칠 수 없습니다.',
+        };
+        vi.stubGlobal(
+            'fetch',
+            vi
+                .fn()
+                .mockResolvedValue(
+                    new Response(JSON.stringify({ detail }), { status: 409 }),
+                ),
+        );
+
+        await expect(updateReport(3, {}, OPTIONS)).rejects.toEqual(
+            new ApiError(detail.message, detail.reason),
+        );
+    });
+
+    it('제보를 DELETE 로 지운다', async () => {
+        const fetchMock = vi
+            .fn()
+            .mockResolvedValue(new Response(null, { status: 204 }));
+        vi.stubGlobal('fetch', fetchMock);
+
+        await expect(deleteReport(3, OPTIONS)).resolves.toBeUndefined();
+
+        const [url, init] = fetchMock.mock.calls[0];
+        expect(String(url)).toBe('http://api.test/api/me/reports/3');
+        expect(init.method).toBe('DELETE');
     });
 });
