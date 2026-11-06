@@ -45,7 +45,12 @@ def test_session_issues_guest_cookie(client: TestClient, db_session: Session) ->
     response = client.post("/api/session")
 
     assert response.status_code == 200
-    assert response.json() == {"is_guest": True, "providers": [], "preset": "general"}
+    assert response.json() == {
+        "is_guest": True,
+        "providers": [],
+        "preset": "general",
+        "is_admin": False,
+    }
     set_cookie = response.headers["set-cookie"].lower()
     assert set_cookie.startswith(f"{COOKIE}=")
     assert "httponly" in set_cookie
@@ -80,6 +85,7 @@ def test_reading_without_cookie_creates_nobody(
         "is_guest": True,
         "providers": [],
         "preset": "general",
+        "is_admin": False,
     }
     assert client.get("/api/me/searches").json() == {"searches": []}
     assert client.get("/api/me/routes").json() == {"routes": []}
@@ -193,6 +199,7 @@ def test_save_preset(client: TestClient) -> None:
         "is_guest": True,
         "providers": [],
         "preset": "stroller",
+        "is_admin": False,
     }
     assert client.post("/api/session").json()["preset"] == "stroller"
 

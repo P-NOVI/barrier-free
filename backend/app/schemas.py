@@ -133,6 +133,7 @@ class SessionResponse(BaseModel):
     is_guest: bool = Field(description="카카오·구글 계정이 연결되지 않았으면 true")
     providers: list[str] = Field(description="연결된 계정. kakao, google")
     preset: str = Field(description="저장한 이동 조건 프리셋. 없으면 기본값")
+    is_admin: bool = Field(default=False, description="관리자 계정이면 true")
 
 
 class PresetRequest(BaseModel):
@@ -232,6 +233,14 @@ class ReportResponse(BaseModel):
     lat: float
     created_at: datetime
     expires_at: datetime
+
+
+class AdminReportResponse(ReportResponse):
+    photo_url: str = Field(description="관리자만 열 수 있는 제보 사진 주소")
+
+
+class AdminReportListResponse(BaseModel):
+    reports: list[AdminReportResponse] = Field(description="오래된 것부터")
 
 
 class ReportListResponse(BaseModel):

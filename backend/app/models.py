@@ -161,6 +161,8 @@ class Report(Base):
     kind: Mapped[str] = mapped_column(String(20))
     # 지나갈 수 없는 공사인지. 공사 제보에서만 true 가 될 수 있다.
     blocked: Mapped[bool] = mapped_column(Boolean, default=False)
+    # pending(검토 중) → approved(승인) → resolved(해결됨)
+    # 또는 pending → rejected(취소)
     status: Mapped[str] = mapped_column(String(20), default="pending", index=True)
     # 사진 저장 폴더 안의 파일 이름. 관리자에게만 보여 준다.
     photo_name: Mapped[str] = mapped_column(String(100))

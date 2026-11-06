@@ -23,6 +23,7 @@ describe('fetchSession', () => {
             is_guest: false,
             providers: ['kakao'],
             preset: 'general',
+            is_admin: false,
         };
         const fetchMock = vi
             .fn()

@@ -12,7 +12,11 @@ from app.db import get_engine
 from app.models import User
 from app.repositories.road_repository import load_entrances, load_graph, load_sites
 from app.repositories.sensor_repository import Sensor, load_sensors
-from app.repositories.user_repository import create_guest, find_user_by_token
+from app.repositories.user_repository import (
+    create_guest,
+    find_user_by_token,
+    has_social_account,
+)
 from app.services.congestion_service import (
     Reading,
     TtlCache,
@@ -240,6 +244,26 @@ def ensure_user(
 
 
 UserDep = Annotated[User, Depends(ensure_user)]
+
+
+def get_admin_user(
+    user: CurrentUserDep, session: DbSessionDep, settings: SettingsDep
+) -> User:
+    """관리자 계정의 사용자. 쿠키가 없으면 401, 관리자가 아니면(게스트 포함) 403."""
+    if user is None:
+        raise HTTPException(
+            status.HTTP_401_UNAUTHORIZED,
+            detail={"reason": "login_required", "message": "로그인이 필요합니다."},
+        )
+    if not has_social_account(session, user.id, settings.admin_account_set):
+        raise HTTPException(
+            status.HTTP_403_FORBIDDEN,
+            detail={"reason": "admin_only", "message": "관리자만 쓸 수 있습니다."},
+        )
+    return user
+
+
+AdminUserDep = Annotated[User, Depends(get_admin_user)]
 
 
 def get_oauth_client(settings: SettingsDep) -> Iterator[httpx.Client]:
