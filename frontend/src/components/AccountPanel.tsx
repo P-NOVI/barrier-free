@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useEffectEvent, useState } from 'react';
 
 import {
     fetchSession,
@@ -21,6 +21,8 @@ type AccountPanelProps = {
     initialMessage?: string;
     /** 로그아웃해서 사용자가 바뀌었을 때 */
     onSessionChange: () => void;
+    /** 로그인 상태를 불러올 때마다 (처음, 로그아웃 뒤) */
+    onSessionLoad?: (session: Session) => void;
 };
 
 /**
@@ -30,15 +32,21 @@ type AccountPanelProps = {
 export default function AccountPanel({
     initialMessage = '',
     onSessionChange,
+    onSessionLoad,
 }: AccountPanelProps) {
     const [state, setState] = useState<SessionState>({ status: 'loading' });
     const [message, setMessage] = useState(initialMessage);
+    const reportLoaded = useEffectEvent((session: Session) =>
+        onSessionLoad?.(session),
+    );
 
     useEffect(() => {
         let cancelled = false;
         fetchSession()
             .then((session) => {
-                if (!cancelled) setState({ status: 'success', session });
+                if (cancelled) return;
+                setState({ status: 'success', session });
+                reportLoaded(session);
             })
             .catch(() => {
                 if (!cancelled) setState({ status: 'error' });
@@ -54,6 +62,7 @@ export default function AccountPanel({
             .then((session) => {
                 setState({ status: 'success', session });
                 setMessage('');
+                onSessionLoad?.(session);
                 onSessionChange();
             })
             .catch((error: Error) => setMessage(error.message));
