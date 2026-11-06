@@ -22,6 +22,8 @@ venv/
 # 데이터 원본 / 중간 결과 / DB
 data/raw/
 data/interim/
+# Vercel 빌드가 복사하는 서버 데이터(backend/scripts/vercel_build.py)
+backend/vercel_data/
 *.db
 
 # 로그
