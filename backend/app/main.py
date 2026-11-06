@@ -26,6 +26,7 @@ from app.routers import (
     routes,
     weather,
 )
+from app.services.photo_storage import PhotoStorageError, create_photo_storage
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +35,24 @@ DB_UNAVAILABLE = {
     "message": "DB에 접속할 수 없습니다. "
     "docker compose 로 DB가 켜져 있는지 확인하세요.",
 }
+
+
+def delete_photos(settings: Settings, photo_names: list[str]) -> None:
+    """만료된 제보의 사진을 지운다. 하나가 실패해도 나머지는 계속 지운다."""
+    if not photo_names:
+        return
+    storage, client = create_photo_storage(settings)
+    try:
+        for photo_name in photo_names:
+            try:
+                storage.delete(photo_name)
+            except (PhotoStorageError, OSError) as error:
+                logger.warning(
+                    "만료된 제보 사진을 지우지 못했습니다 (%s).", type(error).__name__
+                )
+    finally:
+        if client is not None:
+            client.close()
 
 
 def prepare_database(settings: Settings) -> None:
@@ -56,9 +75,8 @@ def prepare_database(settings: Settings) -> None:
             purge_inactive_guests(session, settings.guest_retention_days)
             photo_names = purge_expired_reports(session, settings.report_retention_days)
             session.commit()
-            # DB 에서 지운 뒤에 파일을 지워, 커밋이 실패해도 사진만 사라지지 않게 한다.
-            for photo_name in photo_names:
-                (settings.report_photo_dir / photo_name).unlink(missing_ok=True)
+        # DB 에서 지운 뒤에 사진을 지워, 커밋이 실패해도 사진만 사라지지 않게 한다.
+        delete_photos(settings, photo_names)
     except OperationalError:
         # 오류 문구에 접속 정보가 섞일 수 있어 로그에 남기지 않는다.
         logger.warning("DB에 접속할 수 없어 테이블을 준비하지 못했습니다.")

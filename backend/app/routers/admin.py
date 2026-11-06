@@ -1,17 +1,19 @@
 """관리자 전용. 대기 중인 제보를 보고 승인하거나 취소한다."""
 
 from collections.abc import Callable
+from pathlib import Path
 
-from fastapi import APIRouter, HTTPException, status
-from fastapi.responses import FileResponse
+from fastapi import APIRouter, HTTPException, Response, status
 
-from app.deps import AdminUserDep, DbSessionDep, SettingsDep
+from app.deps import AdminUserDep, DbSessionDep, PhotoStorageDep
 from app.models import Report
 from app.repositories import report_repository
 from app.routers.reports import FAILURE_MESSAGES, FAILURE_STATUS
 from app.schemas import AdminReportListResponse, AdminReportResponse, RouteError
+from app.services.photo_storage import PhotoStorageError
 from app.services.report_service import (
     PENDING,
+    PHOTO_MEDIA_TYPES,
     ReportError,
     resolve_report,
     review_report,
@@ -20,7 +22,6 @@ from app.services.report_service import (
 router = APIRouter(prefix="/admin", tags=["admin"])
 
 REPORT_STATUSES = ("pending", "approved", "resolved", "rejected")
-PHOTO_MEDIA_TYPES = {".jpg": "image/jpeg", ".png": "image/png", ".webp": "image/webp"}
 
 ADMIN_ERRORS = {
     401: {"model": RouteError, "description": "로그인하지 않음"},
@@ -92,27 +93,36 @@ def get_reports(
 
 @router.get(
     "/reports/{report_id}/photo",
-    response_class=FileResponse,
-    responses={**ADMIN_ERRORS, **NOT_FOUND},
+    response_class=Response,
+    responses={**ADMIN_ERRORS, **NOT_FOUND, 502: {"model": RouteError}},
 )
 def get_report_photo(
     report_id: int,
     _admin: AdminUserDep,
     session: DbSessionDep,
-    settings: SettingsDep,
-) -> FileResponse:
+    storage: PhotoStorageDep,
+) -> Response:
     report = report_or_404(session, report_id)
     # 파일 이름은 DB 에 저장된 값만 쓴다. 요청으로 받은 경로는 쓰지 않는다.
-    path = settings.report_photo_dir / report.photo_name
-    media_type = PHOTO_MEDIA_TYPES.get(path.suffix)
-    if media_type is None or not path.is_file():
+    media_type = PHOTO_MEDIA_TYPES.get(Path(report.photo_name).suffix)
+    try:
+        content = storage.read(report.photo_name) if media_type else None
+    except (PhotoStorageError, OSError) as error:
+        raise HTTPException(
+            status.HTTP_502_BAD_GATEWAY,
+            detail={
+                "reason": "photo_storage_failed",
+                "message": "사진을 불러오지 못했습니다.",
+            },
+        ) from error
+    if media_type is None or content is None:
         raise HTTPException(
             status.HTTP_404_NOT_FOUND,
             detail={"reason": "photo_not_found", "message": "사진이 없습니다."},
         )
     # 사진에 얼굴·번호판이 있을 수 있어 브라우저·중간 서버에 남기지 않는다.
-    return FileResponse(
-        path, media_type=media_type, headers={"Cache-Control": "private, no-store"}
+    return Response(
+        content, media_type=media_type, headers={"Cache-Control": "private, no-store"}
     )
 
 

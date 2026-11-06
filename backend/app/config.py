@@ -132,8 +132,15 @@ class Settings(BaseSettings):
     landmark_on_spot_m: float = 30.0
     # 길 위 문제 제보 사진을 저장하는 폴더. 사진에 사람 얼굴·번호판이 있을 수 있어
     # 저장소에 커밋하지 않고(.gitignore) 관리자에게만 보여 준다.
+    # Supabase Storage 키가 없을 때만 쓴다(로컬 개발).
     report_photo_dir: Path = REPO_ROOT / "data" / "report_photos"
     report_photo_max_bytes: int = 5 * 1024 * 1024
+    # 제보 사진을 올리는 Supabase Storage 비공개 버킷. 키는 backend/.env 에만 둔다.
+    # supabase_url 과 supabase_service_key 가 모두 있으면 사진을 여기에 저장한다.
+    supabase_url: str = ""
+    supabase_service_key: SecretStr = SecretStr("")
+    supabase_photo_bucket: str = "report-photos"
+    supabase_timeout_s: float = 10.0
     # 제보 좌표가 도로망에서 이보다 멀면 제보를 받지 않는다. 초안 값이다.
     report_snap_radius_m: float = 30.0
     # 만료된 제보를 이 기간이 지나면 사진과 함께 지운다. 서버를 켤 때 정리한다.

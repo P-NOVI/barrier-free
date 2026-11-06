@@ -28,6 +28,7 @@ from app.services.congestion_service import (
     road_congestion,
 )
 from app.services.oauth_service import create_oauth_client
+from app.services.photo_storage import PhotoStorage, create_photo_storage
 from app.services.place_service import create_kakao_client
 from app.services.weather_service import ItemCache, KeyedTtlCache, create_kma_client
 from core.closure import close_edges
@@ -237,6 +238,19 @@ def get_route_graph(graph: GraphDep, closed: ClosedEdgesDep) -> Graph:
 
 
 RouteGraphDep = Annotated[Graph, Depends(get_route_graph)]
+
+
+def get_photo_storage(settings: SettingsDep) -> Iterator[PhotoStorage]:
+    """제보 사진 저장소. Supabase 키가 있으면 Supabase, 없으면 로컬 폴더."""
+    storage, client = create_photo_storage(settings)
+    try:
+        yield storage
+    finally:
+        if client is not None:
+            client.close()
+
+
+PhotoStorageDep = Annotated[PhotoStorage, Depends(get_photo_storage)]
 
 
 def get_kma_client(settings: SettingsDep) -> Iterator[httpx.Client]:

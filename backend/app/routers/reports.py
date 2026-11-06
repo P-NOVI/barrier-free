@@ -4,7 +4,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
 
-from app.deps import DbSessionDep, GraphDep, SettingsDep, UserDep
+from app.deps import DbSessionDep, GraphDep, PhotoStorageDep, SettingsDep, UserDep
 from app.models import REPORT_DESCRIPTION_MAX_LENGTH
 from app.schemas import (
     Latitude,
@@ -37,6 +37,7 @@ FAILURE_STATUS = {
     ReportFailure.NOT_APPROVED: status.HTTP_409_CONFLICT,
     ReportFailure.NOT_FOUND: status.HTTP_404_NOT_FOUND,
     ReportFailure.NOT_REVIEWABLE: status.HTTP_409_CONFLICT,
+    ReportFailure.PHOTO_STORAGE_FAILED: status.HTTP_503_SERVICE_UNAVAILABLE,
 }
 
 FAILURE_MESSAGES = {
@@ -54,6 +55,9 @@ FAILURE_MESSAGES = {
     ReportFailure.NOT_APPROVED: "승인된 제보만 해결됨으로 바꿀 수 있습니다.",
     ReportFailure.NOT_FOUND: "제보를 찾을 수 없습니다.",
     ReportFailure.NOT_REVIEWABLE: "리뷰를 받지 않는 제보입니다.",
+    ReportFailure.PHOTO_STORAGE_FAILED: (
+        "사진을 저장하지 못했습니다. 잠시 뒤 다시 시도해 주세요."
+    ),
 }
 
 
@@ -64,6 +68,7 @@ FAILURE_MESSAGES = {
     responses={
         413: {"model": RouteError},
         422: {"model": RouteError},
+        503: {"model": RouteError},
     },
 )
 def post_report(
@@ -71,6 +76,7 @@ def post_report(
     session: DbSessionDep,
     graph: GraphDep,
     settings: SettingsDep,
+    storage: PhotoStorageDep,
     kind: Annotated[str, Form()],
     lon: Annotated[Longitude, Form()],
     lat: Annotated[Latitude, Form()],
@@ -85,6 +91,7 @@ def post_report(
             session,
             graph,
             settings,
+            storage,
             user.id,
             ReportInput(kind, blocked, lon, lat, content, description),
         )
