@@ -13,8 +13,9 @@ from app.deps import get_closed_edges, get_graph
 from app.main import app
 from app.models import Report, utc_now
 from app.repositories import closure_repository
-from app.repositories.closure_repository import APPROVED, closed_edge_ids
+from app.repositories.closure_repository import closed_edge_ids
 from app.services.congestion_service import TtlCache
+from app.services.report_service import APPROVED, PENDING, REJECTED, RESOLVED
 from core.closure import close_edges
 from core.graph import Graph, build_graph
 from core.pathfinding import find_path
@@ -161,9 +162,11 @@ def test_closed_edge_ids_keep_only_approved_blocked_live_reports(
 ) -> None:
     add_report(db_session, 10, APPROVED, blocked=True, expires_in_days=3)
     add_report(db_session, 11, APPROVED, blocked=True, expires_in_days=-1)
-    add_report(db_session, 12, "pending", blocked=True, expires_in_days=3)
+    add_report(db_session, 12, PENDING, blocked=True, expires_in_days=3)
     add_report(db_session, 13, APPROVED, blocked=False, expires_in_days=3)
-    add_report(db_session, 14, "rejected", blocked=True, expires_in_days=3)
+    add_report(db_session, 14, REJECTED, blocked=True, expires_in_days=3)
+    # 해결됨으로 바뀐 길은 다시 지나갈 수 있다.
+    add_report(db_session, 15, RESOLVED, blocked=True, expires_in_days=3)
     db_session.commit()
 
     assert closed_edge_ids(db_session, utc_now()) == frozenset({10})

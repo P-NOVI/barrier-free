@@ -6,9 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models import Report
-
-# 관리자가 승인한 제보의 상태 값. 프론트 ReportStatus(reportApi.ts)와 같다.
-APPROVED = "approved"
+from app.services.report_service import APPROVED
 
 
 def closed_edge_ids(session: Session, now: datetime) -> frozenset[int]:
