@@ -32,6 +32,13 @@ class RouteRequest(BaseModel):
     goal: Coordinate = Field(description="도착지 [경도, 위도]")
     # 로그인 연동 전까지 요청으로 이동 조건 프리셋을 받는다.
     preset: PresetName = DEFAULT_PRESET
+    depart_at: datetime | None = Field(
+        default=None,
+        description=(
+            "출발 시각(시간대 포함, 정시로 내림). 없으면 지금이고 실시간 혼잡도를, "
+            "있으면 그 시각의 예측 혼잡도를 쓴다. 지금 시 ~ 모레 23시만 받는다."
+        ),
+    )
 
 
 class TurnPoint(BaseModel):
@@ -41,7 +48,9 @@ class TurnPoint(BaseModel):
     )
 
 
-class RouteResponse(BaseModel):
+class RouteOption(BaseModel):
+    """추천 경로 하나."""
+
     distance_m: float
     duration_s: float = Field(
         description="이동 조건의 평균 속도로 distance_m 을 가는 예상 시간(초)"
@@ -66,6 +75,22 @@ class RouteResponse(BaseModel):
     )
     goal_entrance: Coordinate | None = Field(
         default=None, description="도착지가 건물·시설 안이라 거친 출입구 [경도, 위도]"
+    )
+    busy_m: float = Field(
+        default=0.0,
+        description="출발 시각의 혼잡도가 기준(congestion_busy_level) 이상인 길의 길이",
+    )
+
+
+class RouteResponse(RouteOption):
+    """1안(혼잡도 없이 찾은 경로)과 2안.
+
+    1안의 값은 지금처럼 응답 바로 아래에 둔다.
+    """
+
+    alternative: RouteOption | None = Field(
+        default=None,
+        description="2안: 혼잡도를 반영한 경로. 혼잡도 정보가 없거나 1안과 같으면 null",
     )
 
 

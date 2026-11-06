@@ -41,7 +41,14 @@ import {
 } from './lib/historyApi';
 import { type LngLat, SEOUL_CITY_HALL } from './lib/kakaoMap';
 import { findAddress } from './lib/placeApi';
+import {
+    DEPART_NOW,
+    isDepartTimeValid,
+    toDepartAt,
+    type DepartTime,
+} from './lib/departTime';
 import { DEFAULT_PRESET, isPresetId, type PresetId } from './lib/presets';
+import { chosenRoute, otherRoute, type RouteChoice } from './lib/routeApi';
 import {
     placesAt,
     type SavedPlace,
@@ -142,15 +149,41 @@ export default function App() {
     );
     const start = elevatorRoute.endpoints.start?.position ?? null;
     const goal = elevatorRoute.endpoints.goal?.position ?? null;
-    const route = useRoute(start, goal, preset);
+    // 출발 시각. 고른 시각이 지나면(시가 바뀜) 지금으로 본다.
+    const [departTime, setDepartTime] = useState<DepartTime>(DEPART_NOW);
+    const now = new Date();
+    const depart = isDepartTimeValid(departTime, now) ? departTime : DEPART_NOW;
+    const departAt = toDepartAt(depart, now);
+    const route = useRoute(start, goal, preset, departAt);
     useRouteHistory(endpoints, preset, route, navigating);
+    // 1안·2안 중 고른 것. 새로 찾으면 1안으로 돌아간다. 안내 중 경로를 벗어나 다시
+    // 찾을 때는 고른 안을 그대로 둔다(2안이 없어지면 1안).
+    const searchKey = JSON.stringify([start, goal, preset, departAt]);
+    const [chosen, setChosen] = useState<{ key: string; choice: RouteChoice }>({
+        key: searchKey,
+        choice: 'primary',
+    });
+    const choice: RouteChoice =
+        navigating || chosen.key === searchKey ? chosen.choice : 'primary';
+    const choose = useCallback(
+        (next: RouteChoice) => setChosen({ key: searchKey, choice: next }),
+        [searchKey],
+    );
     // 안내 중 경로를 다시 찾는 동안에는 전 경로를 그대로 보여 준다.
-    const shownRoute =
+    const foundRoute =
         route.status === 'success'
             ? route.route
             : navigating && route.status === 'loading'
               ? route.previous
               : null;
+    const shownRoute = foundRoute && chosenRoute(foundRoute, choice);
+    // 고르지 않은 쪽은 연하게 그린다. 안내 중에는 고른 경로만 그린다.
+    const unchosenRoute =
+        foundRoute && !navigating ? otherRoute(foundRoute, choice) : null;
+    const chooseOther = useCallback(
+        () => choose(choice === 'primary' ? 'alternative' : 'primary'),
+        [choose, choice],
+    );
 
     // 경로를 벗어나면 지금 위치를 출발지로 경로를 다시 찾는다.
     const reroute = useCallback((position: LngLat) => {
@@ -398,6 +431,10 @@ export default function App() {
                     }
                     saveError={savedRoutes.error}
                     onPresetChange={setPreset}
+                    departTime={depart}
+                    onDepartTimeChange={setDepartTime}
+                    choice={choice}
+                    onChoiceChange={choose}
                     onReset={() => setEndpoints(NO_ENDPOINTS)}
                     onStartNavigation={startNavigation}
                 />
@@ -478,6 +515,8 @@ export default function App() {
                 picked={picked?.position}
                 popup={wide ? placeCard : null}
                 path={shownRoute?.coordinates ?? null}
+                otherPath={unchosenRoute?.coordinates ?? null}
+                onOtherPathClick={chooseOther}
                 startEntrance={shownRoute?.start_entrance}
                 goalEntrance={shownRoute?.goal_entrance}
                 savedPlaces={savedPlaces.places}
