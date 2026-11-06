@@ -15,6 +15,7 @@ from app.repositories import (
     saved_route_repository,
 )
 from app.repositories.user_repository import (
+    has_social_account,
     linked_providers,
     load_preset,
     save_preset,
@@ -50,7 +51,9 @@ NOT_FOUND = {
 }
 
 
-def session_response(session: DbSessionDep, user_id: int | None) -> SessionResponse:
+def session_response(
+    session: DbSessionDep, settings: SettingsDep, user_id: int | None
+) -> SessionResponse:
     if user_id is None:
         return SessionResponse(is_guest=True, providers=[], preset=DEFAULT_PRESET)
     providers = linked_providers(session, user_id)
@@ -58,6 +61,7 @@ def session_response(session: DbSessionDep, user_id: int | None) -> SessionRespo
         is_guest=not providers,
         providers=providers,
         preset=load_preset(session, user_id),
+        is_admin=has_social_account(session, user_id, settings.admin_account_set),
     )
 
 
@@ -128,24 +132,31 @@ def delete_or_404(
 
 
 @router.get("/session", response_model=SessionResponse)
-def get_session(user: CurrentUserDep, session: DbSessionDep) -> SessionResponse:
+def get_session(
+    user: CurrentUserDep, session: DbSessionDep, settings: SettingsDep
+) -> SessionResponse:
     """쿠키의 사용자. 쿠키가 없어도 게스트를 만들지 않고 기본값을 준다."""
-    return session_response(session, user.id if user else None)
+    return session_response(session, settings, user.id if user else None)
 
 
 @router.post("/session", response_model=SessionResponse)
-def start_session(user: UserDep, session: DbSessionDep) -> SessionResponse:
+def start_session(
+    user: UserDep, session: DbSessionDep, settings: SettingsDep
+) -> SessionResponse:
     """쿠키의 사용자를 돌려준다. 쿠키가 없으면 게스트 토큰을 쿠키로 발급한다."""
-    return session_response(session, user.id)
+    return session_response(session, settings, user.id)
 
 
 @router.put("/me/preset", response_model=SessionResponse)
 def put_preset(
-    request: PresetRequest, user: UserDep, session: DbSessionDep
+    request: PresetRequest,
+    user: UserDep,
+    session: DbSessionDep,
+    settings: SettingsDep,
 ) -> SessionResponse:
     save_preset(session, user.id, request.preset)
     session.commit()
-    return session_response(session, user.id)
+    return session_response(session, settings, user.id)
 
 
 @router.get("/me/searches", response_model=SearchHistoryListResponse)

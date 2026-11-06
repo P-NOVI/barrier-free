@@ -92,6 +92,23 @@ def linked_providers(session: Session, user_id: int) -> list[str]:
     )
 
 
+def has_social_account(
+    session: Session, user_id: int, accounts: frozenset[tuple[str, str]]
+) -> bool:
+    """연결된 소셜 계정 중 accounts((provider, provider_user_id))에 든 것이 있는가."""
+    if not accounts:
+        return False
+    linked = session.execute(
+        select(SocialAccount.provider, SocialAccount.provider_user_id).where(
+            SocialAccount.user_id == user_id
+        )
+    )
+    return any(
+        (provider, provider_user_id) in accounts
+        for provider, provider_user_id in linked
+    )
+
+
 def sign_in_with_social(
     session: Session,
     current_user_id: int | None,

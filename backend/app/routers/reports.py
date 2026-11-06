@@ -24,6 +24,9 @@ FAILURE_STATUS = {
     ReportFailure.DESCRIPTION_TOO_LONG: status.HTTP_422_UNPROCESSABLE_CONTENT,
     ReportFailure.OFF_NETWORK: status.HTTP_422_UNPROCESSABLE_CONTENT,
     ReportFailure.NOT_EDITABLE: status.HTTP_409_CONFLICT,
+    ReportFailure.NOT_PENDING: status.HTTP_409_CONFLICT,
+    ReportFailure.EXPIRED: status.HTTP_409_CONFLICT,
+    ReportFailure.NOT_APPROVED: status.HTTP_409_CONFLICT,
 }
 
 FAILURE_MESSAGES = {
@@ -36,6 +39,9 @@ FAILURE_MESSAGES = {
     ),
     ReportFailure.OFF_NETWORK: "제보 위치 근처에 보행 도로가 없습니다.",
     ReportFailure.NOT_EDITABLE: "검토가 끝난 제보는 고칠 수 없습니다.",
+    ReportFailure.NOT_PENDING: "이미 검토가 끝난 제보입니다.",
+    ReportFailure.EXPIRED: "만료된 제보는 승인할 수 없습니다. 취소만 할 수 있어요.",
+    ReportFailure.NOT_APPROVED: "승인된 제보만 해결됨으로 바꿀 수 있습니다.",
 }
 
 
