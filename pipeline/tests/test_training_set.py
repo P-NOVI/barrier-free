@@ -305,3 +305,52 @@ def test_add_subway_uses_last_year_and_fills_zero_or_null() -> None:
     # 두 호선을 더한다. 그 시각 자료가 없거나 역이 없는 센서는 0,
     # 자료가 없는 달(2023-01)은 null 이다.
     assert rows == [(1, 8, None), (1, 8, 15.0), (1, 10, 0.0), (2, 8, 0.0)]
+
+
+def raw_history(rows: list[tuple[int, str, int]]) -> pa.Table:
+    return pa.table(
+        {
+            "sensor_code": pa.array([r[0] for r in rows], type=pa.int32()),
+            "measured_at": pa.array(
+                stamps(*[r[1] for r in rows]), type=pa.timestamp("ms")
+            ),
+            "visitor_count": pa.array([r[2] for r in rows], type=pa.int32()),
+            "district": pa.array(["Jung-gu"] * len(rows)),
+        }
+    )
+
+
+def test_merge_realtime_keeps_history_on_same_key() -> None:
+    history = raw_history([(1, "2026-10-25T23:40", 10), (1, "2026-10-25T23:50", 20)])
+    # 수집 DB 는 타입이 달라도(int64) history 타입으로 맞춘다.
+    realtime = raw_history(
+        [(1, "2026-10-25T23:50", 99), (1, "2026-10-26T00:00", 30)]
+    ).cast(
+        pa.schema(
+            [
+                ("sensor_code", pa.int64()),
+                ("measured_at", pa.timestamp("ms")),
+                ("visitor_count", pa.int64()),
+                ("district", pa.string()),
+            ]
+        )
+    )
+    merged, added = training.merge_realtime(history, realtime)
+    assert added == 1
+    assert merged.schema == history.schema
+    got = sorted(
+        zip(
+            merged["measured_at"].to_pylist(),
+            merged["visitor_count"].to_pylist(),
+        )
+    )
+    assert [count for _, count in got] == [10, 20, 30]
+
+
+def test_add_empty_subway_appends_null_columns() -> None:
+    table = pa.table({"sensor_code": pa.array([1, 2], type=pa.int32())})
+    got = training.add_empty_subway(table)
+    assert got.column_names == ["sensor_code", *training.SUBWAY_COLUMNS]
+    for name in training.SUBWAY_COLUMNS:
+        assert got[name].type == pa.float32()
+        assert got[name].null_count == 2

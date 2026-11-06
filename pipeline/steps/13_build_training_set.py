@@ -2,10 +2,11 @@
 
 실행: pipeline/ 에서 uv run python steps/13_build_training_set.py
 - 입력: interim/sdot/history.parquet (06 단계, 10분 단위 유동인구)
+        interim/sdot/realtime.parquet (16 단계, 수집 DB 유동인구. 없으면 건너뜀)
         interim/weather/hourly.parquet (11 단계, 자치구·시간별 기온·강수)
         interim/calendar/daily.parquet (12 단계, 날짜별 공휴일·연휴)
-        interim/subway/hourly.parquet (14 단계, 역별 시간대별 월 승하차)
-        interim/subway/stations.parquet (15 단계, 역 좌표)
+        interim/subway/hourly.parquet (14 단계, 역별 시간대별 월 승하차. 없으면 건너뜀)
+        interim/subway/stations.parquet (15 단계, 역 좌표. 없으면 건너뜀)
         data/processed/sdot_sensors.json (센서 위치)
 - 출력: interim/training/hourly.parquet, hourly_report.json
   config 에 output_full 이 있으면 단절 정리 전 전체 행도 따로 저장한다(walk-forward용).
@@ -19,6 +20,10 @@
   구한다.
 - 날씨는 H 정시 행을 그대로 붙인다. 강수량이 직전 1시간 누적이라 한 시간 구간과 맞는다.
 처리
+- 이력은 history(CSV)와 realtime(수집 DB)을 합친다. 같은 (센서, 측정 시각)은 history
+  값을 쓴다. 두 자료는 겹치는 구간에서 값이 같다(2026-10-25 확인).
+- 날씨 첫 시각 앞의 시간은 버린다. 날씨 마지막 시각 뒤의 시간(수집 DB로 이어 붙인 최근
+  자료)은 남기고 날씨 칸을 비운다. 예측은 최근 유동인구로 피처를 만들기 때문이다.
 - foot_traffic 은 한 시간에 센서를 지나간 사람 수(명/시간)다. 한 시간 안 10분 값의
   평균에 bins_per_hour 를 곱한다. 10분 값이 min_bins 개 미만인 시간은 버린다.
 - 센서 값은 그대로 쓰고 정규화하지 않는다. 0 은 낮에도 그대로 둔다(사람이 안
@@ -36,6 +41,8 @@
   자료가 아직 없어서 학습도 같은 규칙으로 맞춘다.
   - 반경 안에 역이 없는 센서, 그 달에 아직 열지 않은 역은 0 이다.
   - 그 달 승하차 자료가 아예 없으면(14 단계 기간 밖) 빈 값(null)이다.
+  - 지하철 파일(14·15 단계)이 없으면 두 열을 모두 빈 값으로 둔다. 지금 모델(ml/)은
+    이 열을 쓰지 않는다.
 학습·검증·테스트 나누기는 ml/ 에서 한다.
 그래프(00~04 단계)와 관계가 없어서 run_all.py 에 넣지 않고 따로 실행한다.
 """
@@ -73,6 +80,8 @@ HOUR = np.timedelta64(1, "h")
 TRAFFIC_QUANTILES = (0.5, 0.95, 0.99)
 SUBWAY_COLUMNS = ["subway_boardings", "subway_alightings"]
 MONTH = np.timedelta64(1, "M")
+HISTORY_COLUMNS = ["sensor_code", "measured_at", "visitor_count", "district"]
+HISTORY_KEYS = ["sensor_code", "measured_at"]
 
 
 def hour_end(measured_at: np.ndarray) -> np.ndarray:
@@ -120,6 +129,18 @@ def aggregate_hourly(
         }
     )
     return table, int((~keep).sum())
+
+
+def merge_realtime(history: pa.Table, realtime: pa.Table) -> tuple[pa.Table, int]:
+    """history 에 realtime 을 붙인다. 같은 (센서, 측정 시각)은 history 값을 쓴다.
+
+    반환: (합친 표, realtime 에서 새로 붙은 행 수)
+    """
+    realtime = realtime.select(history.column_names).cast(history.schema)
+    new = realtime.join(
+        history.select(HISTORY_KEYS), keys=HISTORY_KEYS, join_type="left anti"
+    )
+    return pa.concat_tables([history, new.select(history.column_names)]), new.num_rows
 
 
 def read_sensor_places(path: Path) -> dict[int, tuple[float, float]]:
@@ -365,6 +386,13 @@ def add_subway(
     )
 
 
+def add_empty_subway(table: pa.Table) -> pa.Table:
+    """지하철 파일이 없을 때. 승하차 열을 빈 값(null)으로 붙인다."""
+    for name in SUBWAY_COLUMNS:
+        table = table.append_column(name, pa.nulls(table.num_rows, pa.float32()))
+    return table
+
+
 def count_missing(column: pa.ChunkedArray) -> int:
     """null(조인에서 못 찾음)과 NaN(날씨 원본 결측)의 합."""
     return int(column.null_count + np.isnan(column.fill_null(0.0).to_numpy()).sum())
@@ -404,6 +432,7 @@ def main() -> None:
     parser.add_argument("--config", type=Path, default=CONFIG_PATH)
     config = load_config(parser.parse_args().config)["training_set"]
     history_path = data_path(config["history"])
+    realtime_path = data_path(config["realtime"])
     weather_path = data_path(config["weather"])
     calendar_path = data_path(config["calendar"])
     sensors_path = repo_path(config["sensors"])
@@ -411,22 +440,21 @@ def main() -> None:
     stations_path = data_path(config["subway_stations"])
     output = data_path(config["output"])
     report_path = data_path(config["report"])
-    require_files(
-        history_path,
-        weather_path,
-        calendar_path,
-        sensors_path,
-        subway_path,
-        stations_path,
-    )
+    # 수집 DB 이력(16 단계)과 지하철(14·15 단계)은 없으면 건너뛴다.
+    require_files(history_path, weather_path, calendar_path, sensors_path)
 
     started = time.time()
     weather = pq.read_table(weather_path)
     calendar = pq.read_table(calendar_path)
-    history = pq.read_table(
-        history_path,
-        columns=["sensor_code", "measured_at", "visitor_count", "district"],
-    )
+    history = pq.read_table(history_path, columns=HISTORY_COLUMNS)
+    realtime_rows = 0
+    if realtime_path.exists():
+        history, realtime_rows = merge_realtime(
+            history, pq.read_table(realtime_path, columns=HISTORY_COLUMNS)
+        )
+        print(f"수집 DB 이력 {realtime_rows:,}행을 붙였습니다.", flush=True)
+    else:
+        print(f"수집 DB 이력이 없어 건너뜁니다: {realtime_path}", flush=True)
     districts = majority_districts(history)
     rows_before = history.num_rows
     history = keep_majority_district(history, districts)
@@ -434,16 +462,16 @@ def main() -> None:
     places = read_sensor_places(sensors_path)
     no_place = sorted(set(districts) - set(places))
 
-    # 날씨가 있는 시간(구간 끝 H 가 날씨 첫 시각 이후)만 쓴다.
+    # 날씨 첫 시각 앞의 시간은 버린다. 마지막 시각 뒤의 시간은 날씨를 비운 채 남긴다.
     first_hour = np.datetime64(pc.min(weather["hour"]).as_py(), "s")
     last_hour = np.datetime64(pc.max(weather["hour"]).as_py(), "s")
     hourly, short_hours = aggregate_hourly(
         history, config["min_bins"], config["bins_per_hour"]
     )
     ends = hourly["hour_end"].to_numpy()
-    in_weather = (ends >= first_hour) & (ends <= last_hour)
     located = np.isin(hourly["sensor_code"].to_numpy(), list(places))
-    hourly = hourly.filter(pa.array(in_weather & located))
+    hourly = hourly.filter(pa.array((ends >= first_hour) & located))
+    hours_after_weather = int((hourly["hour_end"].to_numpy() > last_hour).sum())
     hourly_full = hourly  # 단절 정리 전 행(output_full 에 쓴다)
 
     break_config = config["level_break"]
@@ -462,16 +490,26 @@ def main() -> None:
         "compared_sensors": len(ratios),
     }
 
-    subway = pq.read_table(subway_path)
-    near = sensor_stations(
-        places, pq.read_table(stations_path), config["subway_radius_m"]
-    )
-    features = subway_features(near, daily_ridership(subway))
-    months = sorted(set(subway["month"].to_pylist()))
+    has_subway = subway_path.exists() and stations_path.exists()
+    sensors_with_station: int | None = None
+    if has_subway:
+        subway = pq.read_table(subway_path)
+        near = sensor_stations(
+            places, pq.read_table(stations_path), config["subway_radius_m"]
+        )
+        features = subway_features(near, daily_ridership(subway))
+        months = sorted(set(subway["month"].to_pylist()))
+        sensors_with_station = len(
+            set(near["sensor_code"].to_pylist()) & set(districts)
+        )
+    else:
+        print("지하철 파일(14·15 단계)이 없어 승하차 열을 비웁니다.", flush=True)
 
     def assemble(rows: pa.Table) -> pa.Table:
         """시간별 행 → 센서 정보·날씨·달력·지하철 승하차를 붙인 학습 표."""
         built = build_training_set(rows, districts, places, weather, calendar)
+        if not has_subway:
+            return add_empty_subway(built)
         return add_subway(built, features, months, config["subway_lag_months"])
 
     table = assemble(hourly)
@@ -483,10 +521,11 @@ def main() -> None:
         "hours_dropped_few_bins": short_hours,
         "sensors_without_location": no_place,
         "level_break": level_break,
+        "realtime_rows_added": realtime_rows,
+        "hours_after_weather": hours_after_weather,
+        "subway_files": has_subway,
         "subway_radius_m": config["subway_radius_m"],
-        "sensors_with_station": len(
-            set(near["sensor_code"].to_pylist()) & set(districts)
-        ),
+        "sensors_with_station": sensors_with_station,
     }
     if "output_full" in config:
         # walk-forward 검증은 학습 종료일마다 단절을 그 시점까지의 데이터로 다시
