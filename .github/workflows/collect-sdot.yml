@@ -1,27 +1,28 @@
-# 10분마다 유동인구·날씨를 받아 수집 DB(Supabase)에 쌓는다. backend/app/collector 참고.
-# 날씨는 DB에 없는 시각만 받으므로 대부분의 실행은 유동인구만 새로 넣는다.
+# 하루 한 번 S-DoT 유동인구를 받아 수집 DB(Supabase)에 쌓는다. backend/app/collector 참고.
+# DB의 최신 측정 시각까지 거슬러 받으므로(API 는 최소 11일 전까지 준다) 며칠 빠져도 메운다.
 # Actions 실행기는 IPv6 를 못 써서 Supabase 는 Session pooler 주소(IPv4)를 쓴다.
 # 예약 실행은 기본 브랜치(main)에 있는 이 파일로만 돈다. 코드는 dev 에서 받는다.
-# 필요한 저장소 Secrets: COLLECTOR_DATABASE_URL, SDOT_API_KEY, KMA_API_KEY
-name: Collect Data
+# 필요한 저장소 Secrets: COLLECTOR_DATABASE_URL, SDOT_API_KEY
+name: Collect S-DoT
 
 on:
   schedule:
-    # 매시 7·17·27·37·47·57분. 정각은 GitHub 예약 실행이 몰려 늦어지기 쉽다.
-    - cron: "7-59/10 * * * *"
+    # 매일 06:37 KST(21:37 UTC). 정각은 GitHub 예약 실행이 몰려 늦어지기 쉽다.
+    - cron: "37 21 * * *"
   workflow_dispatch:
 
 permissions:
   contents: read
 
 concurrency:
-  group: collect-data
+  group: collect-sdot
   cancel-in-progress: false
 
 jobs:
   collect:
     runs-on: ubuntu-latest
-    timeout-minutes: 9
+    # 하루치는 약 12쪽이지만, 며칠 밀렸을 때를 생각해 넉넉히 둔다.
+    timeout-minutes: 30
     defaults:
       run:
         working-directory: backend
@@ -31,8 +32,7 @@ jobs:
           ref: dev
       - uses: astral-sh/setup-uv@v6
       - name: 수집
-        run: uv run --frozen --no-dev python -m app.collector
+        run: uv run --frozen --no-dev python -m app.collector sdot
         env:
           COLLECTOR_DATABASE_URL: ${{ secrets.COLLECTOR_DATABASE_URL }}
           SDOT_API_KEY: ${{ secrets.SDOT_API_KEY }}
-          KMA_API_KEY: ${{ secrets.KMA_API_KEY }}

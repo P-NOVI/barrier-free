@@ -1,0 +1,39 @@
+# 1시간마다 기상청 날씨(초단기실황·05시 단기예보)를 받아 수집 DB(Supabase)에 쌓는다.
+# backend/app/collector 참고. 실황은 기상청이 24시간 안만 다시 주고, 수집기는 지난
+# collector_backfill_hours 안에서 DB에 없는 정시만 받으므로 몇 번 빠져도 메운다.
+# 자치구 위치는 sdot_readings 의 센서·자치구 짝으로 구한다(collect-sdot.yml 이 쌓는다).
+# Actions 실행기는 IPv6 를 못 써서 Supabase 는 Session pooler 주소(IPv4)를 쓴다.
+# 예약 실행은 기본 브랜치(main)에 있는 이 파일로만 돈다. 코드는 dev 에서 받는다.
+# 필요한 저장소 Secrets: COLLECTOR_DATABASE_URL, KMA_API_KEY
+name: Collect Weather
+
+on:
+  schedule:
+    # 매시 7분. 정각은 GitHub 예약 실행이 몰려 늦어지기 쉽다.
+    - cron: "7 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: collect-weather
+  cancel-in-progress: false
+
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 9
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: dev
+      - uses: astral-sh/setup-uv@v6
+      - name: 수집
+        run: uv run --frozen --no-dev python -m app.collector weather
+        env:
+          COLLECTOR_DATABASE_URL: ${{ secrets.COLLECTOR_DATABASE_URL }}
+          KMA_API_KEY: ${{ secrets.KMA_API_KEY }}
