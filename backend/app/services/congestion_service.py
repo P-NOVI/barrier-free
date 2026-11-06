@@ -108,9 +108,12 @@ def road_congestion(
     return levels
 
 
-def request_rows(client: httpx.Client, page_size: int) -> list[dict[str, Any]]:
+def request_rows(
+    client: httpx.Client, page_size: int, start: int = 1
+) -> list[dict[str, Any]]:
+    """최신순 start 번째 행부터 page_size 개."""
     try:
-        response = client.get(f"/{SERVICE_NAME}/1/{page_size}/")
+        response = client.get(f"/{SERVICE_NAME}/{start}/{start + page_size - 1}/")
         response.raise_for_status()
         body = response.json()
         # 성공하면 서비스 이름 아래에, 인증 오류 같은 실패는 바로 RESULT 로 온다.
