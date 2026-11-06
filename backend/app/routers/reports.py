@@ -6,13 +6,21 @@ from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
 
 from app.deps import DbSessionDep, GraphDep, SettingsDep, UserDep
 from app.models import REPORT_DESCRIPTION_MAX_LENGTH
-from app.schemas import Latitude, Longitude, ReportResponse, RouteError
+from app.schemas import (
+    Latitude,
+    Longitude,
+    ReportResponse,
+    ReviewRequest,
+    ReviewResponse,
+    RouteError,
+)
 from app.services.report_service import (
     ReportError,
     ReportFailure,
     ReportInput,
     create_report,
 )
+from app.services.review_service import save_review
 
 router = APIRouter(tags=["report"])
 
@@ -27,6 +35,8 @@ FAILURE_STATUS = {
     ReportFailure.NOT_PENDING: status.HTTP_409_CONFLICT,
     ReportFailure.EXPIRED: status.HTTP_409_CONFLICT,
     ReportFailure.NOT_APPROVED: status.HTTP_409_CONFLICT,
+    ReportFailure.NOT_FOUND: status.HTTP_404_NOT_FOUND,
+    ReportFailure.NOT_REVIEWABLE: status.HTTP_409_CONFLICT,
 }
 
 FAILURE_MESSAGES = {
@@ -42,6 +52,8 @@ FAILURE_MESSAGES = {
     ReportFailure.NOT_PENDING: "이미 검토가 끝난 제보입니다.",
     ReportFailure.EXPIRED: "만료된 제보는 승인할 수 없습니다. 취소만 할 수 있어요.",
     ReportFailure.NOT_APPROVED: "승인된 제보만 해결됨으로 바꿀 수 있습니다.",
+    ReportFailure.NOT_FOUND: "제보를 찾을 수 없습니다.",
+    ReportFailure.NOT_REVIEWABLE: "리뷰를 받지 않는 제보입니다.",
 }
 
 
@@ -86,3 +98,30 @@ def post_report(
         ) from error
     session.commit()
     return ReportResponse.model_validate(report, from_attributes=True)
+
+
+@router.post(
+    "/reports/{report_id}/review",
+    response_model=ReviewResponse,
+    responses={404: {"model": RouteError}, 409: {"model": RouteError}},
+)
+def post_review(
+    report_id: int,
+    request: ReviewRequest,
+    user: UserDep,
+    session: DbSessionDep,
+) -> ReviewResponse:
+    try:
+        review = save_review(
+            session, user.id, report_id, request.outcome, request.comment
+        )
+    except ReportError as error:
+        raise HTTPException(
+            FAILURE_STATUS[error.reason],
+            detail={
+                "reason": error.reason,
+                "message": FAILURE_MESSAGES[error.reason],
+            },
+        ) from error
+    session.commit()
+    return ReviewResponse.model_validate(review, from_attributes=True)

@@ -2,12 +2,19 @@ from fastapi import APIRouter, HTTPException, status
 
 from app.deps import (
     EntrancesDep,
+    ReportFinderDep,
     RoadCongestionDep,
     RouteGraphDep,
     SettingsDep,
     SitesDep,
 )
-from app.schemas import RouteError, RouteRequest, RouteResponse, TurnPoint
+from app.schemas import (
+    RouteError,
+    RouteReport,
+    RouteRequest,
+    RouteResponse,
+    TurnPoint,
+)
 from app.services.route_service import RouteFailure, RouteNotFoundError, find_route
 from core.profiles import PRESETS
 
@@ -43,6 +50,7 @@ def post_route(
     sites: SitesDep,
     congestion: RoadCongestionDep,
     settings: SettingsDep,
+    find_reports: ReportFinderDep,
 ) -> RouteResponse:
     try:
         route = find_route(
@@ -78,4 +86,13 @@ def post_route(
         goal_gap_m=route.goal_gap_m,
         start_entrance=route.start_entrance,
         goal_entrance=route.goal_entrance,
+        reports=[
+            RouteReport(
+                id=report.id,
+                kind=report.kind,
+                description=report.description,
+                position=(report.lon, report.lat),
+            )
+            for report in find_reports(route.edge_ids)
+        ],
     )

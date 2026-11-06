@@ -1,5 +1,5 @@
 import logging
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from datetime import timedelta
 from functools import cache
 from typing import Annotated
@@ -11,8 +11,9 @@ from sqlalchemy.orm import Session
 
 from app.config import Settings, get_settings
 from app.db import get_engine
-from app.models import User, utc_now
+from app.models import Report, User, utc_now
 from app.repositories.closure_repository import closed_edge_ids
+from app.repositories.report_repository import list_reviewable_reports
 from app.repositories.road_repository import load_entrances, load_graph, load_sites
 from app.repositories.sensor_repository import Sensor, load_sensors
 from app.repositories.user_repository import (
@@ -197,6 +198,37 @@ def get_closed_edges(
 
 
 ClosedEdgesDep = Annotated[frozenset[int], Depends(get_closed_edges)]
+
+
+ReportFinder = Callable[[frozenset[int]], list[Report]]
+
+
+def get_report_finder(settings: SettingsDep) -> ReportFinder:
+    """경로가 지나는 길(edge_id)에 붙은 리뷰 대상 제보를 찾는 함수.
+
+    DB가 없거나 읽지 못하면 빈 목록을 줘서, 경로 응답은 제보 없이 돌려준다.
+    """
+
+    def find(edge_ids: frozenset[int]) -> list[Report]:
+        database_url = settings.database_url.get_secret_value()
+        if not edge_ids or not database_url:
+            return []
+        engine = get_engine(database_url, settings.database_connect_timeout_s)
+        try:
+            with Session(engine) as session:
+                return list_reviewable_reports(session, edge_ids, utc_now())
+        except SQLAlchemyError as error:
+            # 오류 문구에 접속 정보가 섞일 수 있어 종류만 남긴다.
+            logger.warning(
+                "경로가 지나는 제보를 읽지 못해 빼고 응답합니다 (%s).",
+                type(error).__name__,
+            )
+            return []
+
+    return find
+
+
+ReportFinderDep = Annotated[ReportFinder, Depends(get_report_finder)]
 
 
 def get_route_graph(graph: GraphDep, closed: ClosedEdgesDep) -> Graph:

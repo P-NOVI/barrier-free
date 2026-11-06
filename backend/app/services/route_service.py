@@ -73,6 +73,8 @@ class Route:
     # 경로가 건물·시설 출입구에서 시작·끝나면 그 출입구 위치
     start_entrance: LngLat | None = None
     goal_entrance: LngLat | None = None
+    # 경로가 지나는 길(core.graph.Arc.edge_id). 길 위 제보를 찾는 데 쓴다.
+    edge_ids: frozenset[int] = frozenset()
 
 
 def find_route(
@@ -133,6 +135,7 @@ def find_route(
         goal_gap_m=goals[path.nodes[-1]].gap_m,
         start_entrance=starts[path.nodes[0]].entrance,
         goal_entrance=goals[path.nodes[-1]].entrance,
+        edge_ids=frozenset(arc.edge_id for arc in path.arcs),
     )
 
 

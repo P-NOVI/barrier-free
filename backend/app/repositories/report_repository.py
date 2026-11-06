@@ -6,6 +6,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from app.models import Report, utc_now
+from app.services.report_service import APPROVED
 
 
 def list_reports(session: Session, user_id: int) -> list[Report]:
@@ -23,6 +24,25 @@ def list_reports_by_status(session: Session, report_status: str) -> list[Report]
         select(Report)
         .where(Report.status == report_status)
         .order_by(Report.created_at, Report.id)
+    )
+    return list(rows)
+
+
+def list_reviewable_reports(
+    session: Session, edge_ids: frozenset[int], now: datetime
+) -> list[Report]:
+    """edge_ids 길에 붙은 승인·미만료 제보. 통행 불가 공사는 경로가 피하므로 뺀다."""
+    if not edge_ids:
+        return []
+    rows = session.scalars(
+        select(Report)
+        .where(
+            Report.status == APPROVED,
+            Report.blocked.is_(False),
+            Report.expires_at > now,
+            Report.edge_id.in_(edge_ids),
+        )
+        .order_by(Report.id)
     )
     return list(rows)
 

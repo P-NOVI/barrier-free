@@ -11,6 +11,7 @@ NAME_MAX_LENGTH = 200
 ADDRESS_MAX_LENGTH = 300
 LABEL_MAX_LENGTH = 20
 REPORT_DESCRIPTION_MAX_LENGTH = 200
+REVIEW_COMMENT_MAX_LENGTH = 200
 
 
 def utc_now() -> datetime:
@@ -176,3 +177,20 @@ class Report(Base):
     edge_id: Mapped[int] = mapped_column(index=True)
     created_at: Mapped[datetime] = created_at_column()
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), index=True)
+
+
+class ReportReview(Base):
+    """경로로 제보 장소를 지나간 사용자가 도착 후 남긴 리뷰. 제보당 사용자 한 개."""
+
+    __tablename__ = "report_reviews"
+    __table_args__ = (UniqueConstraint("report_id", "user_id"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    report_id: Mapped[int] = mapped_column(
+        ForeignKey("reports.id", ondelete="CASCADE"), index=True
+    )
+    user_id: Mapped[int] = user_id_column(index=True)
+    # app.services.review_service.REVIEW_OUTCOMES 의 값
+    outcome: Mapped[str] = mapped_column(String(20))
+    comment: Mapped[str] = mapped_column(String(REVIEW_COMMENT_MAX_LENGTH), default="")
+    created_at: Mapped[datetime] = created_at_column()

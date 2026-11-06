@@ -3,6 +3,7 @@
 import { type ApiOptions, requestJson } from './apiClient';
 import type { LngLat } from './kakaoMap';
 import type { PresetId } from './presets';
+import type { ReportKind } from './reportApi';
 
 export type RouteRequest = {
     start: LngLat;
@@ -16,6 +17,15 @@ export type TurnPoint = {
     index: number;
     /** 들어온 방향에서 나가는 방향으로 꺾는 각도(도). 오른쪽이 + */
     angle: number;
+};
+
+/** 경로가 지나는 승인된 제보. 도착 후 리뷰를 받을 장소 */
+export type RouteReport = {
+    id: number;
+    kind: ReportKind;
+    description: string | null;
+    /** 제보 위치 */
+    position: LngLat;
 };
 
 export type RouteResponse = {
@@ -37,6 +47,8 @@ export type RouteResponse = {
     /** 출발지가 건물·시설 안이라 거친 출입구. 아니면 null */
     start_entrance: LngLat | null;
     goal_entrance: LngLat | null;
+    /** 경로가 지나는 승인된 제보. 통행 불가 공사는 경로가 피하므로 없다. */
+    reports: RouteReport[];
 };
 
 export function fetchRoute(
