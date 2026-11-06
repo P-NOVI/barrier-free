@@ -19,8 +19,10 @@ MOUNTAIN_GRADE, MOUNTAIN_FACTOR = STEEP_FACTORS[0]
 # 등산로 배율. 경사·계단 배율에 곱한다. 초안 값이다.
 TRAIL_FACTORS: dict[Trail, float] = {Trail.HIKING: 2.0, Trail.MOUNTAIN: 10.0}
 # 인도가 따로 있는 중심선(차도) 배율. 옆 인도로 가게 한다. 지우지 않는 것은 인도가
-# 한쪽만 있거나 끊긴 곳에서 길이 막히지 않게 하려는 것이다. 초안 값이다.
-SIDEWALK_SEPARATE_FACTOR = 3.0
+# 한쪽만 있거나 끊긴 곳에서 길이 막히지 않게 하려는 것이다. 인도에서 중심선 노드로
+# 가는 연결선(횡단보도 없이 차도로 건너기)도 이 표시가 붙는다. 3 이면 30m 를 차도로
+# 건너는 것이 100m 돌아 횡단보도로 건너는 것보다 싸다. 초안 값이다.
+SIDEWALK_SEPARATE_FACTOR = 10.0
 
 
 def is_passable(arc: Arc, profile: Profile) -> bool:

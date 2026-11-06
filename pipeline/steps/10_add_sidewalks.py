@@ -13,6 +13,12 @@ OSM 은 큰 도로를 중심선 하나로만 그린 곳이 많아 경로선이 �
 - 다른 링크 중간에 닿는 링크 끝은 그 점에서 나눠 잇는다.
 - 다른 인도와 이어지지 않은 인도 끝은 가장 가까운 OSM 길(중심선 제외) 위 점에 잇는다.
   길이 없으면 가장 가까운 OSM 노드에 잇는다.
+- 인도를 넣은 큰 도로를 가로지르는 횡단보도 링크(crosswalk_flags)를 넣는다. 횡단보도가
+  없으면 교차로 노드를 거쳐 차도로 건너야 해서, 교차로 한가운데를 대각선으로 가로지른다.
+- 양 끝이 넣은 링크에 닿는 짧은 링크(corner_max_m 이하, 모퉁이)도 넣는다. 큰 도로와
+  나란하지 않아 빠지면 횡단보도 끝이 건넌 쪽 인도에 이어지지 않는다.
+- 교차로 안 큰 도로 조각(양 끝이 인도 있는 중심선에 붙고 intersection_max_m 이하)도
+  sidewalk_separate 를 표시한다. 나란한 인도가 없어 덮이지 않아도 차도다.
 """
 
 import argparse
@@ -76,6 +82,19 @@ def walknet_links(rows: Iterable[dict[str, Any]], excluded_flags: list[str]) -> 
     return list(links.values())
 
 
+def walknet_crosswalks(
+    rows: Iterable[dict[str, Any]],
+    crosswalk_flags: list[str],
+    excluded_flags: list[str],
+) -> list:
+    """횡단보도 링크 모양(경위도). crosswalk_flags 가 붙고 다른 제외 표시는 없다."""
+    others = [flag for flag in excluded_flags if flag not in crosswalk_flags]
+    crosswalk_rows = [
+        row for row in rows if any(row.get(flag) == "1" for flag in crosswalk_flags)
+    ]
+    return walknet_links(crosswalk_rows, others)
+
+
 def direction(line: LineString, at: float) -> Vector:
     a = line.interpolate(max(0.0, at - 1))
     b = line.interpolate(min(line.length, at + 1))
@@ -111,6 +130,7 @@ class SidewalkBuilder:
         settings: dict[str, Any],
         metric_crs: str,
         elevation_of: ElevationOf,
+        crosswalks: Sequence[LineString] = (),
     ) -> None:
         self.graph = graph
         self.s = settings
@@ -120,6 +140,9 @@ class SidewalkBuilder:
         self.to_lonlat = Transformer.from_crs(metric_crs, crs, always_xy=True).transform
         self.links = [self.metric(line) for line in links]
         self.link_tree = STRtree(self.links)
+        self.crosswalk_lines = [self.metric(line) for line in crosswalks]
+        # 넣은 횡단보도의 self.links 번호. 인도처럼 넣지만 교차로 연결 대상은 아니다.
+        self.crosswalk_ids: set[int] = set()
         self.next_id = min((n for n in graph.nodes if isinstance(n, int)), default=0)
         self.next_osmid = -1
         # 인도 링크 노드: 격자 키 → 노드 번호, 노드 번호 → 평면 좌표
@@ -175,11 +198,13 @@ class SidewalkBuilder:
         line_m: LineString,
         highway: str,
         sidewalk_separate: bool = False,
+        crossing: bool = False,
     ) -> None:
         """새 길을 양방향으로 넣는다. 경사는 고도를 정한 뒤 finish 에서 계산한다."""
         geometry = self.lonlat(line_m)
         osmid = self.next_osmid
         self.next_osmid -= 1
+        tags = {"footway": "crossing"} if crossing else {}
         for u, v, g in (
             (a, b, geometry),
             (b, a, LineString(list(geometry.coords)[::-1])),
@@ -196,6 +221,7 @@ class SidewalkBuilder:
                 wheelchair_ok=True,
                 walk_ok=True,
                 sidewalk_separate=sidewalk_separate,
+                **tags,
             )
 
     def split_osm_edge(self, directed: list[tuple], positions: list[float]) -> list:
@@ -298,6 +324,72 @@ class SidewalkBuilder:
             covered_segments=len(covered_lines),
             covered_km=round(sum(line.length for line in covered_lines) / 1000, 2),
         )
+        self.mark_intersection_pieces(segments, segment_line)
+
+    def mark_intersection_pieces(
+        self, segments: dict[tuple, list[tuple]], segment_line: dict[tuple, LineString]
+    ) -> None:
+        """교차로 안 큰 도로 조각에 sidewalk_separate 를 표시한다.
+
+        덮인 중심선 사이를 잇는 짧은 조각이다. 덮인 길로 치지 않아 교차로 연결은
+        그대로다.
+        """
+        limit = self.s["intersection_max_m"]
+        lines = []
+        for key, edges in segments.items():
+            u, v, _ = edges[0]
+            if (
+                edges[0] in self.covered_edges
+                or key not in segment_line
+                or u not in self.centerline_nodes
+                or v not in self.centerline_nodes
+                or segment_line[key].length > limit
+            ):
+                continue
+            for edge in edges:
+                self.graph.edges[edge]["sidewalk_separate"] = True
+            lines.append(segment_line[key])
+        self.intersection_lines = lines
+        self.report["intersection_pieces"] = len(lines)
+
+    def add_crosswalks(self) -> None:
+        """차도로 표시한 큰 도로를 가로지르는 횡단보도 링크를 넣을 링크에 더한다."""
+        roads = [*self.covered_lines, *self.intersection_lines]
+        tree = STRtree(roads)
+        for line in self.crosswalk_lines:
+            if not any(roads[int(i)].intersects(line) for i in tree.query(line)):
+                continue
+            self.crosswalk_ids.add(len(self.links))
+            self.used_links.add(len(self.links))
+            self.links.append(line)
+        self.report["crosswalks"] = len(self.crosswalk_ids)
+
+    def add_corner_links(self) -> None:
+        """양 끝이 넣을 링크에 닿는 corner_max_m 이하 링크를 더한다.
+
+        모퉁이를 도는 짧은 링크는 큰 도로와 나란하지 않아 빠진다. 빠지면 횡단보도 끝이
+        건넌 쪽 인도에 이어지지 않는다.
+        """
+        snap = self.s["snap_m"]
+        used = sorted(self.used_links)
+        tree = STRtree([self.links[i] for i in used])
+
+        def touches(end: Point) -> bool:
+            return any(
+                self.links[used[int(j)]].distance(end) <= snap
+                for j in tree.query(end.buffer(snap))
+            )
+
+        added = [
+            idx
+            for idx, link in enumerate(self.links)
+            if idx not in self.used_links
+            and link.length <= self.s["corner_max_m"]
+            and touches(Point(link.coords[0]))
+            and touches(Point(link.coords[-1]))
+        ]
+        self.used_links.update(added)
+        self.report["corner_links"] = len(added)
 
     def parallel_links(self, line: LineString) -> set[int] | None:
         """중심선을 min_coverage 이상 나란히 덮는 인도 링크 번호. 모자라면 None."""
@@ -357,6 +449,8 @@ class SidewalkBuilder:
         best: dict[int, tuple[float, int, float]] = {}
         for j in self.used_tree.query(p.buffer(limit)):
             idx = self.used[int(j)]
+            if idx in self.crosswalk_ids:
+                continue
             link = self.links[idx]
             at = link.project(p)
             c = link.interpolate(at)
@@ -469,7 +563,10 @@ class SidewalkBuilder:
         self.report["alley_points"] = count
 
     def snap_link_ends(self) -> None:
-        """다른 링크 중간에 snap_m 안으로 닿는 링크 끝을 그 점에 잇는다."""
+        """다른 링크 중간에 snap_m 안으로 닿는 링크 끝을 그 점에 잇는다.
+
+        횡단보도 끝은 인도 중간에 잇지만, 횡단보도 중간에는 다른 링크를 잇지 않는다.
+        """
         snap = self.s["snap_m"]
         self.snaps: list[tuple[tuple[float, float], int, float]] = []
         for idx in self.used:
@@ -481,6 +578,7 @@ class SidewalkBuilder:
                     at = o.project(end)
                     if (
                         other == idx
+                        or other in self.crosswalk_ids
                         or o.distance(end) > snap
                         or at < snap
                         or at > o.length - snap
@@ -511,7 +609,9 @@ class SidewalkBuilder:
                 split_node[(idx, a)] = start
                 split_node[(idx, b)] = end
                 if start != end:
-                    self.add_edge(start, end, piece, "footway")
+                    self.add_edge(
+                        start, end, piece, "footway", crossing=idx in self.crosswalk_ids
+                    )
                     added_m += piece.length
 
         def target(idx: int, at: float) -> int | None:
@@ -660,6 +760,8 @@ class SidewalkBuilder:
         self.find_covered_roads()
         if not self.covered_lines:
             return self.report
+        self.add_crosswalks()
+        self.add_corner_links()
         self.plan_connections()
         self.insert_links()
         self.connect_dangling()
@@ -712,12 +814,17 @@ def main() -> None:
         with gzip.open(path, "rt", encoding="utf-8") as f:
             rows.extend(json.load(f))
     links = walknet_links(rows, settings["excluded_flags"])
+    crosswalks = walknet_crosswalks(
+        rows, settings["crosswalk_flags"], settings["excluded_flags"]
+    )
     bool_tags = export_step.BOOL_TAGS
     graph = ox.load_graphml(
         source, edge_dtypes={tag: export_step.parse_bool for tag in bool_tags}
     )
     print(
-        f"인도 링크 {len(links)}개, 그래프 구간 {graph.number_of_edges()}개", flush=True
+        f"인도 링크 {len(links)}개, 횡단보도 링크 {len(crosswalks)}개, "
+        f"그래프 구간 {graph.number_of_edges()}개",
+        flush=True,
     )
     report = SidewalkBuilder(
         graph,
@@ -725,6 +832,7 @@ def main() -> None:
         settings,
         config["barriers"]["metric_crs"],
         dem_elevations(dem_path),
+        crosswalks,
     ).run()
     print(report, flush=True)
     output.parent.mkdir(parents=True, exist_ok=True)

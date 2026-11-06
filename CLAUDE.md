@@ -25,6 +25,7 @@
 | `backend/` | 린트 · 포맷 | `uv run ruff check .` · `uv run ruff format .` |
 | `backend/` | 테스트 | `uv run pytest` |
 | `backend/` | 앱 DB 테이블 최신화 (`dev`를 받은 뒤) | `uv run alembic upgrade head` |
+| `backend/` | 제보 길 번호 맞추기 (`graph.json.gz`가 바뀐 뒤) | `uv run python -m app.resnap_reports` |
 | `backend/` | 모델을 바꾼 뒤 마이그레이션 만들기 | `uv run alembic revision --autogenerate -m "설명"` (수집 DB는 `-n collector`) |
 | `pipeline/` | 설치 | `uv sync` |
 | `pipeline/` | 전체 실행 (결과 있는 단계는 건너뜀) | `uv run python steps/run_all.py` · `--from 02` · `--force` |

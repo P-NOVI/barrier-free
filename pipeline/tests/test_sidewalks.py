@@ -83,16 +83,28 @@ NODES = {A: (0, 0), C: (100, 0), B: (200, 0), D: (100, -60)}
 SOUTH_WEST = [(0, -10), (95, -10)]
 SOUTH_EAST = [(105, -10), (200, -10)]
 NORTH = [(0, 10), (200, 10)]
+SIDEWALK_ROWS = [
+    link_row(i, points)
+    for i, points in enumerate([SOUTH_WEST, SOUTH_EAST, NORTH], start=1)
+]
 
 
 def road_graph() -> nx.MultiDiGraph:
+    return graph_of(
+        NODES,
+        [(A, C, "primary", 11), (C, B, "primary", 11), (C, D, "residential", 12)],
+    )
+
+
+def graph_of(
+    nodes: dict[int, tuple[float, float]], ways: list[tuple[int, int, str, int]]
+) -> nx.MultiDiGraph:
     graph = nx.MultiDiGraph(crs="EPSG:4326")
-    for n, (x, y) in NODES.items():
+    for n, (x, y) in nodes.items():
         lon, lat = lonlat(x, y)
         graph.add_node(n, x=lon, y=lat, elevation=10.0)
-    ways = [(A, C, "primary", 11), (C, B, "primary", 11), (C, D, "residential", 12)]
     for u, v, highway, osmid in ways:
-        length = LineString([NODES[u], NODES[v]]).length
+        length = LineString([nodes[u], nodes[v]]).length
         for a, b in ((u, v), (v, u)):
             graph.add_edge(
                 a,
@@ -109,21 +121,35 @@ def road_graph() -> nx.MultiDiGraph:
     return graph
 
 
-def build() -> tuple[nx.MultiDiGraph, dict]:
-    graph = road_graph()
-    rows = [
-        link_row(i, points)
-        for i, points in enumerate([SOUTH_WEST, SOUTH_EAST, NORTH], start=1)
-    ]
-    links = add_sidewalks.walknet_links(rows, CONFIG["sidewalks"]["excluded_flags"])
+def build(
+    rows: list[dict] | None = None, graph: nx.MultiDiGraph | None = None
+) -> tuple[nx.MultiDiGraph, dict]:
+    rows = SIDEWALK_ROWS if rows is None else rows
+    graph = road_graph() if graph is None else graph
+    settings = CONFIG["sidewalks"]
+    links = add_sidewalks.walknet_links(rows, settings["excluded_flags"])
+    crosswalks = add_sidewalks.walknet_crosswalks(
+        rows, settings["crosswalk_flags"], settings["excluded_flags"]
+    )
     report = add_sidewalks.SidewalkBuilder(
         graph,
         links,
-        CONFIG["sidewalks"],
+        settings,
         METRIC_CRS,
         lambda points: [10.0] * len(points),
+        crosswalks,
     ).run()
     return graph, report
+
+
+def off_road(graph: nx.MultiDiGraph) -> nx.Graph:
+    """차도(sidewalk_separate)를 뺀 그래프."""
+    walk = nx.Graph()
+    walk.add_nodes_from(graph.nodes)
+    walk.add_edges_from(
+        (u, v) for u, v, d in graph.edges(data=True) if not d["sidewalk_separate"]
+    )
+    return walk
 
 
 def near(graph: nx.MultiDiGraph, x: float, y: float) -> int:
@@ -161,6 +187,77 @@ def test_crossing_to_far_side_walks_on_the_road() -> None:
     crossing = [data for _, v, data in graph.out_edges(C, data=True) if v == north]
     assert crossing
     assert all(data["sidewalk_separate"] for data in crossing)
+
+
+def test_walknet_crosswalks_take_flagged_links_without_other_flags() -> None:
+    rows = [
+        link_row(1, [(0, 0), (10, 0)], BLDG="1"),
+        link_row(2, [(0, 0), (0, 10)], BLDG="1", TNL="1"),
+        link_row(3, [(0, 0), (10, 10)]),
+    ]
+    found = add_sidewalks.walknet_crosswalks(rows, ["BLDG"], ["BLDG", "TNL"])
+    assert len(found) == 1
+
+
+def test_far_side_is_reached_only_on_the_road_without_crosswalk() -> None:
+    graph, report = build()
+    assert report["crosswalks"] == 0
+    assert not nx.has_path(off_road(graph), near(graph, 95, -10), near(graph, 0, 10))
+
+
+def test_crosswalk_over_covered_road_joins_both_sidewalks() -> None:
+    graph, report = build(
+        [*SIDEWALK_ROWS, link_row(9, [(150, -10), (150, 10)], BLDG="1")]
+    )
+    assert report["crosswalks"] == 1
+    crossings = [
+        d for _, _, d in graph.edges(data=True) if d.get("footway") == "crossing"
+    ]
+    assert crossings
+    assert not any(d["sidewalk_separate"] for d in crossings)
+    assert nx.has_path(off_road(graph), near(graph, 95, -10), near(graph, 0, 10))
+
+
+def test_crosswalk_away_from_covered_roads_is_skipped() -> None:
+    _, report = build([*SIDEWALK_ROWS, link_row(9, [(100, -30), (110, -40)], BLDG="1")])
+    assert report["crosswalks"] == 0
+
+
+def test_corner_links_join_crosswalk_ends_to_sidewalks() -> None:
+    # 횡단보도 끝은 인도에서 10m 떨어져 있고, 모퉁이 링크가 인도 중간에 닿는다.
+    rows = [
+        *SIDEWALK_ROWS,
+        link_row(9, [(150, -20), (150, 20)], BLDG="1"),
+        link_row(10, [(150, 20), (160, 10)]),
+        link_row(11, [(150, -20), (160, -10)]),
+        # 한 끝만 닿는 링크는 넣지 않는다.
+        link_row(12, [(150, -20), (145, -40)]),
+    ]
+    graph, report = build(rows)
+    assert report["corner_links"] == 2
+    assert nx.has_path(off_road(graph), near(graph, 95, -10), near(graph, 0, 10))
+
+
+def test_short_big_road_between_covered_centerlines_is_marked() -> None:
+    # 교차로 안 조각 P-Q(20m)는 옆 인도가 멀어 덮이지 않지만 차도다.
+    w, p, q, e = 1, 2, 3, 4
+    graph = graph_of(
+        {w: (0, 0), p: (100, 0), q: (120, 0), e: (220, 0)},
+        [(w, p, "primary", 11), (p, q, "primary", 12), (q, e, "primary", 13)],
+    )
+    sidewalks = [
+        [(0, 10), (70, 10)],
+        [(0, -10), (70, -10)],
+        [(150, 10), (220, 10)],
+        [(150, -10), (220, -10)],
+    ]
+    rows = [link_row(i, points) for i, points in enumerate(sidewalks, start=1)]
+    graph, report = build(rows, graph)
+    assert report["covered_segments"] == 2
+    assert report["intersection_pieces"] == 1
+    piece = [d for u, v, d in graph.edges(data=True) if {u, v} == {p, q}]
+    assert piece
+    assert all(d["sidewalk_separate"] for d in piece)
 
 
 def test_new_edges_get_grade_and_export_marks_only_centerlines() -> None:

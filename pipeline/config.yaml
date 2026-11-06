@@ -79,6 +79,14 @@ sidewalks:
     tertiary, tertiary_link]
   # 넣지 않는 링크: 횡단보도, 육교, 지하철 연결, 건물 안, 터널, 다리(DEM 고도가 수면이다)
   excluded_flags: [CRSWK, OVRP, SBWY_NTW, BLDG, TNL, BRG]
+  # 인도 대신 횡단보도로 넣는 링크 표시. API 의 BLDG(건물 안) 링크는 큰 도로 중심선을
+  # 가로지르는 비율이 71~75%(표시 없음 3%, CRSWK 2~4%, 중구·종로구·강남구)라 실제로는
+  # 횡단보도다. 인도를 넣은 큰 도로를 가로지르는 것만 넣는다.
+  crosswalk_flags: [BLDG]
+  # 양 끝이 인도 있는 중심선에 붙은 이 길이 이하 큰 도로 조각은 교차로 안 차도로 본다.
+  intersection_max_m: 40
+  # 양 끝이 넣은 인도·횡단보도에 닿는 이 길이 이하 링크(모퉁이)도 넣는다.
+  corner_max_m: 30
   # 중심선을 sample_m 간격 지점으로 나눠 sidewalk_max_m 안에 parallel_deg 안으로 나란한
   # 링크가 있는 지점 비율이 min_coverage 이상이면 인도가 따로 있는 중심선으로 본다.
   sample_m: 5

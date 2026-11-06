@@ -79,7 +79,7 @@ npm run dev
 
 ## 6. 데이터 (pipeline 담당만)
 
-backend·frontend 개발에는 필요 없습니다. 서버가 읽는 `data/processed/graph.json.gz`는 Git에 들어 있어 `git pull`이면 됩니다.
+backend·frontend 개발에는 필요 없습니다. 서버가 읽는 `data/processed/graph.json.gz`는 Git에 들어 있어 `git pull`이면 됩니다. 제보는 길 번호(`edge_id`)로 길에 붙는데, 그래프를 다시 만들면 번호가 바뀝니다. `graph.json.gz`가 바뀐 `dev`를 받으면 `backend/`에서 `uv run python -m app.resnap_reports`를 한 번 실행합니다.
 
 DEM·도로망 같은 큰 원본·중간 데이터는 Git 대신 팀 Google Drive 공유 폴더(링크는 팀 채널)에 둡니다.
 
