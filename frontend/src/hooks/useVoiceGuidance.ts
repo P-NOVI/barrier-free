@@ -6,7 +6,7 @@ import type { NavigationState } from './useNavigation';
 /** enabled 인 동안 다음 회전, 도착, 경로 다시 찾기를 소리로 알린다. */
 export function useVoiceGuidance(
     enabled: boolean,
-    { next, judgement }: NavigationState,
+    { next, judgement, goalGap }: NavigationState,
     rerouting: boolean,
 ) {
     // 이미 읽은 안내. 켤 때마다 새로 센다.
@@ -31,12 +31,13 @@ export function useVoiceGuidance(
             next,
             judgement === 'arrived',
             announced.current,
+            goalGap,
         );
         if (result) {
             result.keys.forEach((key) => announced.current.add(key));
             speak(result.text);
         }
-    }, [enabled, next, judgement]);
+    }, [enabled, next, judgement, goalGap]);
 
     useEffect(() => {
         if (enabled && rerouting) {

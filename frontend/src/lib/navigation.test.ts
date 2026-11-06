@@ -4,11 +4,14 @@ import type { LngLat } from './kakaoMap';
 import {
     distanceM,
     judge,
+    lineLengthM,
     NEW_TRACKER,
+    onGoalGap,
     progressAlong,
     type RouteProgress,
     type RouteLine,
     trackOffRoute,
+    withGoalGap,
 } from './navigation';
 
 // ㄱ자 경로: A 에서 동쪽으로 B, B 에서 북쪽으로 C.
@@ -78,6 +81,55 @@ describe('progressAlong', () => {
 
         expect(result.remainingM).toBe(0);
         expect(result.offRouteM).toBeCloseTo(5, 3);
+    });
+});
+
+describe('withGoalGap', () => {
+    // 경로 끝 C 에서 북쪽 30m 출입구 E, 그 북쪽 20m 에 찍은 도착지 G
+    const E = north(C, 30);
+    const G = north(E, 20);
+
+    it('경로 끝에 점선 지점을 직선거리로 이어 붙인다', () => {
+        const line = withGoalGap(ROUTE, [E, G]);
+
+        expect(line.coordinates).toEqual([A, B, C, E, G]);
+        expect(line.distances_m[3]).toBeCloseTo(330, 3);
+        expect(lineLengthM(line)).toBeCloseTo(350, 3);
+        // 원래 경로는 그대로다.
+        expect(lineLengthM(ROUTE)).toBe(300);
+    });
+
+    it('경로 끝과 같은 점은 붙이지 않는다', () => {
+        const line = withGoalGap(ROUTE, [C, north(C, 0.1)]);
+
+        expect(line).toEqual(ROUTE);
+    });
+
+    it('점선 위를 걸으면 경로 위로 보고, 도착지 가까이 가야 도착이다', () => {
+        const line = withGoalGap(ROUTE, [E, G]);
+        // 원래 경로 끝(C)에 서 있어도 점선 50m 가 남는다.
+        const atRoadEnd = progressAlong(line, C);
+        const onGap = progressAlong(line, north(C, 25));
+        const nearGoal = progressAlong(line, north(G, -10));
+
+        expect(atRoadEnd.remainingM).toBeCloseTo(50, 3);
+        expect(judge(atRoadEnd, 10)).toBe('on_route');
+        expect(onGap.offRouteM).toBeCloseTo(0, 3);
+        expect(judge(onGap, 10)).toBe('on_route');
+        expect(judge(nearGoal, 10)).toBe('arrived');
+        // 점선을 붙이지 않으면 C 에서 25m 만 가도 벗어난 것으로 본다.
+        expect(judge(progressAlong(ROUTE, north(C, 26)), 10)).toBe('off_route');
+    });
+});
+
+describe('onGoalGap', () => {
+    it.each([
+        ['길 위 경로 끝 20m 앞부터 점선 구간', 70, 50, true],
+        ['그보다 멀면 아니다', 71, 50, false],
+        ['점선을 따라가는 중', 10, 50, true],
+        ['점선이 도착 판정 거리보다 짧으면 따로 보지 않는다', 15, 20, false],
+    ] as const)('%s', (_, remainingM, goalGapM, expected) => {
+        expect(onGoalGap(progress(0, remainingM), goalGapM)).toBe(expected);
     });
 });
 

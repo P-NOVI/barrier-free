@@ -9,6 +9,7 @@ import { presetLabel } from '../lib/presets';
 import type { SavedPlace } from '../lib/savedPlacesApi';
 import type { SavedRoute } from '../lib/savedRoutesApi';
 import { MY_LIST_ICONS as ICONS } from '../lib/myListIcons';
+import InstallApp from './InstallApp';
 import MyListRow from './MyListRow';
 import MyPlaces from './MyPlaces';
 import MyReports from './MyReports';
@@ -36,7 +37,7 @@ type MyTabProps = {
     children?: ReactNode;
 };
 
-/** My 탭: 즐겨찾기, 내 장소, 내 경로, 내 제보 */
+/** My 탭: 즐겨찾기, 내 장소, 내 경로, 내 제보, 앱 설치 */
 export default function MyTab({
     savedPlaces,
     savedRoutes,
@@ -134,6 +135,7 @@ export default function MyTab({
                     />
                 )}
             </div>
+            <InstallApp />
             {children}
         </div>
     );

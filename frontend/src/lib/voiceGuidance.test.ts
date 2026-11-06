@@ -69,6 +69,37 @@ describe('announcement', () => {
         expect(arrived?.text).toBe(ARRIVED_TEXT);
         expect(announcement(ahead(5, null), true, announced)).toBeNull();
     });
+
+    it('점선 구간에 들어서면 한 번 알리고, 목적지 미리 알림은 건너뛴다', () => {
+        const announced = new Set<string>();
+        const gap = announcement(ahead(62, null), false, announced, 'entrance');
+        gap?.keys.forEach((key) => announced.add(key));
+
+        expect(gap?.text).toBe(
+            '건물 출입구 앞입니다. 점선을 따라 60미터 더 가면 목적지입니다.',
+        );
+        expect(
+            announcement(ahead(30, null), false, announced, 'entrance'),
+        ).toBeNull();
+        expect(announcement(ahead(30, null), false, announced)).toBeNull();
+        expect(announcement(ahead(10, null), true, announced)?.text).toBe(
+            ARRIVED_TEXT,
+        );
+    });
+
+    it('출입구가 아닌 점선은 길 안내가 끝났다고 알린다', () => {
+        expect(
+            announcement(ahead(40, null), false, new Set(), 'gap')?.text,
+        ).toBe(
+            '길 안내가 끝났습니다. 점선을 따라 40미터 더 가면 목적지입니다.',
+        );
+    });
+
+    it('남은 회전이 있으면 점선 구간 알림보다 회전을 먼저 읽는다', () => {
+        expect(
+            announcement(ahead(10), false, new Set(), 'entrance')?.text,
+        ).toBe('오른쪽으로 가세요.');
+    });
 });
 
 describe('speak', () => {

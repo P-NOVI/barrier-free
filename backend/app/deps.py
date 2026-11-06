@@ -1,6 +1,6 @@
 import logging
 from collections.abc import Callable, Iterator
-from datetime import timedelta
+from datetime import datetime, timedelta
 from functools import cache
 from typing import Annotated
 
@@ -9,6 +9,7 @@ from fastapi import Depends, HTTPException, Request, Response, status
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
+from app.collector.store import collector_engine
 from app.config import Settings, get_settings
 from app.db import get_engine
 from app.models import Report, User, utc_now
@@ -22,10 +23,15 @@ from app.repositories.user_repository import (
     has_social_account,
 )
 from app.services.congestion_service import (
+    KST,
     Reading,
     TtlCache,
     create_sdot_client,
     road_congestion,
+)
+from app.services.forecast_congestion_service import (
+    ForecastCache,
+    forecast_congestion,
 )
 from app.services.oauth_service import create_oauth_client
 from app.services.photo_storage import PhotoStorage, create_photo_storage
@@ -160,6 +166,58 @@ def get_road_congestion(
 
 
 RoadCongestionDep = Annotated[dict[int, float], Depends(get_road_congestion)]
+
+# 경로 요청의 출발 시각에 따라 둘 중 하나만 부른다. 출발 시각을 고르면 S-DoT 를,
+# 지금이면 수집 DB를 부르지 않도록 바로 구하지 않고 함수로 넘긴다.
+RealtimeCongestion = Callable[[], dict[int, float]]
+ForecastCongestion = Callable[[datetime], dict[int, float]]
+
+
+def get_realtime_congestion(
+    graph: GraphDep,
+    settings: SettingsDep,
+    readings: CongestionCacheDep,
+    cache: RoadCongestionCacheDep,
+) -> RealtimeCongestion:
+    """지금(실시간 S-DoT) 길별 혼잡도를 구하는 함수."""
+    return lambda: get_road_congestion(graph, settings, readings, cache)
+
+
+RealtimeCongestionDep = Annotated[RealtimeCongestion, Depends(get_realtime_congestion)]
+
+
+@cache
+def get_forecast_cache() -> ForecastCache:
+    return KeyedTtlCache(get_settings().forecast_cache_ttl_s)
+
+
+ForecastCacheDep = Annotated[ForecastCache, Depends(get_forecast_cache)]
+
+
+def get_forecast_congestion(
+    graph: GraphDep, settings: SettingsDep, cache: ForecastCacheDep
+) -> ForecastCongestion:
+    """시각(한 시간의 시작)의 예측 길별 혼잡도를 구하는 함수.
+
+    수집 DB 주소나 센서 위치 파일이 없으면 빈 값이라, 경로는 1안만 나온다.
+    """
+
+    def levels(slot: datetime) -> dict[int, float]:
+        database_url = settings.collector_database_url.get_secret_value()
+        if not database_url:
+            return {}
+        try:
+            sensors = load_sensors(settings.sensors_path)
+        except FileNotFoundError:
+            return {}
+        engine = collector_engine(database_url, settings.collector_connect_timeout_s)
+        today = datetime.now(KST).date()
+        return forecast_congestion(engine, graph, sensors, settings, slot, today, cache)
+
+    return levels
+
+
+ForecastCongestionDep = Annotated[ForecastCongestion, Depends(get_forecast_congestion)]
 
 
 @cache

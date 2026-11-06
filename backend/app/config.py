@@ -55,6 +55,17 @@ class Settings(BaseSettings):
     congestion_full_count: float = 300.0
     # 센서에서 이 거리 안을 지나는 길에 그 센서의 혼잡도를 붙인다. 초안 값이다.
     congestion_radius_m: float = 50.0
+    # 경로의 '붐비는 길' 길이(busy_m)는 혼잡도가 이 값 이상인 길만 더한다.
+    # 0.5 는 10분 유동인구 150명이다.
+    congestion_busy_level: float = 0.5
+    # 예측 유동인구(명/시간)를 10분 유동인구로 바꿀 때 나누는 값(한 시간의 10분
+    # 구간 수). 그래서 예측도 congestion_full_count 와 같은 기준으로 혼잡도가 된다.
+    forecast_bins_per_hour: int = 6
+    # 출발 시각은 오늘부터 이 날 수 안(모레까지)에서만 고른다. 매일 예측 배치
+    # (ml foot_traffic.daily)가 오늘·내일·모레를 예측한다.
+    route_forecast_days: int = 3
+    # 시각별 예측 혼잡도를 이 시간 동안 들고 있는다. 예측은 하루 한 번 바뀐다.
+    forecast_cache_ttl_s: float = 600.0
     # 경로 탐색에서 뺄 길(승인된 통행 불가 제보)을 이 시간 안에는 다시 읽지 않는다.
     # 승인·만료가 경로에 반영되기까지 최대 이만큼 늦다.
     closed_road_cache_ttl_s: float = 60.0
