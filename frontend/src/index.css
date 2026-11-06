@@ -410,6 +410,33 @@ input::placeholder {
     margin-bottom: 8px;
 }
 
+/* My 탭 아래 앱 설치(홈 화면에 추가) */
+.install-app {
+    margin-top: 16px;
+    padding-top: 4px;
+    border-top: 1px solid var(--border);
+}
+
+.install-app__text {
+    margin: 8px 0 0;
+    font-size: 14px;
+    line-height: 1.5;
+    color: var(--text);
+}
+
+.install-app__button {
+    width: 100%;
+    height: 44px;
+    margin-top: 8px;
+    border: 0;
+    border-radius: 10px;
+    font: inherit;
+    font-weight: 600;
+    color: #fff;
+    background: var(--brand);
+    cursor: pointer;
+}
+
 /* My 탭 목록: 동그란 아이콘, 이름, 작은 글씨 설명 */
 .my-list {
     margin: 0;
