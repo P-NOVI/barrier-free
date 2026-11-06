@@ -33,12 +33,13 @@ export type ReportRequest = {
     description?: string;
 };
 
-export type ReportStatus = 'pending' | 'approved' | 'rejected';
+export type ReportStatus = 'pending' | 'approved' | 'resolved' | 'rejected';
 
 export const REPORT_STATUS_LABELS: Record<ReportStatus, string> = {
     pending: '검토 중',
     approved: '승인됨',
-    rejected: '반려됨',
+    resolved: '해결됨',
+    rejected: '취소됨',
 };
 
 /** 위치와 사진은 고칠 수 없다. 보낸 항목만 바뀐다. */

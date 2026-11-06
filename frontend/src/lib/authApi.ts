@@ -14,6 +14,8 @@ export type Session = {
     is_guest: boolean;
     providers: Provider[];
     preset: string;
+    /** 관리자 계정이면 true. 관리자 화면(/admin)을 열 수 있다. */
+    is_admin: boolean;
 };
 
 /** 쿠키의 사용자. 쿠키가 없어도 게스트를 만들지 않는다. */
