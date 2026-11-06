@@ -2340,3 +2340,17 @@ input::placeholder {
         flex: none;
     }
 }
+
+/* 도착 후 리뷰: 제보 하나당 카드 */
+.review-card {
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--border);
+}
+
+.review-card__comment {
+    margin-top: 8px;
+}
+
+.review-card .report-form__actions {
+    margin-top: 8px;
+}

@@ -1,7 +1,11 @@
+import { useState } from 'react';
+
 import type { NavigationState } from '../hooks/useNavigation';
 import type { RouteState } from '../hooks/useRoute';
 import { formatDistance } from '../lib/format';
+import type { RouteReport } from '../lib/routeApi';
 import { DIRECTION_LABELS, type Turn } from '../lib/turns';
+import ReviewPrompt from './ReviewPrompt';
 
 type NavigationPanelProps = {
     route: RouteState;
@@ -47,6 +51,14 @@ function notice(route: RouteState, navigation: NavigationState): Notice | null {
         default:
             return null;
     }
+}
+
+/** 지금 경로가 지나는 승인된 제보. 경로를 다시 찾는 동안에는 바로 전 경로의 것 */
+function routeReports(route: RouteState): RouteReport[] {
+    if (route.status === 'success') {
+        return route.route.reports;
+    }
+    return route.status === 'loading' ? (route.previous?.reports ?? []) : [];
 }
 
 /** 다음 회전 방향 화살표. 회전이 더 없으면 도착 깃발 */
@@ -100,6 +112,16 @@ export default function NavigationPanel({
 }: NavigationPanelProps) {
     const message = notice(route, navigation);
     const { progress, next, judgement } = navigation;
+    // 도착한 순간의 제보를 붙들어 둔다. 위치 오차로 판정이 흔들려도 입력하던 창이 닫히지 않게.
+    const [reviewReports, setReviewReports] = useState<RouteReport[] | null>(
+        null,
+    );
+    if (judgement === 'arrived' && reviewReports === null) {
+        const reports = routeReports(route);
+        if (reports.length > 0) {
+            setReviewReports(reports);
+        }
+    }
 
     return (
         <section
@@ -160,6 +182,9 @@ export default function NavigationPanel({
                     지도를 움직여 따라가기를 멈췄습니다. 내 위치 버튼을 누르면
                     다시 따라갑니다.
                 </p>
+            )}
+            {reviewReports && (
+                <ReviewPrompt reports={reviewReports} onClose={onStop} />
             )}
         </section>
     );

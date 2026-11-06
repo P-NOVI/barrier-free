@@ -50,6 +50,15 @@ def no_real_closed_roads(monkeypatch: pytest.MonkeyPatch) -> None:
     deps.get_closed_road_cache().entry = None
 
 
+@pytest.fixture(autouse=True)
+def no_real_route_reports(monkeypatch: pytest.MonkeyPatch) -> None:
+    """backend/.env 의 DB에서 경로가 지나는 제보를 읽지 않게 한다.
+
+    제보를 쓰는 테스트는 get_report_finder 를 따로 덮어쓴다.
+    """
+    monkeypatch.setattr(deps, "list_reviewable_reports", lambda *args: [])
+
+
 @pytest.fixture(scope="session")
 def sample_graph() -> Graph:
     return build_graph(json.loads(SAMPLE_GRAPH.read_text(encoding="utf-8")))
