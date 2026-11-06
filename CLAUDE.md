@@ -35,6 +35,8 @@
 | `ml/` | 검증 (walk-forward · 최종 테스트) | `uv run python -m foot_traffic.walk_forward` · `--skip-final` · `--final-only` |
 | `ml/` | 서비스 모델 학습 · 공유 폴더 저장 (검증 후) | `uv run python -m foot_traffic.train` |
 | `ml/` | 예측 (실측 없는 날, 학습 불필요) | `uv run python -m foot_traffic.forecast --sensor 4015 --date 2026-10-27` |
+| `ml/` | 매일 예측 배치 (학습셋 갱신 뒤, 수집 DB에 저장) | `uv run python -m foot_traffic.daily` · `--date 2026-11-06` |
+| `ml/` | 배치 입력 파일을 Storage에 올리기 · 받기 | `uv run python -m foot_traffic.storage upload` · `download --dest 폴더` |
 | `ml/` | 실측과 비교 (표 · 그래프 PNG) | `uv run python -m foot_traffic.predict --sensor 4015 --date 2026-10-17` |
 | `ml/` | 테스트 | `uv run pytest` |
 | `ml/` | 린트 · 포맷 | `uv run ruff check .` · `uv run ruff format .` |

@@ -76,8 +76,10 @@ class Settings(BaseSettings):
     # 실황은 지난 이 시간 안에서 DB에 없는 정시만 받는다. 기상청은 24시간 안만 준다.
     collector_backfill_hours: int = 12
     # 하루치 예보: 이 시(KST) 단기예보 발표분을 받아 발표 뒤 이 시간만큼 저장한다.
+    # 67시간은 05시 발표부터 모레 24시까지다. 유동인구 예측(ml foot_traffic.daily)이
+    # 오늘·내일·모레 날씨로 쓴다.
     collector_daily_issue_hour: int = 5
-    collector_daily_hours: int = 24
+    collector_daily_hours: int = 67
     # 자치구 날씨 위치(센서 위치 평균)는 지난 이 기간에 모은 센서·자치구 짝으로 구한다.
     # 유동인구는 하루 한 번 받으므로, 그 실행이 며칠 빠져도 날씨가 멈추지 않게
     # 넉넉히 둔다.

@@ -145,3 +145,32 @@ walk_forward:
       hour_to: 23
       post: ["2025-11-01", "2026-06-01"]
       min_rows: 30
+
+# 매일 예측 배치(`python -m foot_traffic.daily`). 오늘·내일·모레를 예측해 수집 DB
+# (ml/.env 의 COLLECTOR_DATABASE_URL)의 foot_traffic_forecasts 에 저장한다.
+daily:
+  # 배치 날부터 이만큼의 날을 예측한다. 이력이 전날까지 있으면 recent_level.gap_days(3)
+  # 조건으로 모레까지 예측할 수 있다.
+  days: 3
+  # 배치 날 전 이 기간 안에 학습셋 행이 있는 센서만 예측한다(끊긴 센서는 뺀다).
+  active_days: 3
+  # 이 기간이 지난 예측(issued_on 기준)은 지운다.
+  retention_days: 90
+  # 수집 DB weather_daily 의 이 시(KST) 발표분을 쓴다(backend collector_daily_issue_hour).
+  weather_issue_hour: 5
+  timezone: Asia/Seoul
+  connect_timeout_s: 10
+
+# 매일 배치(GitHub Actions)가 읽는 파일을 둘 Supabase Storage 버킷(`python -m
+# foot_traffic.storage`). 버킷 안 경로는 DATA_DIR 기준 상대경로와 같다. 학습셋(13 단계
+# 결과)은 배치가 매일 다시 만들므로 올리지 않는다.
+storage:
+  bucket: foot-traffic
+  files:
+    - interim/sdot/history.parquet
+    - interim/weather/hourly.parquet
+    - interim/calendar/daily.parquet
+    - models/foot_traffic_serve/foot_traffic_model.txt
+    - models/foot_traffic_serve/foot_traffic_meta.json
+  # Supabase 무료 플랜의 파일당 최대 크기
+  max_file_mb: 50

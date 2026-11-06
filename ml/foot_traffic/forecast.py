@@ -106,6 +106,23 @@ def calendar_row(calendar_path: Path, day: np.datetime64) -> dict[str, float]:
     return {name: float(table[name][row].as_py()) for name in CALENDAR_COLUMNS}
 
 
+def sensor_weather(
+    values: np.ndarray | None, sensor_count: int, name: str
+) -> np.ndarray:
+    """날씨 값을 (센서 수, 24) 로 맞춘다. None 이면 모두 NaN."""
+    if values is None:
+        return np.full((sensor_count, HOURS_PER_DAY), np.nan)
+    array = np.asarray(values, dtype=np.float64)
+    if array.shape == (HOURS_PER_DAY,):
+        return np.tile(array, (sensor_count, 1))
+    if array.shape == (sensor_count, HOURS_PER_DAY):
+        return array
+    raise ValueError(
+        f"{name} 은 ({HOURS_PER_DAY},) 또는 (센서 수 {sensor_count}, {HOURS_PER_DAY}) "
+        f"모양이어야 합니다(받은 모양 {array.shape})."
+    )
+
+
 def future_rows(
     columns: Columns,
     calendar_path: Path,
@@ -116,21 +133,18 @@ def future_rows(
 ) -> Columns:
     """실측이 없는 날의 센서별 24시간 행(foot_traffic 은 NaN).
 
-    temp·rain_mm 은 시각별(24개) 값이고 모든 센서에 같게 넣는다. 없으면 NaN 이다.
+    temp·rain_mm 은 시각별(24개) 값이다. 모양이 (24,) 이면 모든 센서에 같게, (센서 수,
+    24) 이면 sensors 순서대로 센서마다 넣는다. 없으면 NaN 이다. h 번째 값은 h 시에
+    시작하는 한 시간 행에 붙는다. 학습셋(13 단계)은 이 행에 h+1 시 정시 날씨를 붙였다.
     """
     calendar = calendar_row(calendar_path, day)
     hours = np.arange(HOURS_PER_DAY)
     weather = {
-        "temp": np.full(HOURS_PER_DAY, np.nan) if temp is None else np.asarray(temp),
-        "rain_mm": np.full(HOURS_PER_DAY, np.nan)
-        if rain_mm is None
-        else np.asarray(rain_mm),
+        "temp": sensor_weather(temp, len(sensors), "temp"),
+        "rain_mm": sensor_weather(rain_mm, len(sensors), "rain_mm"),
     }
-    for name, values in weather.items():
-        if values.shape != (HOURS_PER_DAY,):
-            raise ValueError(f"{name} 은 시각별 {HOURS_PER_DAY}개 값이어야 합니다.")
     parts: list[Columns] = []
-    for sensor in sensors:
+    for index, sensor in enumerate(sensors):
         own = np.flatnonzero(columns["sensor_code"] == sensor)
         if own.size == 0:
             raise ValueError(f"학습셋에 센서 {sensor} 가 없습니다.")
@@ -150,7 +164,7 @@ def future_rows(
         )
         rows["hour_of_day"] = hours.astype(columns["hour_of_day"].dtype)
         for name in ("temp", "rain_mm"):
-            rows[name] = weather[name].astype(columns[name].dtype)
+            rows[name] = weather[name][index].astype(columns[name].dtype)
         for name, value in calendar.items():
             rows[name] = np.full(HOURS_PER_DAY, value, dtype=columns[name].dtype)
         rows["foot_traffic"] = np.full(

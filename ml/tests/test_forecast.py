@@ -203,3 +203,35 @@ def test_config_for_model_takes_preprocessing_from_meta(calendar_path: Path) -> 
         == meta["recent_level"]["gap_days"]
     )
     assert walk_forward.feature_groups(merged) == meta["feature_groups"]
+
+
+def test_future_rows_take_weather_per_sensor(calendar_path: Path) -> None:
+    columns, _, _, _ = service(calendar_path)
+    day = TRAIN_END + 2 * DAY
+    temp = np.stack([np.full(HOURS_PER_DAY, 5.0), np.arange(HOURS_PER_DAY) * 1.0])
+    rows = forecast.future_rows(columns, calendar_path, [1, 3], day, temp=temp)
+    first = rows["sensor_code"] == 1
+    assert np.allclose(rows["temp"][first], 5.0)
+    assert np.allclose(rows["temp"][~first], np.arange(HOURS_PER_DAY))
+    assert np.isnan(rows["rain_mm"]).all()
+
+
+def test_future_rows_spread_one_day_of_weather_to_all_sensors(
+    calendar_path: Path,
+) -> None:
+    columns, _, _, _ = service(calendar_path)
+    day = TRAIN_END + 2 * DAY
+    rain = np.arange(HOURS_PER_DAY) * 0.5
+    rows = forecast.future_rows(columns, calendar_path, [1, 3], day, rain_mm=rain)
+    for sensor in (1, 3):
+        own = rows["sensor_code"] == sensor
+        assert np.allclose(rows["rain_mm"][own], rain)
+
+
+def test_future_rows_refuse_wrong_weather_shape(calendar_path: Path) -> None:
+    columns, _, _, _ = service(calendar_path)
+    day = TRAIN_END + 2 * DAY
+    with pytest.raises(ValueError, match="모양"):
+        forecast.future_rows(
+            columns, calendar_path, [1, 3], day, temp=np.zeros((3, HOURS_PER_DAY))
+        )
