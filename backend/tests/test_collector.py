@@ -1,5 +1,9 @@
+import json
+import sqlite3
 from collections.abc import Iterator
+from contextlib import closing
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import Any
 
 import httpx
@@ -8,8 +12,10 @@ from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
+from app.collector import __main__ as collector_main
+from app.collector.import_sqlite import import_rows
 from app.collector.models import CollectorBase, SdotReading, WeatherDaily, WeatherNow
-from app.collector.sdot import collect_sdot, to_record
+from app.collector.sdot import PageLimitError, collect_sdot, to_record
 from app.collector.weather import (
     collect_weather_daily,
     collect_weather_now,
@@ -96,7 +102,20 @@ def test_to_record_skips_broken_row() -> None:
     assert to_record({"SERIAL": "1"}, NOW) is None
 
 
-def test_collect_sdot_pages_and_skips_stored_rows(session: Session) -> None:
+def sdot_client(
+    settings: Settings, pages: dict[str, list[dict[str, str]]], requested: list[str]
+) -> httpx.Client:
+    """쪽 주소(/시작/끝/)별로 정해 둔 행을 주는 S-DoT 클라이언트."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        tail = request.url.path.split(SERVICE_NAME)[1]
+        requested.append(tail)
+        return httpx.Response(200, json=sdot_page(pages[tail]))
+
+    return create_sdot_client(settings, httpx.MockTransport(handler))
+
+
+def test_collect_sdot_first_run_takes_latest_rows(session: Session) -> None:
     pages = {
         "/1/2/": [
             sdot_row("1", "2026-11-03_20:10:00"),
@@ -106,18 +125,115 @@ def test_collect_sdot_pages_and_skips_stored_rows(session: Session) -> None:
         "/3/3/": [sdot_row("2", "2026-11-03_20:10:00")],
     }
     requested: list[str] = []
-
-    def handler(request: httpx.Request) -> httpx.Response:
-        tail = request.url.path.split(SERVICE_NAME)[1]
-        requested.append(tail)
-        return httpx.Response(200, json=sdot_page(pages[tail]))
-
     settings = Settings(sdot_api_key="k", sdot_page_size=2, collector_sdot_rows=3)
-    with create_sdot_client(settings, httpx.MockTransport(handler)) as client:
+    with sdot_client(settings, pages, requested) as client:
         assert collect_sdot(session, client, settings, NOW) == 2
-        assert collect_sdot(session, client, settings, NOW) == 0
 
-    assert requested == ["/1/2/", "/3/3/"] * 2
+    assert requested == ["/1/2/", "/3/3/"]
+    assert session.scalars(select(SdotReading.sensor_code)).all() == [1, 2]
+
+
+def test_collect_sdot_resumes_from_latest_stored(session: Session) -> None:
+    session.add(reading(1, "Jung-gu", datetime(2026, 11, 3, 18, tzinfo=KST)))
+    session.commit()
+    # 이어 받을 지점은 18:00 - 60분 = 17:00. 그보다 이른 16:50 이 나오면 멈춘다.
+    pages = {
+        "/1/2/": [
+            sdot_row("1", "2026-11-03_20:10:00"),
+            sdot_row("1", "2026-11-03_19:00:00"),
+        ],
+        "/3/4/": [
+            sdot_row("1", "2026-11-03_18:00:00"),
+            sdot_row("1", "2026-11-03_16:50:00"),
+        ],
+    }
+    requested: list[str] = []
+    settings = Settings(
+        sdot_api_key="k", sdot_page_size=2, collector_sdot_overlap_minutes=60
+    )
+    with sdot_client(settings, pages, requested) as client:
+        assert collect_sdot(session, client, settings, NOW) == 3
+
+    assert requested == ["/1/2/", "/3/4/"]
+
+
+def test_collect_sdot_page_limit_inserts_nothing(session: Session) -> None:
+    session.add(reading(1, "Jung-gu", datetime(2026, 11, 3, 10, tzinfo=KST)))
+    session.commit()
+    pages = {
+        "/1/2/": [
+            sdot_row("1", "2026-11-03_20:10:00"),
+            sdot_row("1", "2026-11-03_20:00:00"),
+        ]
+    }
+    settings = Settings(sdot_api_key="k", sdot_page_size=2, collector_sdot_max_pages=1)
+    with sdot_client(settings, pages, []) as client:
+        with pytest.raises(PageLimitError):
+            collect_sdot(session, client, settings, NOW)
+
+    assert len(session.scalars(select(SdotReading)).all()) == 1
+
+
+def test_collect_sdot_warns_when_api_ends_early(
+    session: Session, capsys: pytest.CaptureFixture[str]
+) -> None:
+    session.add(reading(1, "Jung-gu", datetime(2026, 11, 3, 10, tzinfo=KST)))
+    session.commit()
+    # 쪽이 덜 찼는데 이어 받을 지점(09:00)에 닿지 못했다. 받은 만큼은 넣는다.
+    pages = {"/1/2/": [sdot_row("1", "2026-11-03_20:10:00")]}
+    settings = Settings(sdot_api_key="k", sdot_page_size=2)
+    with sdot_client(settings, pages, []) as client:
+        assert collect_sdot(session, client, settings, NOW) == 1
+
+    assert "빈 구간" in capsys.readouterr().out
+
+
+# --- 작업 고르기 ---
+
+
+def test_collect_runs_only_chosen_job(
+    session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    called: list[str] = []
+    monkeypatch.setattr(
+        collector_main, "collect_sdot", lambda *_: called.append("sdot") or 0
+    )
+    monkeypatch.setattr(collector_main, "district_grids", lambda *_: {})
+    monkeypatch.setattr(
+        collector_main, "collect_weather_now", lambda *_: called.append("now") or 0
+    )
+    monkeypatch.setattr(
+        collector_main, "collect_weather_daily", lambda *_: called.append("daily") or 0
+    )
+    settings = Settings(sdot_api_key="k", kma_api_key="k")
+
+    assert collector_main.collect(session, settings, NOW, ("sdot",))
+    assert called == ["sdot"]
+    called.clear()
+    assert collector_main.collect(session, settings, NOW, ("weather",))
+    assert called == ["now", "daily"]
+
+
+# --- 로컬 SQLite 옮기기 ---
+
+
+def test_import_rows_from_local_sqlite(session: Session, tmp_path: Path) -> None:
+    source = tmp_path / "local.db"
+    with closing(sqlite3.connect(source)) as conn:
+        conn.execute("CREATE TABLE sdot_readings (raw TEXT, collected_at TEXT)")
+        conn.executemany(
+            "INSERT INTO sdot_readings VALUES (?, ?)",
+            [
+                (json.dumps(sdot_row("1", "2026-11-03_20:10:00")), NOW.isoformat()),
+                (json.dumps(sdot_row("2", "2026-11-03_20:10:00")), NOW.isoformat()),
+                (json.dumps({"SERIAL": "x"}), NOW.isoformat()),
+                ("깨진 JSON", NOW.isoformat()),
+            ],
+        )
+        conn.commit()
+
+    assert import_rows(session, source, size=1) == 2
+    assert import_rows(session, source) == 0
     assert session.scalars(select(SdotReading.sensor_code)).all() == [1, 2]
 
 
