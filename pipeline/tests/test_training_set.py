@@ -7,6 +7,7 @@ import pyarrow as pa
 import pytest
 
 STEPS = Path(__file__).resolve().parents[1] / "steps"
+BINS_PER_HOUR = 6
 
 
 def load_step(filename: str):
@@ -45,18 +46,94 @@ def history_table(times: list[str], counts: list[int]) -> pa.Table:
     )
 
 
-def test_aggregate_hourly_averages_and_drops_short_hours() -> None:
+def test_aggregate_hourly_sums_to_people_per_hour_and_drops_short_hours() -> None:
     full = [f"2024-01-01T00:{m:02d}" for m in (10, 20, 30, 40, 50)] + [
         "2024-01-01T01:00"
     ]
     short = ["2024-01-01T01:10", "2024-01-01T01:20", "2024-01-01T01:30"]
     table, dropped = training.aggregate_hourly(
-        history_table(full + short, [10, 20, 30, 40, 50, 60, 5, 5, 5]), min_bins=4
+        history_table(full + short, [10, 20, 30, 40, 50, 60, 5, 5, 5]),
+        min_bins=4,
+        bins_per_hour=BINS_PER_HOUR,
     )
     assert dropped == 1
     assert table["hour_end"].to_pylist() == [datetime(2024, 1, 1, 1)]
-    assert table["visitor_mean"].to_pylist() == [35.0]
+    # 10분 값 6개의 합 = 평균 35 × 6
+    assert table["foot_traffic"].to_pylist() == [210.0]
     assert table["bins"].to_pylist() == [6]
+
+
+def test_missing_bins_are_scaled_to_a_full_hour() -> None:
+    times = [f"2024-01-01T00:{m:02d}" for m in (10, 20, 30, 40)]
+    table, _ = training.aggregate_hourly(
+        history_table(times, [10, 10, 20, 20]), 4, BINS_PER_HOUR
+    )
+    # 4개 평균 15 × 6
+    assert table["foot_traffic"].to_pylist() == [90.0]
+
+
+BREAK_CONFIG = {
+    "break_date": "2025-09-01",
+    "before": ["2025-03-01", "2025-08-01"],
+    "after": ["2025-10-01", "2026-06-01"],
+    "hour_from": 9,
+    "hour_to": 14,
+    "min_rows": 3,
+    "drop_ratio": 0.7,
+    "rise_ratio": 1.3,
+}
+
+
+def traffic_table(rows: list[tuple[int, str, float]]) -> pa.Table:
+    """(센서, 구간 시작 시각, 유동인구) → 13단계 hourly 표(hour_end 는 한 시간 뒤)."""
+    starts = np.array([r[1] for r in rows], dtype="datetime64[s]")
+    return pa.table(
+        {
+            "sensor_code": pa.array([r[0] for r in rows], type=pa.int32()),
+            "hour_end": pa.array(
+                starts + np.timedelta64(1, "h"), type=pa.timestamp("s")
+            ),
+            "foot_traffic": pa.array([r[2] for r in rows], type=pa.float32()),
+        }
+    )
+
+
+def level_break_rows() -> list[tuple[int, str, float]]:
+    rows = []
+    for day in range(1, 6):
+        before, after = f"2025-04-0{day}T10:00", f"2025-11-0{day}T10:00"
+        rows += [(1, before, 2000.0), (1, after, 1000.0)]  # 절반으로 하락
+        rows += [(2, before, 2000.0), (2, after, 1900.0)]  # 거의 그대로
+        rows += [(4, before, 1000.0), (4, after, 1500.0)]  # 1.5배 상승
+    rows.append((1, "2025-08-20T10:00", 500.0))  # 단절 구간의 불안정한 값
+    rows.append((3, "2025-04-01T10:00", 2000.0))  # 이후 구간 행이 모자란 센서
+    rows.append((3, "2025-11-01T10:00", 100.0))
+    return rows
+
+
+def test_level_ratios_use_daytime_windows_and_min_rows() -> None:
+    ratios = training.level_ratios(traffic_table(level_break_rows()), BREAK_CONFIG)
+    assert ratios == {1: 0.5, 2: 0.95, 4: 1.5}  # 센서 3 은 행이 모자라 비교하지 않는다.
+
+
+def test_level_ratios_ignore_night_hours() -> None:
+    rows = [(1, f"2025-04-0{d}T02:00", 5000.0) for d in range(1, 6)]
+    rows += [(1, f"2025-11-0{d}T02:00", 10.0) for d in range(1, 6)]
+    assert training.level_ratios(traffic_table(rows), BREAK_CONFIG) == {}
+
+
+def test_drop_before_level_break_only_for_dropped_sensors() -> None:
+    hourly = traffic_table(level_break_rows())
+    ratios = training.level_ratios(hourly, BREAK_CONFIG)
+    kept, flagged, dropped = training.drop_before_level_break(
+        hourly, ratios, BREAK_CONFIG
+    )
+    assert flagged == [1]
+    # 센서 1 의 이전 구간 5행과 단절 구간 1행
+    assert dropped == 6
+    assert kept.num_rows == hourly.num_rows - 6
+    sensor_1 = kept.filter(pa.array(kept["sensor_code"].to_numpy() == 1))
+    assert set(sensor_1["foot_traffic"].to_pylist()) == {1000.0}
 
 
 def test_keep_majority_district_drops_other_district_rows() -> None:
@@ -76,28 +153,13 @@ def test_keep_majority_district_drops_other_district_rows() -> None:
 
 def test_zero_counts_stay_zero() -> None:
     times = [f"2024-01-01T00:{m:02d}" for m in (10, 20, 30, 40)]
-    table, _ = training.aggregate_hourly(history_table(times, [0, 0, 0, 0]), 4)
-    assert table["visitor_mean"].to_pylist() == [0.0]
-
-
-def test_sensor_scales_use_train_period_only() -> None:
-    codes = np.array([1, 1, 1, 1, 2, 2])
-    slots = stamps(
-        "2024-01-01T10:00",
-        "2024-01-02T10:00",
-        "2024-01-02T11:00",
-        "2026-08-01T10:00",  # 학습 기간 밖: 기준값에 들어가지 않는다.
-        "2024-01-01T10:00",
-        "2024-01-01T11:00",
-    ).astype("datetime64[s]")
-    means = np.array([0.0, 10.0, 20.0, 1000.0, 3.0, 5.0], dtype=np.float32)
-    scales = training.sensor_scales(
-        codes, slots, means, "2024-01-01", "2026-07-31", quantile=0.5
+    table, _ = training.aggregate_hourly(
+        history_table(times, [0, 0, 0, 0]), 4, BINS_PER_HOUR
     )
-    assert scales == {1: 10.0, 2: 4.0}
+    assert table["foot_traffic"].to_pylist() == [0.0]
 
 
-def test_build_training_set_joins_and_normalizes() -> None:
+def test_build_training_set_joins_without_normalizing() -> None:
     hourly = pa.table(
         {
             "sensor_code": pa.array([1, 1], type=pa.int32()),
@@ -108,7 +170,7 @@ def test_build_training_set_joins_and_normalizes() -> None:
                 ),
                 type=pa.timestamp("s"),
             ),
-            "visitor_mean": pa.array([5.0, 30.0], type=pa.float32()),
+            "foot_traffic": pa.array([50.0, 300.0], type=pa.float32()),
         }
     )
     weather = pa.table(
@@ -136,7 +198,6 @@ def test_build_training_set_joins_and_normalizes() -> None:
     )
     table = training.build_training_set(
         hourly,
-        {1: 10.0},
         {1: "Gangnam-gu"},
         {1: (127.0, 37.5)},
         weather,
@@ -150,11 +211,12 @@ def test_build_training_set_joins_and_normalizes() -> None:
     assert first["hour_of_day"] == 23
     assert first["is_holiday"] is False
     assert first["rain_mm"] == 0.0 and first["temp"] == -3.0
-    assert first["congestion"] == 0.5
-    # 둘째 행은 slot_start 가 01-01 00시, 비 1.5mm, 30/10 은 1 로 자른다.
+    # 유동인구는 센서 값 그대로다.
+    assert first["foot_traffic"] == 50.0
+    # 둘째 행은 slot_start 가 01-01 00시, 비 1.5mm
     assert second["is_holiday"] is True
     assert second["rain_mm"] == 1.5
-    assert second["congestion"] == 1.0
+    assert second["foot_traffic"] == 300.0
     assert second["district"] == "Gangnam-gu"
 
 
@@ -221,21 +283,20 @@ def test_add_subway_uses_last_year_and_fills_zero_or_null() -> None:
                 type=pa.timestamp("s"),
             ),
             "hour_of_day": pa.array([8, 10, 8, 8], type=pa.int8()),
-            "visitor_mean": pa.array([1.0, 2.0, 3.0, 4.0], type=pa.float32()),
-            "congestion": pa.array([0.1, 0.2, 0.3, 0.4], type=pa.float32()),
+            "foot_traffic": pa.array([10.0, 20.0, 30.0, 40.0], type=pa.float32()),
         }
     )
     out = training.add_subway(
         table, training.subway_features(near, daily), ["2023-02", "2023-03"], 12
     )
+    # 원래 열 뒤에 승하차 열을 붙인다.
     assert out.column_names == [
         "sensor_code",
         "slot_start",
         "hour_of_day",
+        "foot_traffic",
         "subway_boardings",
         "subway_alightings",
-        "visitor_mean",
-        "congestion",
     ]
     rows = [
         (r["sensor_code"], r["hour_of_day"], r["subway_boardings"])

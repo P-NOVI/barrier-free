@@ -28,6 +28,13 @@
 | `pipeline/` | 전체 실행 (결과 있는 단계는 건너뜀) | `uv run python steps/run_all.py` · `--from 02` · `--force` |
 | `pipeline/` | 테스트 | `uv run pytest` |
 | `pipeline/` | 린트 · 포맷 | `uv run ruff check .` · `uv run ruff format .` |
+| `ml/` | 설치 | `uv sync` |
+| `ml/` | 검증 (walk-forward · 최종 테스트) | `uv run python -m foot_traffic.walk_forward` · `--skip-final` · `--final-only` |
+| `ml/` | 서비스 모델 학습 · 공유 폴더 저장 (검증 후) | `uv run python -m foot_traffic.train` |
+| `ml/` | 예측 (실측 없는 날, 학습 불필요) | `uv run python -m foot_traffic.forecast --sensor 4015 --date 2026-10-27` |
+| `ml/` | 실측과 비교 (표 · 그래프 PNG) | `uv run python -m foot_traffic.predict --sensor 4015 --date 2026-10-17` |
+| `ml/` | 테스트 | `uv run pytest` |
+| `ml/` | 린트 · 포맷 | `uv run ruff check .` · `uv run ruff format .` |
 
 - Python 도구는 uv + ruff + pytest로 통일한다. pip, poetry, black은 쓰지 않는다.
 - 프론트 도구는 npm + ESLint + Prettier + Vitest로 통일한다. yarn, pnpm은 쓰지 않는다.
