@@ -1,6 +1,6 @@
 import numpy as np
 
-from foot_traffic import baseline, data, metrics, predict, train
+from foot_traffic import baseline, data, metrics, predict, walk_forward
 
 CONFIG = {
     "temp_bin_c": 5,
@@ -25,29 +25,6 @@ def test_temp_bin_floors_toward_cold() -> None:
     got = data.temp_bin(temp, 5)
     assert got[:-1].tolist() == [-1, 0, 0, 1]
     assert np.isnan(got[-1])
-
-
-def test_split_masks_include_test_end_day() -> None:
-    slots = np.array(
-        [
-            "2026-05-31T23:00",
-            "2026-06-01T00:00",
-            "2026-07-31T23:00",
-            "2026-08-01T00:00",
-            "2026-10-25T23:00",
-            "2026-10-26T00:00",
-        ],
-        dtype="datetime64[s]",
-    )
-    split = {
-        "valid_start": "2026-06-01",
-        "test_start": "2026-08-01",
-        "test_end": "2026-10-25",
-    }
-    masks = data.split_masks(slots, split)
-    assert masks["train"].tolist() == [True, False, False, False, False, False]
-    assert masks["valid"].tolist() == [False, True, True, False, False, False]
-    assert masks["test"].tolist() == [False, False, False, True, True, False]
 
 
 def test_build_features_maps_categories_and_selects_groups() -> None:
@@ -174,25 +151,14 @@ def test_train_model_accepts_sample_weights() -> None:
         "early_stopping_rounds": 5,
         "seed": 1,
     }
-    booster = train.train_model(
+    booster = walk_forward.train_model(
         "regression_l1", (x, y, ref), (x, y, ref), ["hour_of_day"], [], config
     )
-    pred = train.predict(booster, x)
+    pred = walk_forward.predict(booster, x)
     # 가중치가 큰 행은 잘 맞추고, 가중치가 작은 행은 덜 맞춘다.
     heavy = ref > 100
     assert metrics.mae(y[heavy], pred[heavy]) < 0.05
     assert metrics.mae(y[~heavy], pred[~heavy]) > metrics.mae(y[heavy], pred[heavy])
-
-
-def test_pick_reference_uses_validation_mae_of_the_stronger_baseline() -> None:
-    base = {
-        "median": {"valid": {"mae": 107.8}, "test": {"mae": 90.0}},
-        "mean": {"valid": {"mae": 102.0}, "test": {"mae": 120.0}},
-    }
-    # 테스트 값이 아니라 검증 값으로 고른다.
-    assert train.pick_reference(base) == "mean"
-    base["median"]["valid"]["mae"] = 99.0
-    assert train.pick_reference(base) == "median"
 
 
 def test_error_rate_is_independent_of_sensor_scale() -> None:
@@ -219,47 +185,6 @@ def test_grouped_mae() -> None:
         "baseline_bias": -50.0,
     }
     assert got["b"]["model_mae"] == 0.0 and got["b"]["baseline_error_rate"] == 1.0
-
-
-def test_level_breakdown_splits_by_actual_size_and_reports_bias() -> None:
-    y = np.array([50.0, 150.0, 600.0, 1500.0, 3000.0])
-    pred = np.array([40.0, 150.0, 500.0, 1400.0, 2700.0])  # 큰 값은 적게 예측
-    base = np.array([50.0, 150.0, 600.0, 1500.0, 3000.0])
-    got = train.level_breakdown(y, y, pred, base, [0, 100, 1000], top_quantile=0.8)
-    assert list(got["bins"]) == ["0~100", "100~1000", "1000+"]
-    assert got["bins"]["0~100"]["model_bias"] == -10.0
-    assert got["bins"]["1000+"]["rows"] == 2
-    assert got["bins"]["1000+"]["model_bias"] == -200.0  # (-100 + -300) / 2
-    assert got["bins"]["1000+"]["baseline_bias"] == 0.0
-    # 상위 20% 는 가장 큰 값 하나(3000)
-    assert got["top"]["rows"] == 1 and got["top"]["model_bias"] == -300.0
-
-
-def test_level_breakdown_by_prediction_exposes_regression_to_the_mean() -> None:
-    # 예측은 항상 정확한 평균(100)이고 실제는 평균 둘레로 흩어진다.
-    y = np.array([60.0, 80.0, 100.0, 120.0, 140.0])
-    pred = np.full(5, 100.0)
-    base = pred.copy()
-    by_actual = train.level_breakdown(y, y, pred, base, [0, 110], top_quantile=0.6)
-    by_pred = train.level_breakdown(pred, y, pred, base, [0, 110], top_quantile=0.6)
-    # 실제 값으로 묶으면 큰 쪽은 적게, 작은 쪽은 많이 예측한 것처럼 보인다.
-    assert (
-        by_actual["bins"]["110+"]["model_bias"]
-        < 0
-        < by_actual["bins"]["0~110"]["model_bias"]
-    )
-    # 예측 값으로 묶으면 편향이 없다.
-    assert by_pred["bins"]["0~110"]["model_bias"] == 0.0
-
-
-def test_day_type_and_rain_kind() -> None:
-    part = {
-        "is_holiday": np.array([1, 0, 0], dtype=np.float32),
-        "is_off_day": np.array([1, 1, 0], dtype=np.float32),
-        "rain_mm": np.array([0.0, 2.0, np.nan], dtype=np.float32),
-    }
-    assert train.day_type(part).tolist() == ["holiday", "weekend", "weekday"]
-    assert train.rain_kind(part).tolist() == ["no_rain", "rain", "unknown"]
 
 
 def day_part() -> dict:
@@ -322,9 +247,9 @@ def test_train_model_learns_simple_pattern() -> None:
         "early_stopping_rounds": 5,
         "seed": 1,
     }
-    booster = train.train_model(
+    booster = walk_forward.train_model(
         "regression_l2", (x, y, None), (x, y, None), ["hour_of_day"], [], config
     )
-    pred = train.predict(booster, x)
+    pred = walk_forward.predict(booster, x)
     assert metrics.mae(y, pred) < 0.05
     assert pred.min() >= 0.0

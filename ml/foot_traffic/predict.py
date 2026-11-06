@@ -1,35 +1,24 @@
-"""하루 예측을 직접 확인한다: 센서와 날짜를 넣으면 시간대별 예측을 표와 그래프로 본다.
+"""실측이 있는 날의 예측을 실제 값과 비교한다(표와 그래프).
 
-실행: ml/ 에서 uv run python -m foot_traffic.predict --sensor 3020 --date 2026-10-10
-- 입력: 학습한 모델(models/foot_traffic_model.txt)과 학습셋의 그날 실측·날씨·달력.
+실행: ml/ 에서 uv run python -m foot_traffic.predict --sensor 4015 --date 2026-10-17
+- 모델: 서비스용 모델(공유 폴더 serve.model_dir). 피처는 forecast.py 와 같은 경로로
+  만든다. 실측이 없는 날(미래)은 forecast.py 로 예측한다.
 - --rain(mm), --temp(℃)를 주면 그날 모든 시간의 강수·기온을 바꿔 다시 예측한
   선을 더한다.
-- 출력: 터미널 표와 models/predict_<센서>_<날짜>.png (--out 으로 바꾼다).
-- baseline 은 그 센서의 테스트 시작 전(학습+검증) 센서·요일·시각별 중앙값 또는 평균
-  이다(학습 때 검증 구간에서 더 강했던 쪽, 메타의 reference_baseline).
-  테스트 시작 전 날짜는 모델이 학습에 쓴 날이라 실제 성능보다 잘 맞는다.
-  학습에 쓰지 않은 날은 split.test_start 이후다.
+- 출력: 터미널 표와 data.predict_dir/predict_<센서>_<날짜>.png (--out 으로 바꾼다).
+- baseline 은 최근 수준(같은 요일·시각의 최근 평균)이다.
+- 서비스용 모델은 가진 데이터 전체로 학습하므로 거의 모든 날이 학습에 쓴 날이다.
+  학습하지 않은 날의 성능은 walk-forward 최종 테스트(walk_forward.py)로 본다.
 """
 
 import argparse
-import json
 from pathlib import Path
-from typing import Any
 
-import lightgbm as lgb
 import numpy as np
 
-from foot_traffic import baseline, metrics
+from foot_traffic import forecast, metrics
 from foot_traffic.common import CONFIG_PATH, data_path, load_config, repo_path
-from foot_traffic.data import (
-    Columns,
-    add_off_adjacent,
-    add_recent_levels,
-    build_features,
-    load_columns,
-    take,
-)
-from foot_traffic.train import FULL_GROUPS
+from foot_traffic.data import Columns, load_columns, take
 
 WEEKDAYS = ["월", "화", "수", "목", "금", "토", "일"]
 FONTS = ["Malgun Gothic", "AppleGothic", "NanumGothic", "DejaVu Sans"]
@@ -54,46 +43,6 @@ def day_tags(part: Columns) -> str:
     if part["is_after_off_day"][0] == 1:
         tags.append("쉬는 날 다음날")
     return ", ".join(tags)
-
-
-def model_predict(
-    booster: lgb.Booster,
-    part: Columns,
-    vocab: dict[str, list[Any]],
-    config: dict[str, Any],
-    expected_names: list[str],
-    reference: np.ndarray,
-) -> np.ndarray:
-    """예측(명/시간). 모델이 낸 값(비율 또는 사람 수)에 기준값을 곱한다."""
-    matrix, names = build_features(part, vocab, config["features"], FULL_GROUPS)
-    if names != expected_names:
-        raise SystemExit("모델의 피처 목록과 config.yaml 이 다릅니다. 다시 학습하세요.")
-    return np.clip(booster.predict(matrix), 0.0, None) * reference
-
-
-def baseline_predict(
-    columns: Columns, part: Columns, sensor: int, test_start: str, statistic: str
-) -> np.ndarray:
-    """그 센서의 테스트 시작 전 센서·요일·시각별 중앙값·평균, 또는 최근 수준."""
-    if statistic == "recent":
-        median = baseline_predict(columns, part, sensor, test_start, "median")
-        return baseline.recent_predict(part, median)
-    mask = (columns["sensor_code"] == sensor) & (
-        columns["slot_start"] < np.datetime64(test_start)
-    )
-    source = take(columns, mask)
-    keys = baseline.slot_keys(
-        source["sensor_code"], source["day_of_week"], source["hour_of_day"]
-    )
-    by_slot, by_sensor = baseline.fit_baseline(
-        keys, source["sensor_code"], source["foot_traffic"], statistic
-    )
-    target_keys = baseline.slot_keys(
-        part["sensor_code"], part["day_of_week"], part["hour_of_day"]
-    )
-    return baseline.predict_baseline(
-        target_keys, part["sensor_code"], by_slot, by_sensor
-    )
 
 
 def format_table(
@@ -174,11 +123,10 @@ def main() -> None:
     parser.add_argument("--out", type=Path, help="그래프 PNG 경로")
     args = parser.parse_args()
     config = load_config(args.config)
-    data = config["data"]
+    calendar_path = data_path(config["data"]["calendar"])
+    booster, meta = forecast.load_service(config)
 
-    columns = load_columns(data_path(data["training_set"]))
-    add_off_adjacent(columns, data_path(data["calendar"]))
-    add_recent_levels(columns, config["recent_level"])
+    columns = load_columns(data_path(config["walk_forward"]["training_set"]))
     mask = select_day(columns, args.sensor, args.date)
     if not mask.any():
         sensor_slots = columns["slot_start"][columns["sensor_code"] == args.sensor]
@@ -189,30 +137,17 @@ def main() -> None:
             f"{sensor_slots.min().astype('datetime64[D]')} ~ "
             f"{sensor_slots.max().astype('datetime64[D]')} (빠진 날도 있을 수 있습니다)"
         )
-    part = take(columns, mask)
-    order = np.argsort(part["hour_of_day"])
-    part = take(part, order)
-
-    meta_path = repo_path(f"{data['model_dir']}/{data['meta_file']}")
-    meta = json.loads(meta_path.read_text(encoding="utf-8"))
-    booster = lgb.Booster(
-        model_file=str(repo_path(f"{data['model_dir']}/{data['model_file']}"))
-    )
-    vocab = meta["vocab"]
-    names = meta["feature_names"]
-    # 타깃을 나눈 기준값: 학습 때와 같은 식(메타의 target_transform)으로 만든다.
-    target = meta.get("target_transform", {"mode": "absolute"})
-    median = baseline_predict(
-        columns, part, args.sensor, config["split"]["test_start"], "median"
-    )
-    reference = baseline.reference_level(part, median, target)
-    model = model_predict(booster, part, vocab, config, names, reference)
-    # 학습 때 검증 구간에서 더 강했던 baseline(중앙값·평균·최근 수준)을 쓴다.
-    statistic = meta.get("reference_baseline", "median")
-    base_label = f"baseline {baseline.STATISTIC_NAMES[statistic]}"
-    base = baseline_predict(
-        columns, part, args.sensor, config["split"]["test_start"], statistic
-    )
+    target = take(columns, mask)
+    try:
+        prepared, fallback = forecast.prepare_target(
+            columns, target, calendar_path, meta, config
+        )
+    except ValueError as error:
+        raise SystemExit(str(error)) from error
+    order = np.argsort(prepared["hour_of_day"])
+    part, fallback = take(prepared, order), fallback[order]
+    model, base = forecast.predict_prepared(booster, meta, config, part, fallback)
+    base_label = "baseline 최근 수준"
 
     what_if, what_if_label = None, ""
     if args.rain is not None or args.temp is not None:
@@ -224,7 +159,7 @@ def main() -> None:
         if args.temp is not None:
             changed["temp"][:] = args.temp
             parts.append(f"기온 {args.temp:g}℃")
-        what_if = model_predict(booster, changed, vocab, config, names, reference)
+        what_if, _ = forecast.predict_prepared(booster, meta, config, changed, fallback)
         what_if_label = "가정: " + ", ".join(parts)
 
     weekday = WEEKDAYS[int(part["day_of_week"][0])]
@@ -241,13 +176,13 @@ def main() -> None:
         f"(오차율 모델 {metrics.error_rate(actual, model):.1%} / "
         f"baseline {metrics.error_rate(actual, base):.1%})"
     )
-    if args.date < config["split"]["test_start"]:
+    if np.datetime64(args.date, "D") < forecast.meta_as_of(meta):
         print(
             "주의: 이 날짜는 모델 학습에 쓴 구간이라 실제 성능보다 잘 맞을 수 있습니다."
         )
 
     out = args.out or repo_path(
-        f"{data['model_dir']}/predict_{args.sensor}_{args.date}.png"
+        f"{config['data']['predict_dir']}/predict_{args.sensor}_{args.date}.png"
     )
     plot_day(out, title, part, model, base, what_if, what_if_label, base_label)
     print(f"그래프 {out}")

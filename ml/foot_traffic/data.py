@@ -1,6 +1,6 @@
-"""학습셋 읽기, 기간 나누기, 피처 행렬 만들기.
+"""학습셋 읽기와 피처 만들기.
 
-학습셋은 pipeline 13 단계 결과(interim/training/hourly.parquet)다.
+학습셋은 pipeline 13 단계 결과(단절 정리 전 전체 행, interim/training_wf/…)다.
 """
 
 from pathlib import Path
@@ -70,29 +70,25 @@ def add_off_adjacent(columns: Columns, calendar_path: Path) -> None:
     columns["is_after_off_day"] = after[position].astype(np.float32)
 
 
-def add_recent_levels(columns: Columns, config: dict[str, Any]) -> None:
+def add_recent_levels(
+    columns: Columns, config: dict[str, Any], exclude: np.ndarray | None = None
+) -> None:
     """센서의 최근 수준 열(level_same_hour, level_same_dow_hour)을 더한다.
 
     분할 전의 전체 열로 계산한다. 각 행은 gap_days 일 전까지의 값만 쓰므로 검증·테스트
-    구간의 행도 그 앞 구간의 값만 본다(recent.py).
+    구간의 행도 그 앞 구간의 값만 본다(recent.py). exclude 행은 평균에서 뺀다.
     """
-    columns.update(recent.recent_levels(columns, config))
+    columns.update(recent.recent_levels(columns, config, exclude))
+
+
+def add_vacation(columns: Columns, months: list[int]) -> None:
+    """방학 달(months, 1~12) 여부 열 is_vacation 을 더한다."""
+    month = columns["slot_start"].astype("datetime64[M]").astype(np.int64) % 12 + 1
+    columns["is_vacation"] = np.isin(month, months).astype(np.float32)
 
 
 def take(columns: Columns, mask: np.ndarray) -> Columns:
     return {name: values[mask] for name, values in columns.items()}
-
-
-def split_masks(slot_start: np.ndarray, split: dict[str, str]) -> dict[str, np.ndarray]:
-    """학습·검증·테스트 행 마스크. test_end 는 그날을 포함한다."""
-    valid_start = np.datetime64(split["valid_start"])
-    test_start = np.datetime64(split["test_start"])
-    test_stop = np.datetime64(split["test_end"]) + np.timedelta64(1, "D")
-    return {
-        "train": slot_start < valid_start,
-        "valid": (slot_start >= valid_start) & (slot_start < test_start),
-        "test": (slot_start >= test_start) & (slot_start < test_stop),
-    }
 
 
 def make_vocab(columns: Columns, names: list[str]) -> dict[str, list[Any]]:

@@ -29,8 +29,10 @@
 | `pipeline/` | 테스트 | `uv run pytest` |
 | `pipeline/` | 린트 · 포맷 | `uv run ruff check .` · `uv run ruff format .` |
 | `ml/` | 설치 | `uv sync` |
-| `ml/` | 학습 · 평가 · 저장 | `uv run python -m foot_traffic.train` |
-| `ml/` | 하루 예측 확인 (표 · 그래프 PNG) | `uv run python -m foot_traffic.predict --sensor 3020 --date 2026-10-10` |
+| `ml/` | 검증 (walk-forward · 최종 테스트) | `uv run python -m foot_traffic.walk_forward` · `--skip-final` · `--final-only` |
+| `ml/` | 서비스 모델 학습 · 공유 폴더 저장 (검증 후) | `uv run python -m foot_traffic.train` |
+| `ml/` | 예측 (실측 없는 날, 학습 불필요) | `uv run python -m foot_traffic.forecast --sensor 4015 --date 2026-10-27` |
+| `ml/` | 실측과 비교 (표 · 그래프 PNG) | `uv run python -m foot_traffic.predict --sensor 4015 --date 2026-10-17` |
 | `ml/` | 테스트 | `uv run pytest` |
 | `ml/` | 린트 · 포맷 | `uv run ruff check .` · `uv run ruff format .` |
 
