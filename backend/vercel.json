@@ -1,0 +1,9 @@
+{
+  "functions": {
+    "app/main.py": {
+      "maxDuration": 60,
+      "includeFiles": "{vercel_data/**,migrations/**,alembic.ini}",
+      "excludeFiles": "tests/**"
+    }
+  }
+}

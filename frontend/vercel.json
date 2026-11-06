@@ -1,3 +1,9 @@
 {
-    "rewrites": [{ "source": "/admin", "destination": "/index.html" }]
+    "rewrites": [
+        {
+            "source": "/api/:path*",
+            "destination": "https://barrier-free-backend.vercel.app/api/:path*"
+        },
+        { "source": "/((?!api/).*)", "destination": "/index.html" }
+    ]
 }

@@ -17,6 +17,13 @@ dev = [
     "ruff>=0.17.3",
 ]
 
+# Vercel 배포(DEPLOY.md). 빌드 때 루트 data/processed 를 vercel_data/ 로 복사한다.
+[tool.vercel]
+entrypoint = "app.main:app"
+
+[tool.vercel.scripts]
+build = "python scripts/vercel_build.py"
+
 [tool.ruff]
 line-length = 88
 
