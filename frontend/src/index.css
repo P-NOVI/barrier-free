@@ -1840,8 +1840,8 @@ input::placeholder {
 .account-menu__toggle {
     display: grid;
     place-items: center;
-    width: 44px;
-    height: 44px;
+    width: 38px;
+    height: 38px;
     border-radius: 50%;
     color: var(--text);
     background: var(--bg);
@@ -1850,13 +1850,21 @@ input::placeholder {
     cursor: pointer;
 }
 
+.account-menu__toggle--login {
+    width: auto;
+    padding: 0 14px;
+    border-radius: 19px;
+    font-size: 14px;
+    font-weight: 600;
+}
+
 .account-menu__toggle::-webkit-details-marker {
     display: none;
 }
 
 .account-menu__toggle svg {
-    width: 26px;
-    height: 26px;
+    width: 22px;
+    height: 22px;
     fill: none;
     stroke: currentColor;
     stroke-width: 1.8;

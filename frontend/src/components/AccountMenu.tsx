@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import AccountPanel from './AccountPanel';
 
@@ -15,6 +15,8 @@ export default function AccountMenu({
     onSessionChange,
 }: AccountMenuProps) {
     const menuRef = useRef<HTMLDetailsElement>(null);
+    // 비회원이면 아이콘 대신 '로그인' 글자로 보인다. 불러오기 전·실패하면 아이콘.
+    const [guest, setGuest] = useState(false);
 
     // 메뉴 밖을 누르면 닫는다.
     useEffect(() => {
@@ -44,16 +46,23 @@ export default function AccountMenu({
                 }
             }}
         >
-            <summary className="account-menu__toggle" aria-label="내 계정">
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                    <circle cx="12" cy="8.5" r="4" />
-                    <path d="M4.5 20.5a7.5 7.5 0 0 1 15 0" />
-                </svg>
-            </summary>
+            {guest ? (
+                <summary className="account-menu__toggle account-menu__toggle--login">
+                    로그인
+                </summary>
+            ) : (
+                <summary className="account-menu__toggle" aria-label="내 계정">
+                    <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <circle cx="12" cy="8.5" r="4" />
+                        <path d="M4.5 20.5a7.5 7.5 0 0 1 15 0" />
+                    </svg>
+                </summary>
+            )}
             <div className="account-menu__panel">
                 <AccountPanel
                     initialMessage={initialMessage}
                     onSessionChange={onSessionChange}
+                    onSessionLoad={(session) => setGuest(session.is_guest)}
                 />
             </div>
         </details>
