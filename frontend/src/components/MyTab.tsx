@@ -1,5 +1,6 @@
-import { type ReactNode, useId, useState } from 'react';
+import { type CSSProperties, type ReactNode, useId, useState } from 'react';
 
+import type { MyReports as MyReportsState } from '../hooks/useMyReports';
 import type { SavedPlaces } from '../hooks/useSavedPlaces';
 import type { SavedRoutes } from '../hooks/useSavedRoutes';
 import { formatDistance } from '../lib/format';
@@ -10,19 +11,22 @@ import type { SavedRoute } from '../lib/savedRoutesApi';
 import { MY_LIST_ICONS as ICONS } from '../lib/myListIcons';
 import MyListRow from './MyListRow';
 import MyPlaces from './MyPlaces';
+import MyReports from './MyReports';
 
-type Section = 'favorite' | 'mine' | 'routes';
+type Section = 'favorite' | 'mine' | 'routes' | 'reports';
 
 const SECTIONS: { id: Section; label: string }[] = [
     { id: 'favorite', label: '즐겨찾기' },
     { id: 'mine', label: '내 장소' },
     { id: 'routes', label: '내 경로' },
+    { id: 'reports', label: '내 제보' },
 ];
 const UNAVAILABLE = '불러오지 못했어요. 잠시 뒤 다시 열어 주세요.';
 
 type MyTabProps = {
     savedPlaces: SavedPlaces;
     savedRoutes: SavedRoutes;
+    myReports: MyReportsState;
     /** 내 장소를 등록할 때 이 근처 장소를 앞에 둔다. */
     near: LngLat;
     onSelectPlace: (place: SavedPlace) => void;
@@ -32,10 +36,11 @@ type MyTabProps = {
     children?: ReactNode;
 };
 
-/** My 탭: 즐겨찾기, 내 장소, 내 경로 */
+/** My 탭: 즐겨찾기, 내 장소, 내 경로, 내 제보 */
 export default function MyTab({
     savedPlaces,
     savedRoutes,
+    myReports,
     near,
     onSelectPlace,
     onSelectRoute,
@@ -43,13 +48,30 @@ export default function MyTab({
 }: MyTabProps) {
     const [section, setSection] = useState<Section>('favorite');
     const id = useId();
-    const error = section === 'routes' ? savedRoutes.error : savedPlaces.error;
-    const available =
-        section === 'routes' ? savedRoutes.available : savedPlaces.available;
+    const source =
+        section === 'routes'
+            ? savedRoutes
+            : section === 'reports'
+              ? myReports
+              : savedPlaces;
+    const { error, available } = source;
 
     return (
         <div className="my-tab">
-            <div role="tablist" className="my-tab__tabs" aria-label="My">
+            <div
+                role="tablist"
+                className="my-tab__tabs"
+                aria-label="My"
+                // 밑줄이 고른 탭 자리로 미끄러지게 순서를 넘긴다.
+                style={
+                    {
+                        '--my-count': SECTIONS.length,
+                        '--my-index': SECTIONS.findIndex(
+                            (item) => item.id === section,
+                        ),
+                    } as CSSProperties
+                }
+            >
                 {SECTIONS.map((item) => (
                     <button
                         key={item.id}
@@ -104,9 +126,25 @@ export default function MyTab({
                         onDelete={savedRoutes.remove}
                     />
                 )}
+                {available && section === 'reports' && (
+                    <MyReports
+                        reports={myReports.reports}
+                        onUpdate={myReports.update}
+                        onDelete={myReports.remove}
+                    />
+                )}
             </div>
             {children}
         </div>
+    );
+}
+
+// 빈 목록 안내 문장 안의 별
+function StarIcon() {
+    return (
+        <svg className="inline-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path d={ICONS.star} />
+        </svg>
     );
 }
 
@@ -122,7 +160,8 @@ function FavoriteList({
     if (places.length === 0) {
         return (
             <p className="my-tab__status">
-                장소 카드의 북마크에서 ☆ 즐겨찾기를 눌러 추가해 보세요.
+                장소 카드의 북마크에서 <StarIcon /> 즐겨찾기를 눌러 추가해
+                보세요.
             </p>
         );
     }
@@ -154,7 +193,7 @@ function SavedRouteList({
     if (routes.length === 0) {
         return (
             <p className="my-tab__status">
-                길찾기에서 경로를 찾은 뒤 ☆ 를 눌러 저장해 보세요.
+                길찾기에서 경로를 찾은 뒤 <StarIcon /> 를 눌러 저장해 보세요.
             </p>
         );
     }

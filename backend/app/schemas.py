@@ -220,3 +220,29 @@ class SavedPlaceResponse(SavedPlaceRequest):
 
 class SavedPlaceListResponse(BaseModel):
     places: list[SavedPlaceResponse] = Field(description="최근 것부터")
+
+
+class ReportResponse(BaseModel):
+    id: int
+    kind: str
+    blocked: bool
+    status: str
+    description: str | None
+    lon: float
+    lat: float
+    created_at: datetime
+    expires_at: datetime
+
+
+class ReportListResponse(BaseModel):
+    reports: list[ReportResponse] = Field(description="최근 것부터")
+
+
+class ReportUpdateRequest(BaseModel):
+    """보낸 항목만 바꾼다. 위치와 사진은 고칠 수 없다."""
+
+    kind: str | None = None
+    blocked: bool | None = None
+    description: str | None = Field(
+        default=None, description="빈 문자열이면 설명을 지운다"
+    )

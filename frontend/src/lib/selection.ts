@@ -18,12 +18,51 @@ export const NO_ENDPOINTS: Endpoints = { start: null, goal: null };
 export const MAP_CLICK_LABEL = '지도에서 고른 위치';
 export const CURRENT_LOCATION_LABEL = '현재 위치';
 
-/** 지도를 눌러 고른 장소. 이름·주소를 찾은 뒤에 만든다. */
+export function isEndpointRole(value: unknown): value is EndpointRole {
+    return value === 'start' || value === 'goal';
+}
+
+/**
+ * 내 장소(집·회사) 버튼을 눌렀을 때 넣을 칸. 누르고 있던 칸이 있으면 그 칸,
+ * 없으면 빈 칸(출발지 먼저), 둘 다 차 있으면 도착지.
+ */
+export function shortcutRole(
+    focused: EndpointRole | null,
+    endpoints: Endpoints,
+): EndpointRole {
+    if (focused) {
+        return focused;
+    }
+    return endpoints.start ? 'goal' : 'start';
+}
+
+/** 지도를 눌러 고르거나 검색해서 고른 장소. 이름·주소를 찾은 뒤에 만든다. */
 export type PickedPlace = {
     position: LngLat;
     name: string | null;
     address: string | null;
+    /** 장소 분류 (예: 카페). 검색으로 고른 장소만 있다. */
+    category?: string | null;
 };
+
+/**
+ * 카카오 분류(예: '음식점 > 카페 > 커피전문점 > 커피빈')에서 화면에 보일 이름.
+ * 마지막 단계가 상호(장소 이름이 그 말로 시작)면 한 단계 위를 쓴다.
+ */
+export function categoryLabel(category: string, name: string): string | null {
+    const parts = category
+        .split('>')
+        .map((part) => part.trim())
+        .filter((part) => part !== '');
+    const last = parts.at(-1);
+    if (last === undefined) {
+        return null;
+    }
+    if (parts.length > 1 && name.startsWith(last)) {
+        return parts.at(-2) ?? null;
+    }
+    return last;
+}
 
 /** found 가 null 이면 이름·주소를 못 찾은 것이다. */
 export function toPickedPlace(

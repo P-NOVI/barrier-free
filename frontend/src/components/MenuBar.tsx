@@ -1,3 +1,4 @@
+import type { CSSProperties } from 'react';
 import type { Tab } from '../lib/sheet';
 
 const ITEMS: { tab: Tab; label: string; icon: string }[] = [
@@ -23,10 +24,15 @@ type MenuBarProps = {
     onSelect: (tab: Tab) => void;
 };
 
-/** 메뉴: 검색, 길찾기, My. 좁은 화면은 화면 아래, 넓은 화면은 왼쪽 패널 위에 둔다. */
+/** 메뉴: 검색, 길찾기, My. 좁은 화면은 화면 아래에 띄우고, 넓은 화면은 왼쪽 패널 위에 둔다. */
 export default function MenuBar({ tab, onSelect }: MenuBarProps) {
+    // 고른 메뉴 뒤 알약(좁은 화면은 회색, 넓은 화면은 흰색)이 고른 자리로 미끄러지게 순서를 넘긴다.
+    const style = {
+        '--menu-count': ITEMS.length,
+        '--menu-index': ITEMS.findIndex((item) => item.tab === tab),
+    } as CSSProperties;
     return (
-        <nav className="menu-bar" aria-label="메뉴">
+        <nav className="menu-bar" aria-label="메뉴" style={style}>
             {ITEMS.map((item) => (
                 <button
                     key={item.tab}

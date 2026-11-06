@@ -4,11 +4,14 @@
 - 입력: interim/sdot/history.parquet (06 단계, 10분 단위 유동인구)
         interim/weather/hourly.parquet (11 단계, 자치구·시간별 기온·강수)
         interim/calendar/daily.parquet (12 단계, 날짜별 공휴일·연휴)
+        interim/subway/hourly.parquet (14 단계, 역별 시간대별 월 승하차)
+        interim/subway/stations.parquet (15 단계, 역 좌표)
         data/processed/sdot_sensors.json (센서 위치)
 - 출력: interim/training/hourly.parquet, hourly_report.json
   config 에 output_full 이 있으면 단절 정리 전 전체 행도 따로 저장한다(walk-forward용).
   열: sensor_code, district, lon, lat, slot_start, day_of_week, hour_of_day, temp,
-      rain_mm, 달력 열 6개(12 단계와 같은 이름), foot_traffic
+      rain_mm, 달력 열 6개(12 단계와 같은 이름), foot_traffic, subway_boardings,
+      subway_alightings
 시각
 - measured_at 은 구간 끝 시각이다. (H-1:00, H:00] 의 10분 값을 묶어 한 시간 H 로
   만든다.
@@ -27,6 +30,12 @@
   구간으로 비교해 이후/이전이 drop_ratio 미만이면 break_date 앞 행을 버린다. 값이
   오른 센서는 버리지 않고 보고서에만 남긴다.
 - 날씨가 없는 칸(강수 결측 등)은 NaN 으로 둔다.
+- subway_boardings / subway_alightings 는 센서에서 subway_radius_m 안에 있는 역들의
+  하루 평균 승차·하차(월 합계 ÷ 그 달 일수)를 더한 값이다. 같은 시각(hour_of_day)이고,
+  slot_start 보다 subway_lag_months 앞선 달(작년 같은 달) 값을 쓴다. 예측할 때 이번 달
+  자료가 아직 없어서 학습도 같은 규칙으로 맞춘다.
+  - 반경 안에 역이 없는 센서, 그 달에 아직 열지 않은 역은 0 이다.
+  - 그 달 승하차 자료가 아예 없으면(14 단계 기간 밖) 빈 값(null)이다.
 학습·검증·테스트 나누기는 ml/ 에서 한다.
 그래프(00~04 단계)와 관계가 없어서 run_all.py 에 넣지 않고 따로 실행한다.
 """
@@ -42,7 +51,14 @@ import pyarrow as pa
 import pyarrow.compute as pc
 import pyarrow.parquet as pq
 
-from common import CONFIG_PATH, data_path, load_config, repo_path, require_files
+from common import (
+    CONFIG_PATH,
+    data_path,
+    distance_m,
+    load_config,
+    repo_path,
+    require_files,
+)
 
 PARQUET_COMPRESSION = "zstd"
 CALENDAR_COLUMNS = [
@@ -55,6 +71,8 @@ CALENDAR_COLUMNS = [
 ]
 HOUR = np.timedelta64(1, "h")
 TRAFFIC_QUANTILES = (0.5, 0.95, 0.99)
+SUBWAY_COLUMNS = ["subway_boardings", "subway_alightings"]
+MONTH = np.timedelta64(1, "M")
 
 
 def hour_end(measured_at: np.ndarray) -> np.ndarray:
@@ -256,6 +274,97 @@ def build_training_set(
     )
 
 
+def sensor_stations(
+    places: dict[int, tuple[float, float]], stations: pa.Table, radius_m: float
+) -> pa.Table:
+    """센서마다 radius_m 안에 있는 역. 열 sensor_code, line, station"""
+    lon = stations["lon"].to_numpy()
+    lat = stations["lat"].to_numpy()
+    lines = stations["line"].to_pylist()
+    names = stations["station"].to_pylist()
+    codes, near_lines, near_names = [], [], []
+    for code, (x, y) in sorted(places.items()):
+        for i in np.flatnonzero(distance_m(x, y, lon, lat) <= radius_m):
+            codes.append(code)
+            near_lines.append(lines[i])
+            near_names.append(names[i])
+    return pa.table(
+        {
+            "sensor_code": pa.array(codes, type=pa.int32()),
+            "line": pa.array(near_lines, type=pa.string()),
+            "station": pa.array(near_names, type=pa.string()),
+        }
+    )
+
+
+def daily_ridership(subway: pa.Table) -> pa.Table:
+    """월 합계 → 하루 평균. 열 line, station, month, hour, boardings, alightings"""
+    month = np.array(subway["month"].to_pylist(), dtype="datetime64[M]")
+    days = (
+        (month + MONTH).astype("datetime64[D]") - month.astype("datetime64[D]")
+    ).astype(np.float32)
+    return pa.table(
+        {
+            "line": subway["line"],
+            "station": subway["station"],
+            "month": subway["month"],
+            "hour": pc.cast(subway["hour"], pa.int8()),
+            "boardings": subway["boardings"].to_numpy() / days,
+            "alightings": subway["alightings"].to_numpy() / days,
+        }
+    )
+
+
+def subway_features(near: pa.Table, daily: pa.Table) -> pa.Table:
+    """센서·달·시각별 반경 안 역 하루 평균 합계.
+
+    열 sensor_code, subway_month, hour_of_day, subway_boardings, subway_alightings
+    """
+    grouped = (
+        near.join(daily, keys=["line", "station"], join_type="inner")
+        .group_by(["sensor_code", "month", "hour"])
+        .aggregate([("boardings", "sum"), ("alightings", "sum")])
+    )
+    return pa.table(
+        {
+            "sensor_code": pc.cast(grouped["sensor_code"], pa.int32()),
+            "subway_month": grouped["month"],
+            "hour_of_day": grouped["hour"],
+            "subway_boardings": pc.cast(grouped["boardings_sum"], pa.float32()),
+            "subway_alightings": pc.cast(grouped["alightings_sum"], pa.float32()),
+        }
+    )
+
+
+def add_subway(
+    table: pa.Table, features: pa.Table, months: list[str], lag_months: int
+) -> pa.Table:
+    """학습 표에 slot_start 보다 lag_months 앞선 달의 승하차 열을 붙인다.
+
+    months 는 승하차 자료가 있는 달. 그 달인데 붙을 행이 없으면(반경 안에 역이 없거나
+    아직 열지 않은 역) 0, 자료가 없는 달이면 null 이다.
+    """
+    features = features.set_column(
+        0, "sensor_code", pc.cast(features["sensor_code"], table["sensor_code"].type)
+    )
+    slot_month = table["slot_start"].to_numpy().astype("datetime64[M]")
+    subway_month = np.datetime_as_string(slot_month - lag_months * MONTH, unit="M")
+    joined = table.append_column(
+        "subway_month", pa.array(subway_month, type=pa.string())
+    ).join(
+        features,
+        keys=["sensor_code", "subway_month", "hour_of_day"],
+        join_type="left outer",
+    )
+    known = pc.is_in(joined["subway_month"], value_set=pa.array(months))
+    for name in SUBWAY_COLUMNS:
+        filled = pc.if_else(known, pc.fill_null(joined[name], 0.0), joined[name])
+        joined = joined.set_column(joined.schema.get_field_index(name), name, filled)
+    return joined.select([*table.column_names, *SUBWAY_COLUMNS]).sort_by(
+        [("sensor_code", "ascending"), ("slot_start", "ascending")]
+    )
+
+
 def count_missing(column: pa.ChunkedArray) -> int:
     """null(조인에서 못 찾음)과 NaN(날씨 원본 결측)의 합."""
     return int(column.null_count + np.isnan(column.fill_null(0.0).to_numpy()).sum())
@@ -283,6 +392,10 @@ def make_report(table: pa.Table, dropped: dict[str, Any]) -> dict[str, Any]:
         "missing_temp": count_missing(table["temp"]),
         "missing_rain_mm": count_missing(table["rain_mm"]),
         "missing_calendar": int(table["is_holiday"].null_count),
+        "missing_subway": int(table["subway_boardings"].null_count),
+        "subway_zero_share": round(
+            float((table["subway_boardings"].fill_null(-1).to_numpy() == 0).mean()), 4
+        ),
     }
 
 
@@ -294,9 +407,18 @@ def main() -> None:
     weather_path = data_path(config["weather"])
     calendar_path = data_path(config["calendar"])
     sensors_path = repo_path(config["sensors"])
+    subway_path = data_path(config["subway"])
+    stations_path = data_path(config["subway_stations"])
     output = data_path(config["output"])
     report_path = data_path(config["report"])
-    require_files(history_path, weather_path, calendar_path, sensors_path)
+    require_files(
+        history_path,
+        weather_path,
+        calendar_path,
+        sensors_path,
+        subway_path,
+        stations_path,
+    )
 
     started = time.time()
     weather = pq.read_table(weather_path)
@@ -340,7 +462,19 @@ def main() -> None:
         "compared_sensors": len(ratios),
     }
 
-    table = build_training_set(hourly, districts, places, weather, calendar)
+    subway = pq.read_table(subway_path)
+    near = sensor_stations(
+        places, pq.read_table(stations_path), config["subway_radius_m"]
+    )
+    features = subway_features(near, daily_ridership(subway))
+    months = sorted(set(subway["month"].to_pylist()))
+
+    def assemble(rows: pa.Table) -> pa.Table:
+        """시간별 행 → 센서 정보·날씨·달력·지하철 승하차를 붙인 학습 표."""
+        built = build_training_set(rows, districts, places, weather, calendar)
+        return add_subway(built, features, months, config["subway_lag_months"])
+
+    table = assemble(hourly)
     output.parent.mkdir(parents=True, exist_ok=True)
     pq.write_table(table, output, compression=PARQUET_COMPRESSION)
 
@@ -349,11 +483,15 @@ def main() -> None:
         "hours_dropped_few_bins": short_hours,
         "sensors_without_location": no_place,
         "level_break": level_break,
+        "subway_radius_m": config["subway_radius_m"],
+        "sensors_with_station": len(
+            set(near["sensor_code"].to_pylist()) & set(districts)
+        ),
     }
     if "output_full" in config:
         # walk-forward 검증은 학습 종료일마다 단절을 그 시점까지의 데이터로 다시
         # 판단하므로 단절 정리 전 전체 행이 필요하다.
-        full = build_training_set(hourly_full, districts, places, weather, calendar)
+        full = assemble(hourly_full)
         output_full = data_path(config["output_full"])
         output_full.parent.mkdir(parents=True, exist_ok=True)
         pq.write_table(full, output_full, compression=PARQUET_COMPRESSION)

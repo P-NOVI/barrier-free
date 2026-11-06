@@ -1,4 +1,4 @@
-"""pipeline 단계 공통: 설정 읽기, 데이터 경로, Overpass 요청과 영역 고리.
+"""pipeline 단계 공통: 설정 읽기, 데이터 경로, Overpass 요청과 영역 고리, 거리.
 
 데이터 경로는 pipeline/.env 의 DATA_DIR(Google Drive 공유 폴더 등) 기준이고,
 없으면 저장소의 data/ 를 쓴다. 서버가 읽는 결과(data/processed)는 저장소 기준이다.
@@ -14,6 +14,7 @@ from collections.abc import Iterable
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 import yaml
 from dotenv import load_dotenv
 
@@ -26,6 +27,7 @@ OVERPASS_BUSY = {429, 502, 503, 504}
 COORD_DIGITS = 6  # 약 0.1m
 # 닫힌 고리의 최소 점 수(처음 점이 끝에 한 번 더 온다)
 MIN_RING_POINTS = 4
+EARTH_RADIUS_M = 6_371_000
 
 LngLat = tuple[float, float]
 
@@ -139,3 +141,13 @@ def require_files(*paths: Path) -> None:
         "pipeline/.env 의 DATA_DIR 이 맞는지 확인하세요.\n"
         "- 앞 단계 결과가 없으면 steps/run_all.py 로 앞 단계부터 실행하세요."
     )
+
+
+def distance_m(lon1, lat1, lon2, lat2):
+    """두 점(경도, 위도) 사이 대권 거리(m). numpy 배열을 넣으면 배열로 돌려준다."""
+    lon1, lat1, lon2, lat2 = (np.radians(v) for v in (lon1, lat1, lon2, lat2))
+    a = (
+        np.sin((lat2 - lat1) / 2) ** 2
+        + np.cos(lat1) * np.cos(lat2) * np.sin((lon2 - lon1) / 2) ** 2
+    )
+    return 2 * EARTH_RADIUS_M * np.arcsin(np.sqrt(a))
