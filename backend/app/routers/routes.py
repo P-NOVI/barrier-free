@@ -7,6 +7,8 @@ from app.deps import (
     EntrancesDep,
     ForecastCongestionDep,
     RealtimeCongestionDep,
+    ReportFinder,
+    ReportFinderDep,
     RouteGraphDep,
     SettingsDep,
     SitesDep,
@@ -14,6 +16,7 @@ from app.deps import (
 from app.schemas import (
     RouteError,
     RouteOption,
+    RouteReport,
     RouteRequest,
     RouteResponse,
     TurnPoint,
@@ -69,8 +72,12 @@ def depart_slot(
 
 
 def route_option(
-    route: Route, congestion: Mapping[int, float], busy_level: float
+    route: Route,
+    congestion: Mapping[int, float],
+    busy_level: float,
+    find_reports: ReportFinder,
 ) -> RouteOption:
+    """경로 하나의 응답. 1안·2안은 지나는 길이 달라 제보도 따로 찾는다."""
     summary = route.summary
     return RouteOption(
         distance_m=summary.distance_m,
@@ -87,6 +94,15 @@ def route_option(
         start_entrance=route.start_entrance,
         goal_entrance=route.goal_entrance,
         busy_m=busy_length(route, congestion, busy_level),
+        reports=[
+            RouteReport(
+                id=report.id,
+                kind=report.kind,
+                description=report.description,
+                position=(report.lon, report.lat),
+            )
+            for report in find_reports(route.edge_ids)
+        ],
     )
 
 
@@ -103,6 +119,7 @@ def post_route(
     realtime: RealtimeCongestionDep,
     forecast: ForecastCongestionDep,
     settings: SettingsDep,
+    find_reports: ReportFinderDep,
 ) -> RouteResponse:
     """1안(혼잡도 없이)과, 출발 시각의 혼잡도로 찾은 2안(1안과 다를 때만)."""
     try:
@@ -139,10 +156,10 @@ def post_route(
             },
         ) from error
     level = settings.congestion_busy_level
-    primary = route_option(choice.primary, congestion, level)
+    primary = route_option(choice.primary, congestion, level, find_reports)
     alternative = (
         None
         if choice.alternative is None
-        else route_option(choice.alternative, congestion, level)
+        else route_option(choice.alternative, congestion, level, find_reports)
     )
     return RouteResponse(**primary.model_dump(), alternative=alternative)

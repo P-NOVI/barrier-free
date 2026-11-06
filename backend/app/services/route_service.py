@@ -75,6 +75,8 @@ class Route:
     goal_entrance: LngLat | None = None
     # 지나는 구간마다 (edge_id, 길이). 붐비는 길 길이(busy_length)를 셀 때 쓴다.
     segments: tuple[tuple[int, float], ...] = ()
+    # 경로가 지나는 길(core.graph.Arc.edge_id). 길 위 제보를 찾는 데 쓴다.
+    edge_ids: frozenset[int] = frozenset()
 
 
 @dataclass(frozen=True)
@@ -186,6 +188,7 @@ def find_route(
         start_entrance=starts[path.nodes[0]].entrance,
         goal_entrance=goals[path.nodes[-1]].entrance,
         segments=tuple((arc.edge_id, arc.length) for arc in path.arcs),
+        edge_ids=frozenset(arc.edge_id for arc in path.arcs),
     )
 
 

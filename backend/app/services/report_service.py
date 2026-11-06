@@ -42,6 +42,8 @@ class ReportFailure(StrEnum):
     NOT_PENDING = "report_not_pending"
     EXPIRED = "report_expired"
     NOT_APPROVED = "report_not_approved"
+    NOT_FOUND = "report_not_found"
+    NOT_REVIEWABLE = "report_not_reviewable"
 
 
 class ReportError(Exception):

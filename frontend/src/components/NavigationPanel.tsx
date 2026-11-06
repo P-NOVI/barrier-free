@@ -1,10 +1,20 @@
+import { useState } from 'react';
+
 import type { NavigationState } from '../hooks/useNavigation';
 import type { RouteState } from '../hooks/useRoute';
 import { formatDistance } from '../lib/format';
+import {
+    chosenRoute,
+    type RouteChoice,
+    type RouteReport,
+} from '../lib/routeApi';
 import { DIRECTION_LABELS, type Turn } from '../lib/turns';
+import ReviewPrompt from './ReviewPrompt';
 
 type NavigationPanelProps = {
     route: RouteState;
+    /** 안내하는 경로(1안·2안). 도착 후 그 경로의 제보만 리뷰를 받는다. */
+    choice?: RouteChoice;
     navigation: NavigationState;
     /** 지도가 내 위치를 따라가는 중인지 */
     following: boolean;
@@ -47,6 +57,20 @@ function notice(route: RouteState, navigation: NavigationState): Notice | null {
         default:
             return null;
     }
+}
+
+/**
+ * 지금 안내하는 경로(고른 1안·2안)가 지나는 승인된 제보.
+ * 경로를 다시 찾는 동안에는 바로 전 경로의 것
+ */
+function routeReports(route: RouteState, choice: RouteChoice): RouteReport[] {
+    if (route.status === 'success') {
+        return chosenRoute(route.route, choice).reports;
+    }
+    if (route.status === 'loading' && route.previous) {
+        return chosenRoute(route.previous, choice).reports;
+    }
+    return [];
 }
 
 /** 다음 회전 방향 화살표. 회전이 더 없으면 도착 깃발 */
@@ -92,6 +116,7 @@ function instruction({ next, judgement }: NavigationState): string {
 /** 안내 중 경로 패널 자리에 다음 회전, 남은 거리, 안내 상태를 보인다. */
 export default function NavigationPanel({
     route,
+    choice = 'primary',
     navigation,
     following,
     voice,
@@ -100,6 +125,16 @@ export default function NavigationPanel({
 }: NavigationPanelProps) {
     const message = notice(route, navigation);
     const { progress, next, judgement } = navigation;
+    // 도착한 순간의 제보를 붙들어 둔다. 위치 오차로 판정이 흔들려도 입력하던 창이 닫히지 않게.
+    const [reviewReports, setReviewReports] = useState<RouteReport[] | null>(
+        null,
+    );
+    if (judgement === 'arrived' && reviewReports === null) {
+        const reports = routeReports(route, choice);
+        if (reports.length > 0) {
+            setReviewReports(reports);
+        }
+    }
 
     return (
         <section
@@ -160,6 +195,9 @@ export default function NavigationPanel({
                     지도를 움직여 따라가기를 멈췄습니다. 내 위치 버튼을 누르면
                     다시 따라갑니다.
                 </p>
+            )}
+            {reviewReports && (
+                <ReviewPrompt reports={reviewReports} onClose={onStop} />
             )}
         </section>
     );

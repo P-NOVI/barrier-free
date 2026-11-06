@@ -3,6 +3,7 @@
 import { type ApiOptions, requestJson } from './apiClient';
 import type { LngLat } from './kakaoMap';
 import type { PresetId } from './presets';
+import type { ReportKind } from './reportApi';
 
 export type RouteRequest = {
     start: LngLat;
@@ -18,6 +19,15 @@ export type TurnPoint = {
     index: number;
     /** 들어온 방향에서 나가는 방향으로 꺾는 각도(도). 오른쪽이 + */
     angle: number;
+};
+
+/** 경로가 지나는 승인된 제보. 도착 후 리뷰를 받을 장소 */
+export type RouteReport = {
+    id: number;
+    kind: ReportKind;
+    description: string | null;
+    /** 제보 위치 */
+    position: LngLat;
 };
 
 /** 추천 경로 하나 */
@@ -42,6 +52,8 @@ export type RouteOption = {
     goal_entrance: LngLat | null;
     /** 출발 시각의 혼잡도가 기준 이상인 길의 길이 */
     busy_m: number;
+    /** 경로가 지나는 승인된 제보. 통행 불가 공사는 경로가 피하므로 없다. */
+    reports: RouteReport[];
 };
 
 /** 1안(혼잡도 없이 찾은 경로)과 2안 */

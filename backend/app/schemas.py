@@ -8,6 +8,7 @@ from app.models import (
     LABEL_MAX_LENGTH,
     NAME_MAX_LENGTH,
     QUERY_MAX_LENGTH,
+    REVIEW_COMMENT_MAX_LENGTH,
 )
 from core.profiles import DEFAULT_PRESET, PRESETS
 
@@ -48,6 +49,15 @@ class TurnPoint(BaseModel):
     )
 
 
+class RouteReport(BaseModel):
+    """경로가 지나는 승인된 제보. 도착 후 리뷰를 받을 장소다."""
+
+    id: int
+    kind: str
+    description: str | None
+    position: Coordinate = Field(description="제보 위치 [경도, 위도]")
+
+
 class RouteOption(BaseModel):
     """추천 경로 하나."""
 
@@ -79,6 +89,10 @@ class RouteOption(BaseModel):
     busy_m: float = Field(
         default=0.0,
         description="출발 시각의 혼잡도가 기준(congestion_busy_level) 이상인 길의 길이",
+    )
+    reports: list[RouteReport] = Field(
+        default_factory=list,
+        description="경로가 지나는 승인된 제보. 통행 불가 공사는 경로가 피하므로 없다.",
     )
 
 
@@ -270,6 +284,19 @@ class AdminReportListResponse(BaseModel):
 
 class ReportListResponse(BaseModel):
     reports: list[ReportResponse] = Field(description="최근 것부터")
+
+
+class ReviewRequest(BaseModel):
+    outcome: Literal["same", "improved", "gone"] = Field(
+        description="same 은 그대로, improved 는 나아짐, gone 은 사라짐"
+    )
+    comment: str = Field(default="", max_length=REVIEW_COMMENT_MAX_LENGTH)
+
+
+class ReviewResponse(ReviewRequest):
+    id: int
+    report_id: int
+    created_at: datetime
 
 
 class ReportUpdateRequest(BaseModel):

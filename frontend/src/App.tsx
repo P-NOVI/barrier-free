@@ -556,6 +556,7 @@ export default function App() {
             {navigating && (
                 <NavigationPanel
                     route={route}
+                    choice={choice}
                     navigation={navigation}
                     following={following}
                     voice={voice}
