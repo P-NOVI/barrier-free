@@ -696,7 +696,13 @@ input::placeholder {
     border-right: 2px solid var(--text);
     border-bottom: 2px solid var(--text);
     transform: translateY(-70%) rotate(45deg);
+    transition: transform 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
     pointer-events: none;
+}
+
+/* 목록이 펼쳐져 있으면 위를 향한다. :open 을 모르는 브라우저는 이 규칙을 버려 늘 아래를 향한다. */
+.route-panel__preset:has(select:open)::after {
+    transform: translateY(-30%) rotate(-135deg);
 }
 
 .route-panel__reset {
@@ -1912,7 +1918,8 @@ input::placeholder {
     .menu-bar::before,
     .menu-bar__item,
     .my-tab__tabs::after,
-    .my-tab__tab {
+    .my-tab__tab,
+    .route-panel__preset::after {
         transition: none;
     }
 }
