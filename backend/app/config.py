@@ -60,6 +60,20 @@ class Settings(BaseSettings):
     database_url: SecretStr = SecretStr("")
     # DB가 꺼져 있을 때 이 시간만 기다리고 실패한다.
     database_connect_timeout_s: int = 3
+    # 유동인구·날씨 수집 DB(Supabase) 접속 주소. 앱 DB(DATABASE_URL)와 따로 둔다.
+    # Supabase 의 postgresql://... 주소를 그대로 넣어도 된다(드라이버는 psycopg).
+    collector_database_url: SecretStr = SecretStr("")
+    # 외부 DB라 로컬 앱 DB보다 길게 기다린다.
+    collector_connect_timeout_s: int = 10
+    # 한 번에 받는 S-DoT 최신 행 수. 1000행이 약 2시간치라, 실행이 몇 번 빠져도 메운다.
+    collector_sdot_rows: int = 2000
+    # 실황은 지난 이 시간 안에서 DB에 없는 정시만 받는다. 기상청은 24시간 안만 준다.
+    collector_backfill_hours: int = 12
+    # 하루치 예보: 이 시(KST) 단기예보 발표분을 받아 발표 뒤 이 시간만큼 저장한다.
+    collector_daily_issue_hour: int = 5
+    collector_daily_hours: int = 24
+    # 자치구 날씨 위치(센서 위치 평균)는 지난 이 기간에 모은 센서·자치구 짝으로 구한다.
+    collector_district_days: int = 2
     # 마지막 접속 후 이 기간이 지난 게스트는 이력과 함께 지운다.
     # 경로 이력은 위치 정보이므로 기한 없이 쌓아 두지 않는다.
     guest_retention_days: int = 30
