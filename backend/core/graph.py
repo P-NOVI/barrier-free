@@ -61,6 +61,10 @@ class Graph:
     component_cache: dict[tuple, list[int]] = field(
         default_factory=dict, compare=False, repr=False
     )
+    # 막힌 길 묶음 → 그 길을 막은 그래프 캐시 (core/closure.py)
+    closure_cache: dict[frozenset[int], "Graph"] = field(
+        default_factory=dict, compare=False, repr=False
+    )
 
 
 def build_graph(data: dict[str, Any]) -> Graph:

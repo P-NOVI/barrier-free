@@ -55,6 +55,9 @@ class Settings(BaseSettings):
     congestion_full_count: float = 300.0
     # 센서에서 이 거리 안을 지나는 길에 그 센서의 혼잡도를 붙인다. 초안 값이다.
     congestion_radius_m: float = 50.0
+    # 경로 탐색에서 뺄 길(승인된 통행 불가 제보)을 이 시간 안에는 다시 읽지 않는다.
+    # 승인·만료가 경로에 반영되기까지 최대 이만큼 늦다.
+    closed_road_cache_ttl_s: float = 60.0
     # PostgreSQL 접속 주소. 비밀번호가 들어 있으므로 backend/.env 에만 둔다.
     # 형식: postgresql+psycopg://barrierfree:<비밀번호>@localhost:5432/barrierfree
     database_url: SecretStr = SecretStr("")

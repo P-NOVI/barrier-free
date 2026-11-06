@@ -40,6 +40,16 @@ def no_real_sdot_key(monkeypatch: pytest.MonkeyPatch) -> None:
     get_settings.cache_clear()
 
 
+@pytest.fixture(autouse=True)
+def no_real_closed_roads(monkeypatch: pytest.MonkeyPatch) -> None:
+    """backend/.env 의 DB에서 막힌 길을 읽지 않게 한다.
+
+    막힌 길을 쓰는 테스트는 get_closed_edges 를 따로 덮어쓴다.
+    """
+    monkeypatch.setattr(deps, "closed_edge_ids", lambda session, now: frozenset())
+    deps.get_closed_road_cache().entry = None
+
+
 @pytest.fixture(scope="session")
 def sample_graph() -> Graph:
     return build_graph(json.loads(SAMPLE_GRAPH.read_text(encoding="utf-8")))

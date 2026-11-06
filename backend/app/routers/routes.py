@@ -2,8 +2,8 @@ from fastapi import APIRouter, HTTPException, status
 
 from app.deps import (
     EntrancesDep,
-    GraphDep,
     RoadCongestionDep,
+    RouteGraphDep,
     SettingsDep,
     SitesDep,
 )
@@ -38,7 +38,7 @@ def failure_message(reason: RouteFailure, max_snap_distance_m: float) -> str:
 )
 def post_route(
     request: RouteRequest,
-    graph: GraphDep,
+    graph: RouteGraphDep,
     entrances: EntrancesDep,
     sites: SitesDep,
     congestion: RoadCongestionDep,
