@@ -96,6 +96,12 @@ export default function AccountPanel({
                             .join(' · ')}{' '}
                         계정으로 로그인했어요.
                     </p>
+                    {state.session.is_admin && (
+                        // 보이는 것만 막는다. 실제 권한은 백엔드가 403 으로 지킨다.
+                        <a className="account-panel__button" href="/admin">
+                            제보 검토
+                        </a>
+                    )}
                     <button
                         type="button"
                         className="account-panel__button"

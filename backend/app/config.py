@@ -134,6 +134,22 @@ class Settings(BaseSettings):
     report_photo_max_bytes: int = 5 * 1024 * 1024
     # 제보 좌표가 도로망에서 이보다 멀면 제보를 받지 않는다. 초안 값이다.
     report_snap_radius_m: float = 30.0
+    # 만료된 제보를 이 기간이 지나면 사진과 함께 지운다. 서버를 켤 때 정리한다.
+    # 사진에 얼굴·번호판이 있을 수 있어 기한 없이 쌓아 두지 않는다.
+    report_retention_days: int = 30
+    # 관리자 계정. "google:1234,kakao:5678" 처럼 provider:provider_user_id 를
+    # 쉼표로 잇는다.
+    # 카카오는 이메일이 안 내려올 수 있어 이메일이 아니라 계정 번호로 정한다.
+    admin_accounts: str = ""
+
+    @property
+    def admin_account_set(self) -> frozenset[tuple[str, str]]:
+        pairs = (item.strip().partition(":") for item in self.admin_accounts.split(","))
+        return frozenset(
+            (provider.strip(), user_id.strip())
+            for provider, _, user_id in pairs
+            if provider.strip() and user_id.strip()
+        )
 
 
 @cache

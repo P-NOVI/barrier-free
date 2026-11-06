@@ -28,6 +28,7 @@
 | `backend/` | 모델을 바꾼 뒤 마이그레이션 만들기 | `uv run alembic revision --autogenerate -m "설명"` (수집 DB는 `-n collector`) |
 | `pipeline/` | 설치 | `uv sync` |
 | `pipeline/` | 전체 실행 (결과 있는 단계는 건너뜀) | `uv run python steps/run_all.py` · `--from 02` · `--force` |
+| `pipeline/` | 학습셋 갱신 (수집 DB 유동인구 반영, 16 → 13 순서) | `uv run python steps/16_export_sdot_realtime.py` · `uv run python steps/13_build_training_set.py` |
 | `pipeline/` | 테스트 | `uv run pytest` |
 | `pipeline/` | 린트 · 포맷 | `uv run ruff check .` · `uv run ruff format .` |
 | `ml/` | 설치 | `uv sync` |

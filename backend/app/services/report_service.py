@@ -1,8 +1,8 @@
-"""길 위 문제 제보를 검사하고 저장한다. 승인은 관리자 API(다른 이슈)가 맡는다."""
+"""길 위 문제 제보를 검사하고 저장한다. 승인·취소는 관리자 API가 부른다."""
 
 import secrets
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from enum import StrEnum
 
 from sqlalchemy.orm import Session
@@ -15,6 +15,11 @@ from core.road_point import nearby_road_points
 REPORT_KINDS = ("curb", "construction", "obstacle", "damage")
 CONSTRUCTION = "construction"
 PENDING = "pending"
+APPROVED = "approved"
+# 화면에서는 "취소"라고 부르지만, 저장 값은 프론트 타입(reportApi.ts)에 맞춰 둔다.
+REJECTED = "rejected"
+# 승인했지만 현장에서 해결되어 더는 반영하지 않는 제보
+RESOLVED = "resolved"
 
 # 유형별로 제보가 유효한 기간. 공사는 길게, 치워질 수 있는 장애물은 짧게 둔다.
 EXPIRY_DAYS = {"curb": 90, "construction": 7, "obstacle": 1, "damage": 30}
@@ -34,6 +39,9 @@ class ReportFailure(StrEnum):
     DESCRIPTION_TOO_LONG = "description_too_long"
     OFF_NETWORK = "off_network"
     NOT_EDITABLE = "report_not_editable"
+    NOT_PENDING = "report_not_pending"
+    EXPIRED = "report_expired"
+    NOT_APPROVED = "report_not_approved"
 
 
 class ReportError(Exception):
@@ -144,4 +152,36 @@ def update_report(
     report.blocked = new_blocked
     report.description = new_description or None
     report.expires_at = report.created_at + timedelta(days=EXPIRY_DAYS[new_kind])
+    return report
+
+
+def is_expired(report: Report, now: datetime | None = None) -> bool:
+    expires_at = report.expires_at
+    # SQLite 는 시간대 없이 돌려주므로 UTC 로 본다.
+    if expires_at.tzinfo is None:
+        expires_at = expires_at.replace(tzinfo=UTC)
+    return expires_at <= (now or utc_now())
+
+
+def review_report(report: Report, approve: bool, now: datetime | None = None) -> Report:
+    """대기(pending) 제보를 승인하거나 취소한다. commit 은 부르는 쪽이 한다.
+
+    만료된 제보는 취소만 할 수 있다. 이미 의미가 없어진 제보를 승인하지 않게 한다.
+    """
+    if report.status != PENDING:
+        raise ReportError(ReportFailure.NOT_PENDING)
+    if approve and is_expired(report, now):
+        raise ReportError(ReportFailure.EXPIRED)
+    report.status = APPROVED if approve else REJECTED
+    return report
+
+
+def resolve_report(report: Report) -> Report:
+    """승인한 제보를 해결됨으로 바꾼다. 만료 여부는 따지지 않는다.
+
+    commit 은 부르는 쪽이 한다.
+    """
+    if report.status != APPROVED:
+        raise ReportError(ReportFailure.NOT_APPROVED)
+    report.status = RESOLVED
     return report

@@ -13,9 +13,19 @@ from app.config import Settings, get_settings
 from app.db import get_engine
 from app.deps import DbSessionDep
 from app.migrate import APP_DB, is_up_to_date
+from app.repositories.report_repository import purge_expired_reports
 from app.repositories.road_repository import load_entrances, load_graph, load_sites
 from app.repositories.user_repository import purge_inactive_guests
-from app.routers import auth, congestion, me, places, reports, routes, weather
+from app.routers import (
+    admin,
+    auth,
+    congestion,
+    me,
+    places,
+    reports,
+    routes,
+    weather,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +37,10 @@ DB_UNAVAILABLE = {
 
 
 def prepare_database(settings: Settings) -> None:
-    """테이블이 최신인지 보고 오래된 게스트를 지운다. DB가 꺼져 있어도 서버는 켠다."""
+    """테이블이 최신인지 보고 오래된 게스트·만료된 제보를 지운다.
+
+    DB가 꺼져 있어도 서버는 켠다.
+    """
     database_url = settings.database_url.get_secret_value()
     if not database_url:
         return
@@ -41,7 +54,11 @@ def prepare_database(settings: Settings) -> None:
             return
         with Session(engine) as session:
             purge_inactive_guests(session, settings.guest_retention_days)
+            photo_names = purge_expired_reports(session, settings.report_retention_days)
             session.commit()
+            # DB 에서 지운 뒤에 파일을 지워, 커밋이 실패해도 사진만 사라지지 않게 한다.
+            for photo_name in photo_names:
+                (settings.report_photo_dir / photo_name).unlink(missing_ok=True)
     except OperationalError:
         # 오류 문구에 접속 정보가 섞일 수 있어 로그에 남기지 않는다.
         logger.warning("DB에 접속할 수 없어 테이블을 준비하지 못했습니다.")
@@ -75,6 +92,7 @@ app.include_router(me.router, prefix="/api")
 app.include_router(auth.router, prefix="/api")
 app.include_router(weather.router, prefix="/api")
 app.include_router(reports.router, prefix="/api")
+app.include_router(admin.router, prefix="/api")
 
 
 @app.exception_handler(OperationalError)
