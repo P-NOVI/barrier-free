@@ -6,6 +6,7 @@
         interim/calendar/daily.parquet (12 단계, 날짜별 공휴일·연휴)
         data/processed/sdot_sensors.json (센서 위치)
 - 출력: interim/training/hourly.parquet, hourly_report.json
+  config 에 output_full 이 있으면 단절 정리 전 전체 행도 따로 저장한다(walk-forward용).
   열: sensor_code, district, lon, lat, slot_start, day_of_week, hour_of_day, temp,
       rain_mm, 달력 열 6개(12 단계와 같은 이름), foot_traffic
 시각
@@ -321,6 +322,7 @@ def main() -> None:
     in_weather = (ends >= first_hour) & (ends <= last_hour)
     located = np.isin(hourly["sensor_code"].to_numpy(), list(places))
     hourly = hourly.filter(pa.array(in_weather & located))
+    hourly_full = hourly  # 단절 정리 전 행(output_full 에 쓴다)
 
     break_config = config["level_break"]
     ratios = level_ratios(hourly, break_config)
@@ -348,6 +350,25 @@ def main() -> None:
         "sensors_without_location": no_place,
         "level_break": level_break,
     }
+    if "output_full" in config:
+        # walk-forward 검증은 학습 종료일마다 단절을 그 시점까지의 데이터로 다시
+        # 판단하므로 단절 정리 전 전체 행이 필요하다.
+        full = build_training_set(hourly_full, districts, places, weather, calendar)
+        output_full = data_path(config["output_full"])
+        output_full.parent.mkdir(parents=True, exist_ok=True)
+        pq.write_table(full, output_full, compression=PARQUET_COMPRESSION)
+        not_dropped = {
+            **level_break,
+            "flagged_sensors": [],
+            "flagged_ratios": {},
+            "rows_dropped": 0,
+        }
+        full_report = make_report(full, {**dropped, "level_break": not_dropped})
+        data_path(config["report_full"]).write_text(
+            json.dumps(full_report, ensure_ascii=False, indent=1) + "\n",
+            encoding="utf-8",
+        )
+        print(f"전체 행 {full.num_rows:,}개 → {output_full}", flush=True)
     report = make_report(table, dropped)
     report_path.write_text(
         json.dumps(report, ensure_ascii=False, indent=1) + "\n", encoding="utf-8"

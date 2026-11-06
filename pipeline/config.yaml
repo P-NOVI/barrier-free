@@ -206,7 +206,7 @@ calendar:
   attempts: 3
   retry_wait_s: 5
   # 받을 기간(이 달 포함). 연휴 묶음이 기간 끝에서 잘리지 않게 학습 기간보다 앞뒤로 넓게 잡는다.
-  start_month: "2023-12"
+  start_month: "2022-12"
   end_month: "2026-12"
   # 쉬는 날(공휴일·주말)이 이만큼 이어지면 연휴로 본다.
   long_holiday_min_days: 3
@@ -223,6 +223,9 @@ training_set:
   sensors: data/processed/sdot_sensors.json
   output: interim/training/hourly.parquet
   report: interim/training/hourly_report.json
+  # 단절 정리 전 전체 행. walk-forward 검증(ml)이 학습 종료일마다 단절을 다시 판단한다.
+  output_full: interim/training_wf/hourly.parquet
+  report_full: interim/training_wf/hourly_report.json
   # 한 시간에 10분 값이 6개 있다. 이만큼 이상 있어야 그 시간의 유동인구를 만든다.
   bins_per_hour: 6
   min_bins: 4
