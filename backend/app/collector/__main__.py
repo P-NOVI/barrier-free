@@ -20,6 +20,7 @@ from app.collector.weather import (
     district_grids,
 )
 from app.config import Settings, get_settings
+from app.migrate import COLLECTOR_DB, is_up_to_date
 from app.repositories.sensor_repository import load_sensors
 from app.services.congestion_service import CongestionError, create_sdot_client
 from app.services.weather_service import (
@@ -81,8 +82,15 @@ def main() -> int:
         return 1
     try:
         engine = collector_engine(database_url, settings.collector_connect_timeout_s)
+        up_to_date = is_up_to_date(engine, COLLECTOR_DB)
     except SQLAlchemyError as error:
         print(f"수집 DB 연결 실패 ({type(error).__name__})")
+        return 1
+    if not up_to_date:
+        print(
+            "수집 DB 테이블이 최신이 아닙니다. "
+            "backend/ 에서 `uv run alembic -n collector upgrade head` 를 실행하세요."
+        )
         return 1
     with Session(engine) as session:
         ok = collect(session, settings, datetime.now(KST))

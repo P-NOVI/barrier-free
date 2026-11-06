@@ -53,6 +53,8 @@ docker compose exec db psql -U barrierfree -c "select version();"
 
 - 마지막 명령에서 PostgreSQL 17 버전이 나오면 성공입니다.
 - `backend/.env`의 `DATABASE_URL`에 같은 비밀번호로 접속 주소를 넣습니다. 형식은 `backend/.env.example`에 있습니다.
+- 테이블은 마이그레이션으로 만듭니다. `backend/`에서 `uv run alembic upgrade head`를 실행합니다. 처음 한 번, 그리고 `dev`를 받은 뒤 테이블이 바뀌었으면 다시 실행합니다. 서버를 켤 때 테이블이 최신이 아니면 터미널에 경고가 나옵니다.
+- 마이그레이션 전에 서버가 만든 테이블이 이미 있으면 `upgrade`가 `already exists`로 실패합니다. 처음 한 번만 `uv run alembic stamp head`로 표시한 뒤 `uv run alembic check`를 실행합니다. `No new upgrade operations detected`가 나오면 끝입니다. 다른 결과가 나오면 로컬 DB가 지금 모델과 다른 것이므로 팀 채널에 물어봅니다.
 - 끄기: `docker compose stop`. 데이터는 Docker 볼륨(`pgdata`)에 남습니다. `docker compose down -v`는 데이터까지 지우므로 쓰지 않습니다.
 - DB는 이 PC(`127.0.0.1:5432`)에서만 접속할 수 있습니다.
 

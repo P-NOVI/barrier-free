@@ -7,7 +7,9 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
 
 class CollectorBase(DeclarativeBase):
-    """수집 테이블의 부모. 앱 DB의 create_tables 에 섞이지 않게 Base 와 나눈다."""
+    """수집 테이블의 부모. 앱 DB 마이그레이션에 섞이지 않게 Base 와 나눈다.
+
+    테이블은 migrations/collector 가 만든다."""
 
 
 def collected_at() -> Mapped[datetime]:

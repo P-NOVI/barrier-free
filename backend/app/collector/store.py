@@ -5,7 +5,6 @@ from sqlalchemy import Engine, make_url
 from sqlalchemy.dialects import postgresql, sqlite
 from sqlalchemy.orm import Session
 
-from app.collector.models import CollectorBase
 from app.db import get_engine
 from app.services.weather_service import KST
 
@@ -18,9 +17,7 @@ def collector_engine(database_url: str, connect_timeout_s: int) -> Engine:
     url = make_url(database_url)
     if url.drivername == "postgresql":
         url = url.set(drivername="postgresql+psycopg")
-    engine = get_engine(url.render_as_string(hide_password=False), connect_timeout_s)
-    CollectorBase.metadata.create_all(engine)
-    return engine
+    return get_engine(url.render_as_string(hide_password=False), connect_timeout_s)
 
 
 def insert_new(session: Session, model: type, rows: list[dict[str, Any]]) -> int:

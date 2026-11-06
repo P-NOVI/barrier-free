@@ -1,9 +1,14 @@
+from datetime import UTC, datetime
+
 from fastapi.testclient import TestClient
 from httpx import Response
-from sqlalchemy import create_engine, inspect
+from sqlalchemy import create_engine, inspect, select
+from sqlalchemy.orm import Session
 
 from app.config import Settings, get_settings
 from app.main import app, prepare_database
+from app.migrate import APP_DB
+from app.models import User
 
 client = TestClient(app)
 
@@ -40,13 +45,30 @@ def test_unreachable_db_is_503(tmp_path) -> None:
     assert response.json()["detail"]["reason"] == "db_unavailable"
 
 
-def test_prepare_database_creates_tables(tmp_path) -> None:
+def test_prepare_database_warns_when_not_migrated(tmp_path, caplog) -> None:
     database_url = f"sqlite:///{tmp_path / 'app.db'}"
 
     prepare_database(Settings(_env_file=None, database_url=database_url))
 
-    tables = set(inspect(create_engine(database_url)).get_table_names())
-    assert {"users", "auth_sessions", "search_history", "route_history"} <= tables
+    assert "alembic upgrade head" in caplog.text
+    assert inspect(create_engine(database_url)).get_table_names() == []
+
+
+def test_prepare_database_purges_old_guests_after_migration(
+    tmp_path, caplog, migrate
+) -> None:
+    database_url = f"sqlite:///{tmp_path / 'app.db'}"
+    engine = create_engine(database_url)
+    migrate(engine, APP_DB)
+    with Session(engine) as session:
+        session.add(User(last_seen_at=datetime(2000, 1, 1, tzinfo=UTC)))
+        session.commit()
+
+    prepare_database(Settings(_env_file=None, database_url=database_url))
+
+    assert "alembic" not in caplog.text
+    with Session(engine) as session:
+        assert session.scalars(select(User)).all() == []
 
 
 def test_prepare_database_skips_unreachable_db(tmp_path) -> None:
