@@ -1,0 +1,2500 @@
+:root {
+    --text: #18212f;
+    --bg: #fff;
+    --overlay-bg: rgba(255, 255, 255, 0.85);
+    --error-bg: #fdecea;
+    --error-text: #8a1c12;
+    --muted: #5b6472;
+    --border: #e2e6eb;
+    /* 출발·도착은 색 대신 핀 모양(속 빈·속 찬)으로 구분한다. */
+    --pin-start: #18212f;
+    --pin-goal: #18212f;
+    --panel-shadow:
+        0 1px 2px rgba(24, 33, 47, 0.08), 0 4px 14px rgba(24, 33, 47, 0.1);
+    --sheet-shadow: 0 -2px 18px rgba(24, 33, 47, 0.12);
+    --brand: #18212f;
+    --my-location: #1a73e8;
+    --route-arrow: rgba(255, 255, 255, 0.6);
+    --saved-place: #2b3a8c;
+    --icon-bg: #c5cbd3;
+    --soft-bg: #f1f3f6;
+    /* 점자블록 노랑: 이동 조건과 접근성 안내에만 쓴다. */
+    --tactile: #ffc21a;
+    --tactile-soft: #fff4d1;
+    --tactile-text: #6b4e00;
+    /* 카카오 로그인 버튼 색(카카오 디자인 가이드) */
+    --kakao-yellow: #fee500;
+    --kakao-label: rgba(0, 0, 0, 0.85);
+
+    font:
+        16px/1.5 'Pretendard Variable',
+        Pretendard,
+        system-ui,
+        sans-serif;
+    letter-spacing: -0.01em;
+    color: var(--text);
+    background: var(--bg);
+}
+
+html,
+body,
+#root,
+.app {
+    height: 100%;
+    margin: 0;
+}
+
+/* 키보드로 옮긴 포커스는 잉크색 테두리로 보인다. */
+:focus-visible {
+    outline: 2px solid var(--text);
+    outline-offset: 2px;
+}
+
+/* 입력칸 안내 문구도 본문처럼 대비 4.5:1 이상 */
+input::placeholder {
+    color: var(--muted);
+    opacity: 1;
+}
+
+/* 아래 메뉴·시트 크기. 좁은 화면은 지도가 그 위에서 끝나 카카오 로고·축척이 가리지 않는다. */
+.app {
+    /* 화면 아래에 띄운 메뉴 막대 높이와 둘레 여백 */
+    --nav-bar: 64px;
+    --nav-gap: 10px;
+    /* 메뉴가 차지하는 아래 영역 */
+    --nav-height: calc(
+        var(--nav-bar) + var(--nav-gap) * 2 + env(safe-area-inset-bottom)
+    );
+    /* 접힌 시트에 보이는 손잡이·제목 높이 */
+    --sheet-peek: 52px;
+    /* 끝까지 올린 시트 위에 남기는 틈 */
+    --sheet-top-gap: calc(env(safe-area-inset-top) + 8px);
+    --map-bottom: var(--nav-height);
+
+    position: relative;
+    overflow: hidden;
+}
+
+.app[data-sheet='collapsed'] {
+    --map-bottom: calc(var(--nav-height) + var(--sheet-peek));
+}
+
+/* 절반·전체로 편 시트는 화면 가운데부터 덮는다(전체는 지도를 다 가린다). */
+.app[data-sheet='half'],
+.app[data-sheet='full'] {
+    --map-bottom: 50%;
+}
+
+/* 시트가 움직이는 동안은 지도를 화면 아래까지 늘려, 시트가 지나간 자리가 비지 않게 한다. */
+.app[data-sheet-moving] {
+    --map-bottom: 0px;
+}
+
+/* 고른 장소 시트가 메뉴 자리를 덮으므로 지도는 그 시트 위에서 끝난다. 높이는 App.tsx 가 잰다. */
+.app[data-sheet='place'] {
+    --map-bottom: var(--place-sheet-height, 0px);
+}
+
+/* 안내 중에는 메뉴를 숨긴다. */
+.app[data-navigating] {
+    --nav-height: 0px;
+}
+
+.map-view {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: var(--map-bottom);
+    left: 0;
+}
+
+.visually-hidden {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    border: 0;
+}
+
+.map-view__canvas {
+    width: 100%;
+    height: 100%;
+}
+
+.map-view__attribution {
+    position: absolute;
+    right: 4px;
+    bottom: 4px;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 11px;
+}
+
+.map-view__attribution a {
+    padding: 0 4px;
+    color: var(--text);
+    background: var(--overlay-bg);
+    text-decoration: none;
+}
+
+.map-view__attribution-toggle {
+    width: 18px;
+    height: 18px;
+    padding: 0;
+    border: 1px solid var(--muted);
+    border-radius: 50%;
+    font: italic 600 11px/1 serif;
+    color: var(--muted);
+    background: var(--overlay-bg);
+    cursor: pointer;
+}
+
+/* 좁은 화면: 검색창 아래, 내 위치 버튼 왼쪽 */
+.map-view__error {
+    position: absolute;
+    top: 72px;
+    left: 12px;
+    right: 68px;
+    z-index: 10;
+    margin: 0;
+    padding: 8px 12px;
+    border-radius: 6px;
+    color: var(--error-text);
+    background: var(--error-bg);
+}
+
+/* 지도를 못 띄우면 검색창보다 오류가 먼저 보이게 한다. */
+.map-view__error {
+    z-index: 30;
+}
+
+.map-pin {
+    position: relative;
+    width: 32px;
+    height: 47px;
+    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.35));
+}
+
+.map-pin svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+    overflow: visible;
+    fill: currentColor;
+}
+
+/* 핀 머리(지름 = 핀 너비) 가운데 */
+.map-pin__label {
+    position: absolute;
+    top: 0;
+    left: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    font-size: 11px;
+    font-weight: 700;
+    line-height: 1;
+    color: #fff;
+    white-space: nowrap;
+}
+
+.map-pin--start {
+    color: var(--pin-start);
+}
+
+/* 출발 핀은 속이 빈 모양 */
+.map-pin--start svg {
+    fill: var(--bg);
+    stroke: currentColor;
+    stroke-width: 2;
+}
+
+.map-pin--start .map-pin__label {
+    color: var(--pin-start);
+}
+
+.map-pin--goal {
+    color: var(--pin-goal);
+}
+
+/* 좁은 화면에서 고른 장소: 머리 가운데 노란 점 */
+.map-pin--picked {
+    color: var(--brand);
+}
+
+.map-pin--picked .map-pin__label::before {
+    content: '';
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--tactile);
+}
+
+/*
+ * 경로 선 안 진행 방향 화살표. 오른쪽을 가리키게 그리고 --angle(MapView 가 정함)만큼 돌린다.
+ * 높이는 선 폭(8px)보다 작게 둬서 위아래에 파란 여백을 남긴다.
+ */
+.route-arrow {
+    width: 7px;
+    height: 6px;
+    background: var(--route-arrow);
+    /* 앞 끝, 뒤 아래, 뒤쪽 홈, 뒤 위 */
+    clip-path: polygon(100% 50%, 0 100%, 28% 50%, 0 0);
+    transform: rotate(var(--angle));
+    pointer-events: none;
+}
+
+.my-location-dot {
+    box-sizing: border-box;
+    width: 18px;
+    height: 18px;
+    border: 3px solid #fff;
+    border-radius: 50%;
+    background: var(--my-location);
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4);
+}
+
+/* 좁은 화면: 검색창 아래 오른쪽 */
+.my-location-control {
+    position: absolute;
+    top: 72px;
+    right: 12px;
+    z-index: 15;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.my-location-control__button {
+    display: grid;
+    flex: none;
+    place-items: center;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    border: none;
+    border-radius: 50%;
+    color: var(--text);
+    background: var(--bg);
+    box-shadow: var(--panel-shadow);
+    cursor: pointer;
+}
+
+.my-location-control__button svg {
+    width: 22px;
+    height: 22px;
+}
+
+.my-location-control__button:disabled {
+    color: var(--muted);
+    cursor: default;
+}
+
+.my-location-control__error {
+    max-width: 240px;
+    margin: 0;
+    padding: 6px 10px;
+    border-radius: 8px;
+    font-size: 13px;
+    color: var(--error-text);
+    background: var(--error-bg);
+    box-shadow: var(--panel-shadow);
+}
+
+/* 로그인·로그아웃 */
+.account-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.account-panel__status,
+.my-tab__status {
+    margin: 0;
+    font-size: 14px;
+    color: var(--muted);
+}
+
+/* 문장·칩 안에 글자 크기로 넣는 아이콘 */
+.inline-icon {
+    width: 1em;
+    height: 1em;
+    vertical-align: -0.15em;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.8;
+    stroke-linejoin: round;
+}
+
+.place-info__chip[aria-pressed='true'] .inline-icon {
+    fill: currentColor;
+}
+
+.account-panel__error,
+.my-tab__error {
+    margin: 0;
+    padding: 6px 8px;
+    border-radius: 8px;
+    font-size: 13px;
+    color: var(--error-text);
+    background: var(--error-bg);
+}
+
+/* My 탭: 위에 즐겨찾기·내 장소·내 경로 탭, 좁은 화면은 맨 아래 계정 */
+.my-tab__tabs {
+    position: relative;
+    display: flex;
+    border-bottom: 1px solid var(--border);
+}
+
+/* 고른 탭 밑줄. 고른 탭 자리로 미끄러진다(--my-index 는 MyTab 이 정함). */
+.my-tab__tabs::after {
+    content: '';
+    position: absolute;
+    bottom: -1px;
+    left: 0;
+    width: calc(100% / var(--my-count));
+    height: 3px;
+    border-radius: 3px 3px 0 0;
+    background: var(--brand);
+    transform: translateX(calc(var(--my-index) * 100%));
+    transition: transform 0.28s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.my-tab__tab {
+    flex: 1;
+    min-height: 44px;
+    padding: 0;
+    border: 0;
+    font: inherit;
+    color: var(--muted);
+    background: none;
+    cursor: pointer;
+    transition: color 0.2s ease;
+}
+
+.my-tab__tab[aria-selected='true'] {
+    font-weight: 600;
+    color: var(--brand);
+}
+
+.my-tab__panel {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding-top: 8px;
+}
+
+.my-tab__heading {
+    margin: 12px 0 0;
+    font-size: 13px;
+    font-weight: 400;
+    color: var(--muted);
+}
+
+.my-tab__account {
+    margin-top: 16px;
+    padding-top: 4px;
+    border-top: 1px solid var(--border);
+}
+
+.my-tab__account .my-tab__heading {
+    margin-bottom: 8px;
+}
+
+/* My 탭 아래 앱 설치(홈 화면에 추가) */
+.install-app {
+    margin-top: 16px;
+    padding-top: 4px;
+    border-top: 1px solid var(--border);
+}
+
+.install-app__text {
+    margin: 8px 0 0;
+    font-size: 14px;
+    line-height: 1.5;
+    color: var(--text);
+}
+
+.install-app__button {
+    width: 100%;
+    height: 44px;
+    margin-top: 8px;
+    border: 0;
+    border-radius: 10px;
+    font: inherit;
+    font-weight: 600;
+    color: #fff;
+    background: var(--brand);
+    cursor: pointer;
+}
+
+/* My 탭 목록: 동그란 아이콘, 이름, 작은 글씨 설명 */
+.my-list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.my-list__row {
+    display: flex;
+    align-items: center;
+    border-bottom: 1px solid var(--border);
+}
+
+.my-list__pick {
+    display: flex;
+    flex: 1;
+    align-items: center;
+    gap: 12px;
+    min-width: 0;
+    min-height: 64px;
+    padding: 8px 0;
+    border: 0;
+    font: inherit;
+    text-align: left;
+    color: var(--text);
+    background: none;
+    cursor: pointer;
+}
+
+.my-list__icon {
+    display: grid;
+    flex: none;
+    place-items: center;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    color: #fff;
+    background: var(--icon-bg);
+}
+
+.my-list__icon svg {
+    width: 22px;
+    height: 22px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.my-list__text {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+}
+
+.my-list__title {
+    font-weight: 600;
+}
+
+.my-list__title,
+.my-list__detail {
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+
+.my-list__detail {
+    font-size: 13px;
+    color: var(--muted);
+}
+
+.my-list__delete {
+    flex: none;
+    width: 44px;
+    height: 44px;
+    border: 0;
+    font-size: 20px;
+    line-height: 1;
+    color: var(--muted);
+    background: none;
+    cursor: pointer;
+}
+
+/* 내 제보: 고치는 폼, 지울지 묻는 줄 */
+.my-report__edit {
+    padding: 12px 0;
+    border-bottom: 1px solid var(--border);
+}
+
+.my-report__confirm {
+    flex-wrap: wrap;
+    gap: 8px;
+    justify-content: flex-end;
+    padding: 12px 0;
+}
+
+.my-report__question {
+    flex: 1 1 100%;
+    font-size: 14px;
+}
+
+/* 내 장소로 등록할 장소 찾기 */
+.my-register {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.my-register__header {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.my-register__back {
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    border: 0;
+    font-size: 28px;
+    line-height: 1;
+    color: var(--text);
+    background: none;
+    cursor: pointer;
+}
+
+.my-register__title {
+    margin: 0;
+    font-size: 16px;
+}
+
+.my-register__input {
+    box-sizing: border-box;
+    width: 100%;
+    min-height: 44px;
+    padding: 0 12px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    font: inherit;
+}
+
+.my-register__input:focus {
+    border-color: var(--brand);
+    outline: none;
+}
+
+.account-panel__button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 44px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    font: inherit;
+    font-weight: 600;
+    color: var(--text);
+    text-decoration: none;
+    background: var(--bg);
+    cursor: pointer;
+}
+
+.account-panel__button--kakao {
+    border-color: var(--kakao-yellow);
+    color: var(--kakao-label);
+    background: var(--kakao-yellow);
+}
+
+/* 길찾기 탭: 출발·도착 검색 아래 */
+.route-panel {
+    padding-top: 12px;
+}
+
+/* 안내 중에는 시트 대신 지도 아래에 뜬 카드 */
+.navigation-panel {
+    position: absolute;
+    left: 12px;
+    right: 12px;
+    bottom: 28px;
+    z-index: 20;
+    max-width: 420px;
+    margin: 0 auto;
+    padding: 12px 16px;
+    border-radius: 12px;
+    background: var(--bg);
+    box-shadow: var(--panel-shadow);
+}
+
+.route-panel__row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+}
+
+.route-panel__preset {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    color: var(--muted);
+}
+
+/* 이동 조건은 점자 노랑 알약. 기본 화살표는 끝에 붙어서 안쪽에 직접 그린다. */
+.route-panel__preset select {
+    min-height: 36px;
+    padding: 0 34px 0 14px;
+    border: 0;
+    border-radius: 999px;
+    font: inherit;
+    font-weight: 600;
+    color: var(--text);
+    background: var(--tactile);
+    appearance: none;
+    cursor: pointer;
+}
+
+/* 펼친 목록: 흰 카드, 고른 조건은 옅은 노랑과 오른쪽 체크. base-select 를 못 쓰는 브라우저는 기본 목록을 흰 바탕으로 보인다. */
+.route-panel__preset option {
+    font-weight: 500;
+    color: var(--text);
+    background: var(--bg);
+}
+
+@supports (appearance: base-select) {
+    .route-panel__preset select,
+    .route-panel__preset select::picker(select) {
+        appearance: base-select;
+    }
+
+    /* 고른 조건 글자를 알약 세로 가운데에 둔다. */
+    .route-panel__preset select {
+        display: inline-flex;
+        align-items: center;
+    }
+
+    .route-panel__preset select::picker-icon {
+        display: none;
+    }
+
+    .route-panel__preset select::picker(select) {
+        min-width: 180px;
+        margin-block: 6px;
+        padding: 6px;
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        background: var(--bg);
+        box-shadow: var(--panel-shadow);
+    }
+
+    .route-panel__preset option {
+        min-height: 44px;
+        padding: 0 12px;
+        border-radius: 10px;
+        font-size: 15px;
+        outline-offset: -2px;
+        cursor: pointer;
+    }
+
+    .route-panel__preset option:hover {
+        background: var(--soft-bg);
+    }
+
+    .route-panel__preset option:checked {
+        font-weight: 700;
+        background: var(--tactile-soft);
+    }
+
+    .route-panel__preset option::checkmark {
+        order: 1;
+        margin-left: auto;
+        color: var(--tactile-text);
+    }
+}
+
+.route-panel__preset::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    right: 15px;
+    width: 6px;
+    height: 6px;
+    border-right: 2px solid var(--text);
+    border-bottom: 2px solid var(--text);
+    transform: translateY(-70%) rotate(45deg);
+    transition: transform 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
+    pointer-events: none;
+}
+
+/* 목록이 펼쳐져 있으면 위를 향한다. :open 을 모르는 브라우저는 이 규칙을 버려 늘 아래를 향한다. */
+.route-panel__preset:has(select:open)::after {
+    transform: translateY(-30%) rotate(-135deg);
+}
+
+.route-panel__reset {
+    min-height: 36px;
+    padding: 0 10px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    font: inherit;
+    color: var(--text);
+    background: var(--bg);
+    cursor: pointer;
+}
+
+.route-panel__start {
+    width: 100%;
+    min-height: 48px;
+    margin-top: 12px;
+    border: 0;
+    border-radius: 10px;
+    font: inherit;
+    font-weight: 600;
+    color: #fff;
+    background: var(--brand);
+    cursor: pointer;
+}
+
+.navigation-panel__next {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 0;
+    font-size: 20px;
+    /* '오른쪽'이 '오른 / 쪽'으로 끊기지 않게 낱말 단위로 줄을 바꾼다. */
+    word-break: keep-all;
+}
+
+.navigation-panel__icon {
+    flex: none;
+    width: 36px;
+    height: 36px;
+    fill: var(--brand);
+}
+
+.navigation-panel__remaining {
+    margin: 8px 0 0;
+    font-size: 14px;
+    color: var(--muted);
+}
+
+.navigation-panel__remaining strong {
+    color: var(--text);
+}
+
+.navigation-panel__stop,
+.navigation-panel__voice {
+    flex: none;
+    min-height: 40px;
+    padding: 0 14px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font: inherit;
+    background: var(--bg);
+    cursor: pointer;
+}
+
+.navigation-panel__stop {
+    color: var(--error-text);
+}
+
+.navigation-panel__voice {
+    min-height: 32px;
+    margin-top: 8px;
+    font-size: 13px;
+    color: var(--muted);
+}
+
+.navigation-panel__voice[aria-pressed='true'] {
+    border-color: var(--brand);
+    color: var(--brand);
+}
+
+.route-panel__guide,
+.route-panel__error,
+.route-panel__note {
+    margin: 8px 0 0;
+    font-size: 14px;
+}
+
+.route-panel__guide,
+.route-panel__note {
+    color: var(--muted);
+}
+
+.route-panel__error {
+    padding: 6px 10px;
+    border-radius: 6px;
+    color: var(--error-text);
+    background: var(--error-bg);
+}
+
+.route-panel__headline {
+    display: flex;
+    align-items: baseline;
+    margin: 12px 0 0;
+    font-weight: 700;
+}
+
+/* 내 경로 저장 별: 흰 별, 저장하면 파란 별 */
+.route-panel__save {
+    display: grid;
+    flex: none;
+    place-items: center;
+    align-self: center;
+    width: 40px;
+    height: 40px;
+    margin-left: auto;
+    padding: 0;
+    border: 1px solid var(--border);
+    border-radius: 50%;
+    color: var(--muted);
+    background: var(--bg);
+    cursor: pointer;
+}
+
+.route-panel__save svg {
+    width: 22px;
+    height: 22px;
+    fill: #fff;
+    stroke: currentColor;
+    stroke-width: 1.6;
+    stroke-linejoin: round;
+}
+
+.route-panel__save[aria-pressed='true'] {
+    border-color: var(--saved-place);
+    color: var(--saved-place);
+}
+
+.route-panel__save[aria-pressed='true'] svg {
+    fill: currentColor;
+}
+
+.route-panel__duration {
+    font-size: 24px;
+}
+
+.route-panel__distance {
+    margin-left: 10px;
+    padding-left: 10px;
+    border-left: 1px solid var(--border);
+    font-size: 18px;
+    font-variant-numeric: tabular-nums;
+}
+
+.route-panel__summary {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 4px;
+    margin: 8px 0 0;
+}
+
+.route-panel__summary dt {
+    font-size: 12px;
+    color: var(--muted);
+}
+
+.route-panel__summary dd {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+}
+
+/* 출발 시각: 지금 / 시각 지정(오늘·내일·모레 + 시) */
+.route-panel__depart {
+    margin: 10px 0 0;
+    padding: 0;
+    border: 0;
+}
+
+.route-panel__depart legend {
+    padding: 0;
+    font-size: 12px;
+    color: var(--muted);
+}
+
+.route-panel__depart-kind {
+    display: flex;
+    gap: 16px;
+    margin-top: 4px;
+    font-size: 14px;
+}
+
+.route-panel__depart-kind label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 36px;
+    cursor: pointer;
+}
+
+.route-panel__depart-at {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin-top: 6px;
+}
+
+.route-panel__depart-days {
+    display: flex;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+}
+
+.route-panel__depart-days button {
+    min-height: 36px;
+    padding: 0 12px;
+    border: 0;
+    border-left: 1px solid var(--border);
+    font: inherit;
+    font-size: 14px;
+    color: var(--text);
+    background: var(--bg);
+    cursor: pointer;
+}
+
+.route-panel__depart-days button:first-child {
+    border-left: 0;
+}
+
+.route-panel__depart-days button[aria-pressed='true'] {
+    font-weight: 600;
+    color: #fff;
+    background: var(--brand);
+}
+
+.route-panel__depart-hour select {
+    min-height: 36px;
+    padding: 0 8px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    font: inherit;
+    font-size: 14px;
+    color: var(--text);
+    background: var(--bg);
+}
+
+/* 1안·2안 카드. 고른 카드는 테두리를 진하게 */
+.route-panel__options {
+    display: grid;
+    gap: 8px;
+    margin-top: 12px;
+}
+
+.route-panel__option {
+    display: grid;
+    gap: 2px;
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    font: inherit;
+    text-align: left;
+    color: var(--text);
+    background: var(--bg);
+    cursor: pointer;
+}
+
+.route-panel__option[aria-pressed='true'] {
+    border: 2px solid var(--saved-place);
+    padding: 9px 11px;
+}
+
+.route-panel__option-title {
+    font-size: 14px;
+    font-weight: 700;
+}
+
+.route-panel__option-detail {
+    font-size: 13px;
+    color: var(--muted);
+    font-variant-numeric: tabular-nums;
+}
+
+/* 길찾기 탭 위쪽 출발·도착 입력 */
+.place-search {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--border);
+}
+
+/*
+ * 입력칸 묶음은 칸을 나누지 않고 .place-search 의 줄로 바로 놓는다.
+ * 검색 결과·최근 기록(dropdown)만 맨 뒤로 보내, 출발지 칸을 눌러도
+ * 도착지 칸과 내 장소 버튼이 그 자리에 남고 목록은 그 아래에 열린다.
+ */
+.place-search__field {
+    display: contents;
+}
+
+.place-search__dropdown {
+    order: 1;
+}
+
+.place-search__dropdown:empty {
+    display: none;
+}
+
+.place-search__row {
+    display: flex;
+    gap: 6px;
+}
+
+/* 입력칸 아래 집·회사 바로 넣기 버튼: 동그란 아이콘과 이름 */
+.place-search__shortcuts {
+    display: flex;
+    gap: 4px;
+    padding-top: 2px;
+}
+
+.place-search__shortcut {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-height: 40px;
+    padding: 0 10px 0 2px;
+    border: 0;
+    border-radius: 999px;
+    font: inherit;
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text);
+    background: none;
+    cursor: pointer;
+}
+
+.place-search__shortcut-icon {
+    display: grid;
+    place-items: center;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    color: #fff;
+    background: var(--saved-place);
+}
+
+.place-search__shortcut-icon svg {
+    width: 16px;
+    height: 16px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+/* 아직 등록하지 않은 칸은 My 탭 내 장소처럼 흐린 회색 */
+.place-search__shortcut[data-empty] {
+    color: var(--muted);
+}
+
+.place-search__shortcut[data-empty] .place-search__shortcut-icon {
+    background: var(--icon-bg);
+}
+
+.place-search__label {
+    display: flex;
+    flex: 1;
+    align-items: center;
+    min-width: 0;
+    padding: 0 12px;
+    border: 1px solid transparent;
+    border-radius: 10px;
+    background: var(--soft-bg);
+}
+
+.place-search__label:focus-within {
+    border-color: var(--text);
+    background: var(--bg);
+}
+
+.place-search__label input {
+    flex: 1;
+    min-width: 0;
+    min-height: 40px;
+    border: 0;
+    outline: none;
+    font: inherit;
+    color: var(--text);
+    background: transparent;
+}
+
+.place-search__locate {
+    flex: none;
+    min-height: 42px;
+    padding: 0 10px;
+    border: 1px solid transparent;
+    border-radius: 10px;
+    font: inherit;
+    font-size: 14px;
+    color: var(--text);
+    background: var(--soft-bg);
+    cursor: pointer;
+}
+
+.place-search__locate:disabled {
+    color: var(--muted);
+    cursor: default;
+}
+
+.place-search__results {
+    margin: 4px 0 0;
+    padding: 0;
+    list-style: none;
+}
+
+.place-search__results button {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    padding: 8px;
+    border: 0;
+    border-bottom: 1px solid var(--border);
+    font: inherit;
+    text-align: left;
+    color: var(--text);
+    background: var(--bg);
+    cursor: pointer;
+}
+
+/* 마우스를 올리거나 터치할 때는 테두리를 두지 않는다(터치 기기는 손을 뗀 뒤에도 hover 가 남는다).
+   키보드로 옮겨 갈 때만 테두리로 위치를 보여 준다. */
+.place-search__results button:focus-visible {
+    outline: 2px solid var(--text);
+    outline-offset: -2px;
+}
+
+/* 검색어가 없을 때 검색창 아래에 보이는 최근 경로·검색 */
+.place-search__recent-title {
+    margin: 8px 0 0;
+    padding: 0 8px;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--muted);
+}
+
+.place-search__recent-item {
+    display: flex;
+}
+
+.place-search__recent-item button:first-child {
+    flex: 1;
+    min-width: 0;
+}
+
+.place-search__results .place-search__remove {
+    flex: none;
+    justify-content: center;
+    align-items: center;
+    width: 44px;
+    font-size: 18px;
+    color: var(--muted);
+}
+
+.place-search__name {
+    font-weight: 600;
+}
+
+.place-search__address,
+.place-search__message {
+    font-size: 13px;
+    color: var(--muted);
+}
+
+.place-search__message,
+.place-search__error {
+    margin: 4px 0 0;
+    padding: 0 8px;
+}
+
+.place-search__error {
+    padding: 6px 10px;
+    border-radius: 6px;
+    font-size: 14px;
+    color: var(--error-text);
+    background: var(--error-bg);
+}
+
+/* 선택한 장소 핀 위에 뜨는 카드. 아래 여백은 핀 높이만큼 비워 핀을 가리지 않게 한다. */
+/* 폭을 고정한다. 안 그러면 지도 가장자리 가까이에서 카드 폭이 줄고 크기 변화가 생긴다. */
+.map-popup {
+    position: relative;
+    width: min(300px, calc(100vw - 32px));
+    /* 높이 0: 지도가 오버레이 위치를 잡을 때 카드 높이에 기대지 않게 한다. */
+    height: 0;
+}
+
+.place-info {
+    position: absolute;
+    /* 아래 10px 은 꼬리 자리. 꼬리 끝이 .map-popup 아래, 곧 고른 위치다. */
+    bottom: 10px;
+    left: 0;
+    box-sizing: border-box;
+    width: 100%;
+    padding: 16px;
+    /* 지도 오버레이가 줄바꿈을 막아 두는 경우가 있어 되돌린다. */
+    white-space: normal;
+    word-break: keep-all;
+    border-radius: 16px;
+    background: var(--bg);
+    box-shadow: var(--panel-shadow);
+}
+
+/* 아래 가운데 꼬리: 카드가 고른 장소를 가리킨다. */
+.place-info::after {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 100%;
+    transform: translateX(-50%);
+    border: 10px solid transparent;
+    border-bottom: 0;
+    border-top-color: var(--bg);
+}
+
+.place-info__close {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    border: 0;
+    color: var(--text);
+    background: none;
+    cursor: pointer;
+}
+
+.place-info__close svg {
+    width: 20px;
+    height: 20px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+}
+
+.place-info__name {
+    margin: 0 36px 0 0;
+    font-size: 18px;
+    overflow-wrap: anywhere;
+}
+
+.place-info__address {
+    margin: 4px 0 0;
+    font-size: 14px;
+    color: var(--muted);
+    overflow-wrap: anywhere;
+}
+
+/* 역 엘리베이터 출구 같은 접근성 안내는 노란 칩 */
+.place-info__note {
+    display: inline-block;
+    margin: 8px 0 0;
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--tactile-text);
+    background: var(--tactile-soft);
+}
+
+.place-info__error {
+    margin: 8px 0 0;
+    padding: 6px 8px;
+    border-radius: 8px;
+    font-size: 13px;
+    color: var(--error-text);
+    background: var(--error-bg);
+}
+
+/* 아래 줄: 왼쪽 북마크, 오른쪽 길찾기 */
+.place-info__toolbar {
+    display: flex;
+    gap: 8px;
+    margin-top: 16px;
+}
+
+.place-info__bookmark,
+.place-info__route {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 40px;
+    border-radius: 10px;
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.place-info__bookmark {
+    flex: 1;
+    padding: 0;
+    border: 1px solid var(--border);
+    color: var(--text);
+    background: var(--bg);
+}
+
+.place-info__bookmark svg {
+    width: 22px;
+    height: 22px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.6;
+    stroke-linejoin: round;
+}
+
+/* 저장한 장소면 북마크를 채운다. */
+.place-info__bookmark[data-saved] {
+    border-color: var(--saved-place);
+    color: var(--saved-place);
+}
+
+.place-info__bookmark[data-saved] svg {
+    fill: currentColor;
+}
+
+.place-info__route {
+    flex: none;
+    gap: 4px;
+    padding: 0 14px;
+    border: 0;
+    color: #fff;
+    background: var(--brand);
+}
+
+.place-info__route svg {
+    width: 18px;
+    height: 18px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.place-info__bookmark[aria-expanded='true'],
+.place-info__route[aria-expanded='true'] {
+    box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.2);
+}
+
+/* 북마크·길찾기를 눌러 펼친 칸 */
+.place-info__panel {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 10px;
+}
+
+.place-info__panel-title {
+    margin: 4px 0 0;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--muted);
+}
+
+.place-info__chips,
+.place-info__custom {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.place-info__chip {
+    min-height: 36px;
+    padding: 0 12px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    font: inherit;
+    font-size: 14px;
+    color: var(--text);
+    background: var(--bg);
+    cursor: pointer;
+}
+
+/* 즐겨찾기 칩은 내용 너비만 차지한다. */
+.place-info__panel > .place-info__chip {
+    align-self: flex-start;
+}
+
+.place-info__chip[aria-pressed='true'] {
+    border-color: var(--saved-place);
+    font-weight: 600;
+    color: var(--saved-place);
+}
+
+.place-info__chip:disabled {
+    color: var(--muted);
+    cursor: default;
+}
+
+.place-info__custom-input {
+    flex: 1;
+    min-width: 80px;
+    min-height: 36px;
+    box-sizing: border-box;
+    padding: 0 10px;
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    font: inherit;
+    font-size: 14px;
+}
+
+/* 출발·도착: 기본은 흰 바탕. 올리거나(마우스) 누르는 동안(터치) 핀 색으로 채운다. */
+.place-info__endpoint {
+    min-height: 40px;
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    font: inherit;
+    font-weight: 600;
+    color: var(--text);
+    background: var(--bg);
+    cursor: pointer;
+}
+
+.place-info__endpoint--start:hover,
+.place-info__endpoint--start:focus-visible,
+.place-info__endpoint--start:active {
+    border-color: var(--pin-start);
+    color: #fff;
+    background: var(--pin-start);
+}
+
+.place-info__endpoint--goal:hover,
+.place-info__endpoint--goal:focus-visible,
+.place-info__endpoint--goal:active {
+    border-color: var(--pin-goal);
+    color: #fff;
+    background: var(--pin-goal);
+}
+
+/* 좁은 화면에서 고른 장소: 아래 메뉴 자리를 덮고 화면 아래에 붙는 시트 */
+.place-sheet {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 25;
+    box-sizing: border-box;
+    max-height: 70%;
+    padding: 20px 16px calc(16px + env(safe-area-inset-bottom));
+    overflow-y: auto;
+    border-radius: 20px 20px 0 0;
+    background: var(--bg);
+    box-shadow: var(--sheet-shadow);
+}
+
+.place-info-sheet__head {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+}
+
+.place-info-sheet__text {
+    flex: 1;
+    min-width: 0;
+    padding-top: 2px;
+}
+
+.place-info-sheet .place-info__name {
+    margin: 0;
+    font-size: 20px;
+}
+
+/* 이름 오른쪽 동그란 즐겨찾기·닫기 버튼 */
+.place-info-sheet__round {
+    display: grid;
+    flex: none;
+    place-items: center;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    color: var(--text);
+    background: var(--soft-bg);
+    cursor: pointer;
+}
+
+.place-info-sheet__round svg {
+    width: 22px;
+    height: 22px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+/* 저장한 장소면 별을 채운다. */
+.place-info-sheet__star[data-saved] {
+    color: var(--saved-place);
+}
+
+.place-info-sheet__star[data-saved] svg {
+    fill: currentColor;
+}
+
+.place-info-sheet__star[aria-expanded='true'] {
+    box-shadow: inset 0 0 0 2px var(--saved-place);
+}
+
+/* 아래 줄: 같은 폭의 출발·도착 */
+.place-info-sheet__actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-top: 16px;
+}
+
+.place-info-sheet__action {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-height: 48px;
+    border: 0;
+    border-radius: 10px;
+    font: inherit;
+    font-weight: 600;
+    color: var(--text);
+    background: var(--soft-bg);
+    cursor: pointer;
+}
+
+.place-info-sheet__action svg {
+    width: 20px;
+    height: 20px;
+    fill: currentColor;
+}
+
+.place-info-sheet__action--start svg {
+    color: var(--pin-start);
+}
+
+.place-info-sheet__action--goal {
+    color: #fff;
+    background: var(--brand);
+}
+
+/* 즐겨찾기·내 장소 별. 별 가운데가 장소를 가리키고, 내 장소 이름표는 그 아래에 뜬다. */
+.saved-place-pin {
+    position: relative;
+    display: block;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: none;
+    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.35));
+    cursor: pointer;
+}
+
+.saved-place-pin svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+
+.saved-place-pin circle {
+    fill: var(--saved-place);
+}
+
+.saved-place-pin path {
+    fill: #fff;
+    stroke: #fff;
+    stroke-width: 1.2;
+    stroke-linejoin: round;
+}
+
+.saved-place-pin__label {
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    margin-top: 2px;
+    padding: 0 6px;
+    border-radius: 8px;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 18px;
+    white-space: nowrap;
+    color: var(--text);
+    background: var(--overlay-bg);
+}
+
+/* 화면 맨 위 장소 검색창 */
+.top-search {
+    position: absolute;
+    top: 12px;
+    left: 12px;
+    right: 12px;
+    z-index: 30;
+    border-radius: 16px;
+    background: var(--bg);
+    box-shadow: var(--panel-shadow);
+}
+
+.top-search:focus-within {
+    box-shadow:
+        var(--panel-shadow),
+        0 0 0 2px var(--brand);
+}
+
+.top-search__field {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-height: 48px;
+    padding: 0 14px;
+}
+
+.top-search__icon {
+    flex: none;
+    width: 20px;
+    height: 20px;
+    fill: none;
+    stroke: var(--muted);
+    stroke-width: 2;
+    stroke-linecap: round;
+}
+
+.top-search__field input {
+    flex: 1;
+    min-width: 0;
+    min-height: 44px;
+    border: 0;
+    outline: none;
+    font: inherit;
+    color: var(--text);
+    background: transparent;
+}
+
+/* 누르면 펼쳐지는 최근 경로·검색과 검색 결과 */
+.top-search__list {
+    max-height: 60vh;
+    padding: 0 8px 8px;
+    overflow-y: auto;
+    border-top: 1px solid var(--border);
+}
+
+.top-search__list:empty {
+    display: none;
+}
+
+/*
+ * 화면 아래에 띄운 둥근 메뉴 막대. 시트는 이 막대 뒤로 화면 아래까지 이어진다.
+ * 고른 메뉴 뒤 회색 알약은 고른 자리로 미끄러진다(--menu-index 는 MenuBar 가 정함).
+ */
+.menu-bar {
+    --menu-pad: 6px;
+
+    position: absolute;
+    right: var(--nav-gap);
+    bottom: calc(var(--nav-gap) + env(safe-area-inset-bottom));
+    left: var(--nav-gap);
+    z-index: 35;
+    display: grid;
+    /* 메뉴 수와 상관없이 같은 폭으로 나눈다. */
+    grid-auto-columns: 1fr;
+    grid-auto-flow: column;
+    box-sizing: border-box;
+    height: var(--nav-bar);
+    padding: var(--menu-pad);
+    border-radius: 26px;
+    background: var(--bg);
+    box-shadow:
+        0 1px 3px rgba(24, 33, 47, 0.1),
+        0 6px 20px rgba(24, 33, 47, 0.14);
+}
+
+.menu-bar::before {
+    content: '';
+    position: absolute;
+    top: var(--menu-pad);
+    bottom: var(--menu-pad);
+    left: var(--menu-pad);
+    width: calc((100% - var(--menu-pad) * 2) / var(--menu-count));
+    border-radius: 20px;
+    background: var(--soft-bg);
+    transform: translateX(calc(var(--menu-index) * 100%));
+    transition: transform 0.32s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.menu-bar__item {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    padding: 0;
+    border: 0;
+    border-radius: 20px;
+    font: inherit;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--muted);
+    background: none;
+    cursor: pointer;
+    transition: color 0.2s ease;
+}
+
+.menu-bar__item svg {
+    width: 24px;
+    height: 24px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.menu-bar__item[aria-current='page'] {
+    font-weight: 700;
+    color: var(--brand);
+}
+
+.menu-bar__item[aria-current='page'] svg {
+    stroke-width: 2.2;
+}
+
+/*
+ * 아래에서 올라오는 시트. 끝까지 올린 높이로 그려 두고, 단계마다 아래로 내려 보이는 높이를
+ * 바꾼다(BottomSheet.tsx 가 transform 을 정함). 아래 여백은 떠 있는 메뉴 자리다.
+ */
+.bottom-sheet {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 15;
+    display: flex;
+    flex-direction: column;
+    box-sizing: border-box;
+    height: calc(100% - var(--sheet-top-gap));
+    padding-bottom: var(--nav-height);
+    border-radius: 24px 24px 0 0;
+    background: var(--bg);
+    box-shadow: var(--sheet-shadow);
+    /* 처음 잴 때까지는 화면 밖에 둔다. */
+    transform: translateY(100%);
+    transition: transform 0.42s cubic-bezier(0.22, 1, 0.36, 1);
+    will-change: transform;
+}
+
+/* 잴 때 바로 제자리에 놓고, 그 뒤부터 움직임을 보인다. */
+.bottom-sheet:not([data-ready]) {
+    visibility: hidden;
+    transition: none;
+}
+
+/* 끝까지 올리거나 끄는 중에는 위 검색창도 덮는다. 메뉴(35)는 그 위에 남는다. */
+.bottom-sheet[data-snap='full'],
+.bottom-sheet[data-dragging] {
+    z-index: 31;
+}
+
+/* 끄는 동안은 손가락을 바로 따라온다. */
+.bottom-sheet[data-dragging] {
+    transition: none;
+}
+
+.bottom-sheet__header {
+    display: flex;
+    flex: none;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    box-sizing: border-box;
+    height: var(--sheet-peek);
+    padding: 0 16px;
+    border: 0;
+    font: inherit;
+    color: var(--text);
+    background: none;
+    cursor: grab;
+    /* 끌 때 페이지가 스크롤되지 않게 한다. */
+    touch-action: none;
+}
+
+.bottom-sheet[data-dragging] .bottom-sheet__header {
+    cursor: grabbing;
+}
+
+.bottom-sheet__handle {
+    width: 36px;
+    height: 4px;
+    border-radius: 2px;
+    background: var(--border);
+}
+
+.bottom-sheet__title {
+    font-size: 17px;
+    font-weight: 700;
+}
+
+.bottom-sheet__body {
+    flex: 1;
+    min-height: 0;
+    padding: 0 16px 16px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    transition: opacity 0.2s ease;
+}
+
+/* 시트 아래쪽이 화면 밖에 있는 만큼(--sheet-hidden 은 BottomSheet.tsx 가 정함) 내용 끝에 여백을 둬,
+   시트를 움직이지 않고 보이는 칸 안에서 내용 끝까지 스크롤된다. */
+.bottom-sheet__body::after {
+    content: '';
+    display: block;
+    height: var(--sheet-hidden, 0px);
+}
+
+/* 접힌 시트는 내용이 메뉴 둘레로 비쳐 보이지 않게 감춘다. 끄는 동안은 다시 보인다. */
+.bottom-sheet[data-snap='collapsed']:not([data-dragging]) .bottom-sheet__body {
+    opacity: 0;
+    visibility: hidden;
+}
+
+/* 넓은 화면 왼쪽 위에 띄운 패널: 위에 이름과 메뉴, 아래에 고른 탭 내용 */
+.side-panel {
+    position: absolute;
+    top: 12px;
+    left: 12px;
+    z-index: 20;
+    display: flex;
+    flex-direction: column;
+    width: var(--panel-width);
+    /* 아래 40px 은 카카오 로고·축척이 가리지 않게 비운다. */
+    max-height: calc(100% - 52px);
+    overflow: hidden;
+    border-radius: 16px;
+    background: var(--bg);
+    box-shadow: var(--panel-shadow);
+}
+
+.side-panel__header {
+    flex: none;
+    padding: 18px 16px 12px;
+    border-bottom: 1px solid var(--border);
+}
+
+/* 이름 앞 팀 로고(사이트 아이콘과 같은 그림) */
+.side-panel__title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0 0 12px;
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+}
+
+.side-panel__title::before {
+    content: '';
+    flex: none;
+    width: 24px;
+    height: 24px;
+    background: url('/favicon.svg') center / contain no-repeat;
+}
+
+/* 회색 트랙 위 흰 알약 탭. 알약은 고른 탭 자리로 미끄러진다(--menu-index 는 MenuBar 가 정함). */
+.side-panel .menu-bar {
+    position: relative;
+    inset: auto;
+    z-index: auto;
+    display: flex;
+    gap: 2px;
+    height: auto;
+    padding: 3px;
+    border-radius: 12px;
+    background: var(--soft-bg);
+    box-shadow: none;
+}
+
+.side-panel .menu-bar::before {
+    content: '';
+    position: absolute;
+    top: 3px;
+    bottom: 3px;
+    left: 3px;
+    width: calc(
+        (100% - 6px - (var(--menu-count) - 1) * 2px) / var(--menu-count)
+    );
+    border-radius: 9px;
+    background: var(--bg);
+    box-shadow: 0 1px 2px rgba(24, 33, 47, 0.14);
+    transform: translateX(calc(var(--menu-index) * (100% + 2px)));
+    transition: transform 0.28s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.side-panel .menu-bar__item {
+    position: relative;
+    flex: 1;
+    min-height: 34px;
+    border-radius: 9px;
+    font-size: 14px;
+    font-weight: 500;
+    transition: color 0.2s ease;
+}
+
+.side-panel .menu-bar__item svg {
+    display: none;
+}
+
+.side-panel .menu-bar__item[aria-current='page'] {
+    font-weight: 600;
+}
+
+.side-panel__body {
+    flex: 1;
+    min-height: 0;
+    padding: 16px;
+    overflow-y: auto;
+}
+
+/* 패널 안 검색창: 입력칸에만 테두리를 두고, 최근 기록·검색 결과는 늘 아래에 펼친다. */
+.top-search--inline {
+    position: static;
+    border-radius: 0;
+    background: none;
+    box-shadow: none;
+}
+
+.top-search--inline:focus-within {
+    box-shadow: none;
+}
+
+.top-search--inline .top-search__field {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+}
+
+.top-search--inline .top-search__field:focus-within {
+    border-color: var(--brand);
+}
+
+.top-search--inline .top-search__list {
+    max-height: none;
+    padding: 8px 0 0;
+    overflow: visible;
+    border-top: 0;
+}
+
+/* 넓은 화면 오른쪽 위 계정 아이콘 */
+.account-menu {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    z-index: 25;
+}
+
+.account-menu__toggle {
+    display: grid;
+    place-items: center;
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    color: var(--text);
+    background: var(--bg);
+    box-shadow: var(--panel-shadow);
+    list-style: none;
+    cursor: pointer;
+}
+
+.account-menu__toggle--login {
+    width: auto;
+    padding: 0 14px;
+    border-radius: 19px;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+.account-menu__toggle::-webkit-details-marker {
+    display: none;
+}
+
+.account-menu__toggle svg {
+    width: 22px;
+    height: 22px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 1.8;
+    stroke-linecap: round;
+}
+
+.account-menu__panel {
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    box-sizing: border-box;
+    width: 280px;
+    padding: 16px;
+    border-radius: 16px;
+    background: var(--bg);
+    box-shadow: var(--panel-shadow);
+}
+
+/*
+ * 넓은 화면: 지도는 화면 전체, 패널은 왼쪽 위에 띄운 카드 하나.
+ * App.tsx 의 WIDE_LAYOUT 과 같은 값
+ */
+/* 움직임 줄이기를 켠 사용자에게는 시트와 탭 알약·밑줄을 애니메이션 없이 옮긴다. */
+@media (prefers-reduced-motion: reduce) {
+    .bottom-sheet,
+    .bottom-sheet__body,
+    .menu-bar::before,
+    .menu-bar__item,
+    .my-tab__tabs::after,
+    .my-tab__tab,
+    .route-panel__preset::after {
+        transition: none;
+    }
+}
+
+/* 좁은 화면(터치)에서는 누르는 칸을 44px 이상으로 둔다. */
+@media (max-width: 767.98px) {
+    .route-panel__preset select,
+    .route-panel__reset,
+    .route-panel__depart-kind label,
+    .route-panel__depart-days button,
+    .route-panel__depart-hour select,
+    .route-panel__option,
+    .place-search__locate,
+    .place-search__shortcut,
+    .place-info__chip,
+    .place-info__custom-input,
+    .navigation-panel__stop,
+    .navigation-panel__voice {
+        min-height: 44px;
+    }
+
+    /* 위아래 테두리 1px 씩을 더해 44px */
+    .place-search__label input {
+        min-height: 42px;
+    }
+
+    .route-panel__save,
+    .my-register__back {
+        width: 44px;
+        height: 44px;
+    }
+}
+
+@media (min-width: 768px) {
+    .app {
+        --panel-width: 380px;
+    }
+
+    .app[data-sheet] {
+        --map-bottom: 0px;
+    }
+
+    .navigation-panel {
+        right: auto;
+        bottom: 40px;
+        width: var(--panel-width);
+        max-width: none;
+        box-sizing: border-box;
+        margin: 0;
+    }
+
+    /* 지도 위 오류는 패널 오른쪽, 계정 아이콘 왼쪽에 띄운다. */
+    .map-view__error {
+        top: 12px;
+        left: calc(var(--panel-width) + 24px);
+    }
+
+    /* 오른쪽 아래, OpenStreetMap 출처 표기 위 */
+    .my-location-control {
+        top: auto;
+        bottom: 32px;
+    }
+}
+
+/* 길 위 문제 제보 */
+.place-info__report {
+    width: 100%;
+    margin-top: 8px;
+    padding: 8px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font: inherit;
+    font-size: 14px;
+    color: var(--muted);
+    background: var(--bg);
+    cursor: pointer;
+}
+
+.report-backdrop {
+    position: fixed;
+    inset: 0;
+    /* 끝까지 올린 시트(31)와 아래 메뉴(35)보다 위 */
+    z-index: 40;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    background: rgba(0, 0, 0, 0.4);
+}
+
+.report-form {
+    box-sizing: border-box;
+    width: min(360px, 100%);
+    max-height: 100%;
+    overflow-y: auto;
+    padding: 16px;
+    border-radius: 8px;
+    background: var(--bg);
+    box-shadow: var(--panel-shadow);
+}
+
+.report-form__title {
+    margin: 0 0 4px;
+    font-size: 18px;
+}
+
+.report-form__hint {
+    margin: 0 0 12px;
+    font-size: 13px;
+    color: var(--muted);
+}
+
+.report-form__field {
+    display: block;
+    margin: 0 0 12px;
+    padding: 0;
+    border: 0;
+    font-size: 14px;
+}
+
+.report-form__field legend,
+.report-form__field > span {
+    display: block;
+    margin-bottom: 4px;
+    font-weight: 600;
+}
+
+.report-form__textarea {
+    box-sizing: border-box;
+    width: 100%;
+    padding: 8px;
+    border: 1px solid var(--muted);
+    border-radius: 8px;
+    font: inherit;
+    color: inherit;
+    background: var(--bg);
+    resize: vertical;
+}
+
+.report-form__field > .report-form__count {
+    margin: 4px 0 0;
+    font-size: 12px;
+    font-weight: 400;
+    text-align: right;
+    color: var(--muted);
+}
+
+.report-form__chips,
+.report-form__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.report-form__actions {
+    justify-content: flex-end;
+}
+
+.report-form__submit {
+    padding: 8px 16px;
+    border: 0;
+    border-radius: 8px;
+    font: inherit;
+    color: #fff;
+    background: var(--brand);
+    cursor: pointer;
+}
+
+/* 취소 버튼: 칩 모양에서 크기와 모서리를 저장·제보하기 버튼과 같게 */
+.report-form__cancel {
+    min-height: 0;
+    padding: 8px 16px;
+    border: 0;
+    border-radius: 8px;
+    font-size: inherit;
+    /* 테두리 두께가 크기를 바꾸지 않게 안쪽 선으로 그린다 */
+    box-shadow: inset 0 0 0 1px var(--border);
+}
+
+/* 완료창: 문구 옆에 확인 버튼 */
+.my-report__notice {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+}
+
+.my-report__notice .report-form__title {
+    margin: 0;
+}
+
+.report-form__submit:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+
+/* 관리자 제보 검토(/admin) */
+.admin-page {
+    max-width: 880px;
+    margin: 0 auto;
+    padding: 16px;
+}
+
+.admin-page__header {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.admin-page__heading {
+    margin: 0;
+    font-size: 22px;
+}
+
+.admin-page__count {
+    flex: 1;
+    font-size: 14px;
+    color: var(--muted);
+}
+
+.admin-page__refresh,
+.admin-page__cancel {
+    padding: 8px 16px;
+    border: 0;
+    border-radius: 8px;
+    font: inherit;
+    color: var(--text);
+    background: var(--bg);
+    box-shadow: inset 0 0 0 1px var(--border);
+    cursor: pointer;
+}
+
+.admin-page__approve {
+    padding: 8px 16px;
+    border: 0;
+    border-radius: 8px;
+    font: inherit;
+    color: #fff;
+    background: var(--brand);
+    cursor: pointer;
+}
+
+.admin-page__approve:disabled,
+.admin-page__cancel:disabled {
+    opacity: 0.5;
+    cursor: default;
+}
+
+.admin-page__back {
+    font-size: 14px;
+    color: var(--muted);
+}
+
+.admin-page__tabs {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 12px;
+    border-bottom: 1px solid var(--border);
+}
+
+.admin-page__tab {
+    padding: 8px 16px;
+    border: 0;
+    border-bottom: 2px solid transparent;
+    font: inherit;
+    color: var(--muted);
+    background: none;
+    cursor: pointer;
+}
+
+.admin-page__tab[aria-selected='true'] {
+    border-bottom-color: var(--brand);
+    font-weight: 600;
+    color: var(--text);
+}
+
+.admin-page__status-text {
+    margin: 0;
+    font-size: 14px;
+    color: var(--muted);
+}
+
+.admin-page__error {
+    margin: 0 0 12px;
+    padding: 10px 12px;
+    border-radius: 8px;
+    font-size: 14px;
+    color: var(--error-text);
+    background: var(--error-bg);
+}
+
+.admin-page__list {
+    display: grid;
+    gap: 12px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+}
+
+.admin-page__card {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    padding: 12px;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+}
+
+.admin-page__photo-link {
+    flex: none;
+}
+
+.admin-page__photo {
+    display: block;
+    width: 200px;
+    height: 200px;
+    border-radius: 8px;
+    object-fit: cover;
+    background: var(--soft-bg);
+}
+
+.admin-page__body {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 0;
+}
+
+.admin-page__title {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 0;
+    font-size: 18px;
+}
+
+.admin-page__badge {
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 12px;
+    color: var(--tactile-text);
+    background: var(--tactile-soft);
+}
+
+.admin-page__badge--expired {
+    color: var(--error-text);
+    background: var(--error-bg);
+}
+
+.admin-page__status {
+    font-size: 13px;
+    font-weight: 400;
+    color: var(--muted);
+}
+
+.admin-page__description {
+    margin: 0;
+    overflow-wrap: anywhere;
+}
+
+.admin-page__facts {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 2px 12px;
+    margin: 0;
+    font-size: 14px;
+    color: var(--muted);
+}
+
+.admin-page__map-toggle {
+    padding: 0;
+    border: 0;
+    font: inherit;
+    color: var(--saved-place);
+    background: none;
+    text-decoration: underline;
+    cursor: pointer;
+}
+
+/* MapView 는 부모를 꽉 채우는(absolute) 지도라서 높이가 있는 상자에 넣는다. */
+.admin-page__map {
+    --map-bottom: 0;
+
+    position: relative;
+    flex: 1 0 100%;
+    height: 320px;
+    overflow: hidden;
+    border-radius: 8px;
+}
+
+.admin-page__facts dt {
+    font-weight: 600;
+}
+
+.admin-page__facts dd {
+    margin: 0;
+}
+
+.admin-page__actions {
+    display: flex;
+    gap: 8px;
+    margin-top: auto;
+}
+
+@media (max-width: 560px) {
+    .admin-page__card {
+        flex-direction: column;
+    }
+
+    .admin-page__photo {
+        width: 100%;
+        height: auto;
+        aspect-ratio: 4 / 3;
+    }
+
+    /* 세로 배치에서는 flex-basis 100% 가 너비가 아니라 높이라서, 지도 높이가 0이 된다. */
+    .admin-page__map {
+        flex: none;
+    }
+}
+
+/* 도착 후 리뷰: 제보 하나당 카드 */
+.review-card {
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--border);
+}
+
+.review-card__comment {
+    margin-top: 8px;
+}
+
+.review-card .report-form__actions {
+    margin-top: 8px;
+}

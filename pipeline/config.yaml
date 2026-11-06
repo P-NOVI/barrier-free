@@ -1,0 +1,318 @@
+# 경로 기준
+# - raw/…, interim/… : 데이터 폴더 (pipeline/.env 의 DATA_DIR, 없으면 저장소 data/)
+# - data/processed/… : 저장소 루트 (서버가 읽고 Git 에 커밋)
+
+# 03 단계(건물 윤곽), 07 단계(출입구), 08 단계(시설 영역)가 OSM 데이터를 받는 곳
+overpass:
+  url: https://overpass-api.de/api/interpreter
+  # OSM 행정구역 이름(admin_level 4)
+  area_name: 서울특별시
+  # Overpass 는 User-Agent 가 없는 요청을 거절한다.
+  user_agent: barrier-free-pipeline (https://github.com/P-NOVI/barrier-free)
+  # 붐빔(429·502·503·504) 응답이면 retry_wait_s 초 기다렸다 다시 보낸다.
+  attempts: 4
+  retry_wait_s: 30
+
+dem:
+  contour_shp: raw/dem/등고선 5000/N3L_F001.shp
+  contour_dbf: raw/dem/등고선 5000/N3L_F001.dbf
+  point_shp: raw/dem/표고 5000/N3P_F002.shp
+  point_dbf: raw/dem/표고 5000/N3P_F002.dbf
+  output: raw/dem/seoul_dem_5m.tif
+  # 원본은 옛 Bessel 측지계. .prj 만으로 변환하면 수백 m 어긋나서 명시한다.
+  source_crs: EPSG:5174
+  target_crs: EPSG:5186
+  resolution_m: 5
+  tile_m: 5000
+  buffer_m: 500
+  # 가장 가까운 등고선·표고점에서 이보다 먼 칸은 빈 값으로 둔다.
+  max_gap_m: 500
+
+network:
+  # OSM(Nominatim) 지명. 범위를 줄이려면 구 이름 등으로 바꾼다.
+  place: Seoul, South Korea
+  output: interim/walk.graphml
+  # Overpass 응답 캐시. 다시 실행할 때 내려받기를 건너뛴다.
+  cache_folder: interim/osmnx_cache
+
+elevation:
+  output: interim/walk_elevation.graphml
+  # DEM 빈 칸 노드를 이웃 노드 평균으로 채우는 최대 반복 횟수
+  max_fill_passes: 50
+
+barriers:
+  output: interim/walk_tagged.graphml
+  # OSM 건물 윤곽 캐시. 없으면 Overpass 에서 받아 저장한다(서울 약 17만 개, 2분 정도).
+  buildings: interim/buildings.json.gz
+  buildings_timeout_s: 600
+  # 지붕만 있는 구조물(주유소 캐노피 등)은 그 밑을 걸을 수 있어 윤곽에서 뺀다.
+  # layer · min_level 이 있는 공중·지하 건물도 뺀다.
+  excluded_buildings: [roof, bridge, "no", carport, canopy]
+  # 건물 윤곽 안을 이 길이(m) 이상, 구간 길이의 이 비율 이상 지나면 걷지 않는 구간으로 둔다.
+  # 길이만 보면 건물 벽을 따라 조금 겹쳐 그려진 보도까지 막힌다.
+  min_inside_m: 10
+  min_inside_share: 0.5
+  # 길이를 재는 평면 좌표계 (dem.target_crs 와 같은 중부원점 TM)
+  metric_crs: EPSG:5186
+
+# 09 단계. 서울시 도보 네트워크 공간정보 OpenAPI (자치구별)
+walknet:
+  url: http://openapi.seoul.go.kr:8088
+  service: TbTraficWlkNet
+  # 한 번에 받는 최대 행 수
+  page_size: 1000
+  # 요청마다 행 순서가 달라 처음부터 다시 받아 합치는 최대 횟수
+  max_passes: 10
+  timeout_s: 60
+  attempts: 3
+  retry_wait_s: 10
+  output_dir: raw/walknet
+  districts: [종로구, 중구, 용산구, 성동구, 광진구, 동대문구, 중랑구, 성북구, 강북구, 도봉구,
+    노원구, 은평구, 서대문구, 마포구, 양천구, 강서구, 구로구, 금천구, 영등포구, 동작구,
+    관악구, 서초구, 강남구, 송파구, 강동구]
+
+# 10 단계. 큰 도로 중심선 옆에 도보 네트워크 인도를 넣는다. 거리는 barriers.metric_crs 로 잰다.
+sidewalks:
+  output: interim/walk_sidewalk.graphml
+  # 인도를 따로 찾는 큰 도로 (OSM highway)
+  big_roads: [trunk, trunk_link, primary, primary_link, secondary, secondary_link,
+    tertiary, tertiary_link]
+  # 넣지 않는 링크: 횡단보도, 육교, 지하철 연결, 건물 안, 터널, 다리(DEM 고도가 수면이다)
+  excluded_flags: [CRSWK, OVRP, SBWY_NTW, BLDG, TNL, BRG]
+  # 중심선을 sample_m 간격 지점으로 나눠 sidewalk_max_m 안에 parallel_deg 안으로 나란한
+  # 링크가 있는 지점 비율이 min_coverage 이상이면 인도가 따로 있는 중심선으로 본다.
+  sample_m: 5
+  sidewalk_max_m: 25
+  parallel_deg: 30
+  min_coverage: 0.7
+  # 교차로 노드·골목 점 → 인도 연결 최대 거리. 교차로 노드 → 인도 선은 도로와
+  # crossing_min_deg 이상 벌어져야 한다(비스듬하면 다른 길의 인도다).
+  connect_max_m: 30
+  crossing_min_deg: 60
+  # 골목이 어느 쪽으로 나가는지 alley_arm_m 지점에서 보고, alley_max_m 안에서
+  # alley_step_m 간격으로 인도 위치를 찾는다.
+  alley_arm_m: 5
+  alley_max_m: 40
+  alley_step_m: 0.5
+  # 다른 링크 중간에 이 거리 안으로 닿는 링크 끝은 잇는다.
+  snap_m: 1.5
+  # 홀로 끝난 인도 끝을 OSM 길에 잇는 최대 거리
+  dangling_max_m: 20
+  # 인도 링크 끝점을 같은 노드로 합치는 격자 크기
+  node_grid_m: 0.5
+
+export:
+  # 저장소 기준. backend/app/config.py 의 기본 그래프 경로와 같아야 한다.
+  output: data/processed/graph.json.gz
+
+# 05 단계. 그래프와 관계가 없어서 run_all.py 에 넣지 않고 따로 실행한다.
+sdot:
+  source: raw/sdot/서울시 도시데이터 센서(S-DoT) 유동인구 설치 위치정보_251113.xlsx
+  # 저장소 기준. backend/app/config.py 의 기본 센서 위치 경로와 같아야 한다.
+  output: data/processed/sdot_sensors.json
+  # 서울 범위 밖 좌표(오타 등)를 걸러낸다.
+  min_lat: 37.4
+  max_lat: 37.75
+  min_lon: 126.7
+  max_lon: 127.2
+
+# 06 단계. 05 단계처럼 run_all.py 에 넣지 않고 따로 실행한다.
+sdot_history:
+  # 열린데이터광장 OA-15964 주간 CSV (S-DoT_WALK_*.csv)
+  source_dir: raw/sdot/history
+  output: interim/sdot/history.parquet
+  report: interim/sdot/history_report.json
+  # 저장소 기준. 위치를 모르는 센서 코드를 보고서에 남기는 데 쓴다.
+  sensors: data/processed/sdot_sensors.json
+
+# 07 단계. 05 단계처럼 run_all.py 에 넣지 않고 따로 실행한다.
+entrances:
+  timeout_s: 300
+  # 이 태그 중 하나가 있는 닫힌 way·multipolygon 만 영역으로 쓴다.
+  # 공항(aeroway)처럼 아주 넓은 영역은 넣지 않는다. 터미널 건물이 따로 있다.
+  area_keys: [building, amenity, leisure, tourism, historic, landuse, shop, healthcare, office]
+  # 길안내에 쓰지 않는 출입구 (entrance=*, access=* 값)
+  excluded_entrances: [emergency, service]
+  excluded_access: [private, "no"]
+  # 저장소 기준. backend/app/config.py 의 기본 출입구 경로와 같아야 한다.
+  output: data/processed/entrances.json.gz
+
+# 08 단계. 05 단계처럼 run_all.py 에 넣지 않고 따로 실행한다.
+sites:
+  timeout_s: 300
+  # 담장으로 둘러싸여 문으로만 드나드는 시설. 태그 조합 중 하나에 맞으면 쓴다.
+  # 값은 Overpass 정규식이다.
+  # 이름 없는 주거지역(landuse=residential)은 동네 전체를 덮어 공공 도로까지 들어가므로 뺀다.
+  filters:
+    - {amenity: "^(university|college|school|kindergarten|hospital|prison)$"}
+    - {landuse: "^military$"}
+    - {landuse: "^residential$", residential: "^apartments$"}
+    - {landuse: "^residential$", name: "아파트"}
+  # 저장소 기준. backend/app/config.py 의 기본 시설 영역 경로와 같아야 한다.
+  output: data/processed/sites.json.gz
+
+# 11 단계. 05 단계처럼 run_all.py 에 넣지 않고 따로 실행한다.
+weather:
+  # 기상청 AWS 시간자료 CSV (OBS_AWS_TIM_*.csv)와 지점 목록
+  source_dir: raw/weather/aws
+  file_pattern: "OBS_AWS_TIM_*.csv"
+  stations: raw/weather/aws_stations.csv
+  # 혼잡도 쪽 자치구 이름과 센서 코드를 읽는다(06 단계 결과).
+  history: interim/sdot/history.parquet
+  # 저장소 기준. 센서 위치(자치구 중심 계산용)
+  sensors: data/processed/sdot_sensors.json
+  output: interim/weather/hourly.parquet
+  report: interim/weather/hourly_report.json
+  # 혼잡도 history 의 자치구 이름 → AWS 지점주소의 자치구.
+  # 같은 구에 지점이 없거나(종로구) 구가 아니면(null) 센서 위치 중심에서 가장 가까운 지점을 쓴다.
+  districts:
+    Dobong-gu: 도봉구
+    Dongjak-gu: 동작구
+    Eunpyeong-gu: 은평구
+    Gangbuk-gu: 강북구
+    Gangdong-gu: 강동구
+    Gangnam-gu: 강남구
+    Gangseo-gu: 강서구
+    Geumcheon-gu: 금천구
+    Guro-gu: 구로구
+    Gwanak-gu: 관악구
+    Gwangjin-gu: 광진구
+    Jongno-gu: 종로구
+    Jung-gu: 중구
+    Jungnang-gu: 중랑구
+    Mapo-gu: 마포구
+    Nowon-gu: 노원구
+    Seocho-gu: 서초구
+    Seodaemun-gu: 서대문구
+    Seongdong-gu: 성동구
+    Seoul_Grand_Park: null
+    Songpa-gu: 송파구
+    Yangcheon-gu: 양천구
+    Yeongdeungpo-gu: 영등포구
+    Yongsan-gu: 용산구
+  # 결측 칸은 같은 시간에 값이 있는 가까운 자치구 이만큼의 평균으로 채운다.
+  fill_neighbors: 3
+  # 남은 기온 결측 중 앞뒤 값이 있는 이 시간 이하의 구간은 직선으로 잇는다.
+  max_gap_hours: 3
+
+# 12 단계. 05 단계처럼 run_all.py 에 넣지 않고 따로 실행한다.
+calendar:
+  # 공공데이터포털 한국천문연구원 특일 정보(공휴일)
+  url: http://apis.data.go.kr/B090041/openapi/service/SpcdeInfoService
+  operation: getRestDeInfo
+  # 한 달 공휴일은 한 쪽에 다 담긴다.
+  page_size: 100
+  timeout_s: 20
+  attempts: 3
+  retry_wait_s: 5
+  # 받을 기간(이 달 포함). 연휴 묶음이 기간 끝에서 잘리지 않게 학습 기간보다 앞뒤로 넓게 잡는다.
+  start_month: "2022-12"
+  end_month: "2026-12"
+  # 쉬는 날(공휴일·주말)이 이만큼 이어지면 연휴로 본다.
+  long_holiday_min_days: 3
+  raw_dir: raw/calendar/holidays
+  output: interim/calendar/daily.parquet
+  report: interim/calendar/daily_report.json
+
+# 13 단계. 05 단계처럼 run_all.py 에 넣지 않고 따로 실행한다.
+training_set:
+  history: interim/sdot/history.parquet
+  # 16 단계 결과(수집 DB 유동인구). 없으면 history 만 쓴다.
+  realtime: interim/sdot/realtime.parquet
+  weather: interim/weather/hourly.parquet
+  calendar: interim/calendar/daily.parquet
+  # 저장소 기준. 센서 위치
+  sensors: data/processed/sdot_sensors.json
+  output: interim/training/hourly.parquet
+  report: interim/training/hourly_report.json
+  # 단절 정리 전 전체 행. walk-forward 검증(ml)이 학습 종료일마다 단절을 다시 판단한다.
+  output_full: interim/training_wf/hourly.parquet
+  report_full: interim/training_wf/hourly_report.json
+  # 한 시간에 10분 값이 6개 있다. 이만큼 이상 있어야 그 시간의 유동인구를 만든다.
+  bins_per_hour: 6
+  min_bins: 4
+  # 2025-08 전후로 평균 유동인구가 꺾인 센서(수집 방식이 바뀐 것으로 보인다)를 찾아 그 전
+  # 구간을 뺀다. 낮 시간(hour_from ~ hour_to시) 평균을 before·after 구간([시작, 끝) 날짜)에서
+  # 비교해 이후/이전이 drop_ratio 미만이면 break_date 앞 행을 버린다. 두 구간 모두
+  # min_rows 행 이상인 센서만 비교한다. after 는 학습 구간 안에서 잡는다. 이후/이전이
+  # rise_ratio 를 넘게 오른 센서는 버리지 않고 보고서에만 남긴다.
+  level_break:
+    break_date: "2025-09-01"
+    before: ["2025-03-01", "2025-08-01"]
+    after: ["2025-10-01", "2026-06-01"]
+    hour_from: 9
+    hour_to: 14
+    min_rows: 200
+    # 검증 구간 baseline MAE 가 0.85 부근에서 더 줄지 않아 0.85 로 잡았다(0.7 이면 오른쪽 센서가
+    # 남아 baseline 이 나쁘다).
+    drop_ratio: 0.85
+    rise_ratio: 1.3
+  # 지하철 승하차(14 단계)와 역 좌표(15 단계). 둘 중 하나라도 없으면 승하차 열을 비운다.
+  subway: interim/subway/hourly.parquet
+  subway_stations: interim/subway/stations.parquet
+  # 센서에서 이 거리 안에 있는 역들의 승하차를 더한다.
+  subway_radius_m: 500
+  # 이만큼 앞선 달의 승하차를 쓴다. 예측할 때는 이번 달 자료가 아직 없어서(전월 자료가 매월
+  # 5일에 올라온다) 학습도 작년 같은 달 값으로 맞춘다.
+  subway_lag_months: 12
+
+# 14 단계. 05 단계처럼 run_all.py 에 넣지 않고 따로 실행한다.
+subway_ridership:
+  # 서울 열린데이터광장 서울시 지하철 호선별 역별 시간대별 승하차 인원 정보(OA-12252)
+  url: http://openapi.seoul.go.kr:8088
+  service: CardSubwayTime
+  # 한 번에 받을 행 수. API 는 한 번에 1000행까지 준다. 한 달은 보통 약 620행이고,
+  # 같은 행이 두 번 들어간 달(2026-03, 1240행)은 나눠 받는다.
+  page_size: 1000
+  timeout_s: 30
+  attempts: 3
+  retry_wait_s: 5
+  # 받을 달(끝 달 포함). end_month 가 null 이면 지난달까지 받는다.
+  # 전월 자료는 매월 5일에 올라온다. 그 전에 돌리면 지난달은 자료 없는 달로 남는다.
+  # API 는 2015-01 부터 자료가 있다(2026-11-05 확인). 13 단계가 작년 같은 달 값을 붙이므로
+  # 학습셋 시작보다 subway_lag_months(12) 앞선 달부터 받아야 그 행에 값이 붙는다. 지금은
+  # 2023-01 부터라 학습셋의 2023 행은 승하차가 빈 값(null)이다.
+  start_month: "2023-01"
+  end_month: null
+  raw_dir: raw/subway/ridership_hourly
+  output: interim/subway/hourly.parquet
+  report: interim/subway/hourly_report.json
+
+# 15 단계. 05 단계처럼 run_all.py 에 넣지 않고 따로 실행한다.
+subway_stations:
+  # 서울 열린데이터광장 서울시 역사마스터 정보
+  url: http://openapi.seoul.go.kr:8088
+  service: subwayStationMaster
+  # 역·호선 약 780행이라 한 번에 다 받는다(API 는 한 번에 1000행까지 준다).
+  page_size: 1000
+  timeout_s: 30
+  attempts: 3
+  retry_wait_s: 5
+  ridership: interim/subway/hourly.parquet
+  # 승하차 자료의 호선 이름 → 역사마스터의 호선 이름(띄어쓰기는 빼고 비교한다).
+  line_aliases:
+    경의선: 경의중앙선
+    9호선2~3단계: 9호선(연장)
+  # 승하차 자료의 역 이름(괄호 앞) → 역사마스터의 역 이름. 이름이 바뀐 역이다(2026-11-05 확인).
+  # 초성리·한국항공대는 역사마스터에 없어서 좌표를 정하지 못한다(서울 밖).
+  name_aliases:
+    당고개: 불암산
+    자양: 뚝섬유원지
+    평택지제: 지제
+  # 이름이 같은 역사마스터 행이 이 거리 안에 모여 있으면 한 역으로 보고 좌표를 평균한다.
+  # 서울역은 호선마다 약 500m 떨어져 있고, 양평(5호선·중앙선)은 약 54km 떨어진 다른 역이다.
+  same_place_m: 1000
+  raw: raw/subway/stations.json
+  output: interim/subway/stations.parquet
+  report: interim/subway/stations_report.json
+
+# 16 단계. 05 단계처럼 run_all.py 에 넣지 않고 따로 실행한다.
+# 수집 DB(backend 수집기, pipeline/.env 의 COLLECTOR_DATABASE_URL)의 유동인구를 내보낸다.
+sdot_realtime:
+  output: interim/sdot/realtime.parquet
+  report: interim/sdot/realtime_report.json
+  # history.parquet(06 단계)의 측정시간과 같은 한국 시각으로 바꾼다.
+  timezone: Asia/Seoul
+  connect_timeout_s: 10
+  # history 의 source_file 열에 넣는 값. 수집 DB 에서 온 행을 구분한다.
+  source_name: collector_db

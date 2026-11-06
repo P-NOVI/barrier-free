@@ -1,0 +1,58 @@
+# 매일 유동인구 예측: 유동인구 수집(collect-sdot.yml)이 끝나면 학습셋을 갱신하고
+# 오늘·내일·모레를 예측해 수집 DB(Supabase)의 foot_traffic_forecasts 에 저장한다.
+# 이력·날씨·달력·모델은 Supabase Storage 에서 받는다(ml/foot_traffic/storage.py).
+# 받은 폴더를 DATA_DIR 로 두므로 pipeline·ml 코드는 공유 폴더에서 돌 때와 같다.
+# 예약 실행(workflow_run)은 기본 브랜치(main)에 있는 이 파일로만 돈다. 코드는 dev 에서 받는다.
+# 필요한 저장소 Secrets: COLLECTOR_DATABASE_URL, STORAGE_S3_ENDPOINT, STORAGE_S3_REGION,
+#   STORAGE_S3_ACCESS_KEY_ID, STORAGE_S3_SECRET_ACCESS_KEY
+name: Forecast Daily
+
+on:
+  workflow_run:
+    workflows: ["Collect S-DoT"]
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: forecast-daily
+  cancel-in-progress: false
+
+jobs:
+  forecast:
+    # 수집이 실패한 날은 이력이 모자라므로 건너뛴다(손으로 돌리면 그대로 한다).
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      COLLECTOR_DATABASE_URL: ${{ secrets.COLLECTOR_DATABASE_URL }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: dev
+      - uses: astral-sh/setup-uv@v6
+      - name: 데이터 폴더
+        run: echo "DATA_DIR=$RUNNER_TEMP/data" >> "$GITHUB_ENV"
+      - name: Storage 에서 받기
+        working-directory: ml
+        run: uv run --frozen --no-dev python -m foot_traffic.storage download --dest "$DATA_DIR"
+        env:
+          STORAGE_S3_ENDPOINT: ${{ secrets.STORAGE_S3_ENDPOINT }}
+          STORAGE_S3_REGION: ${{ secrets.STORAGE_S3_REGION }}
+          STORAGE_S3_ACCESS_KEY_ID: ${{ secrets.STORAGE_S3_ACCESS_KEY_ID }}
+          STORAGE_S3_SECRET_ACCESS_KEY: ${{ secrets.STORAGE_S3_SECRET_ACCESS_KEY }}
+      - name: 수집 DB 마이그레이션
+        working-directory: backend
+        run: uv run --frozen --no-dev python -m app.migrate collector
+      - name: 학습셋 갱신 (16 → 13 단계)
+        working-directory: pipeline
+        run: |
+          uv run --frozen --no-dev python steps/16_export_sdot_realtime.py
+          uv run --frozen --no-dev python steps/13_build_training_set.py
+      - name: 예측
+        working-directory: ml
+        run: uv run --frozen --no-dev python -m foot_traffic.daily

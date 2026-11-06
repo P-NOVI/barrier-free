@@ -1,0 +1,176 @@
+# 경로 기준
+# - interim/…, serve.model_dir : 데이터 폴더 (ml/.env 의 DATA_DIR, 없으면 저장소 data/).
+#   pipeline 과 같은 팀 공유 폴더다.
+# - walk_forward.output_dir, data.predict_dir : 저장소 루트(git 에 올리지 않는다)
+
+data:
+  # pipeline 12 단계 날짜별 달력. 쉬는 날 전날·다음날 피처를 만든다.
+  calendar: interim/calendar/daily.parquet
+  # predict.py 가 그래프를 저장하는 저장소 폴더(git 에 올리지 않는다).
+  predict_dir: models/predict
+
+# 서비스용 모델(`python -m foot_traffic.train` 이 저장하고 forecast.py 가 읽는다).
+# 공유 폴더에 두어 팀원은 다시 학습하지 않고 바로 예측한다.
+serve:
+  model_dir: models/foot_traffic_serve
+  model_file: foot_traffic_model.txt
+  meta_file: foot_traffic_meta.json
+
+features:
+  # 서비스에서는 예보를 넣으므로 실측 그대로 쓰지 않고 구간으로 줄인다.
+  temp_bin_c: 5
+  # 강수 등급: 0 이하 → 0, (0,1] → 1, (1,5] → 2, (5,20] → 3, 20 초과 → 4 (mm)
+  rain_bins_mm: [0, 1, 5, 20]
+  groups:
+    base: [sensor_code, district, lon, lat, day_of_week, hour_of_day]
+    weather: [temp_bin, rain_grade]
+    holiday:
+      - is_holiday
+      - is_off_day
+      - off_run_length
+      - in_long_holiday
+      - days_to_long_holiday
+      - days_since_long_holiday
+    # 쉬는 날(공휴일·주말) 기준. 전날은 금요일·연휴 전날·공휴일 전날을, 다음날은 월요일·
+    # 연휴 다음날·공휴일 다음날을 묶는다.
+    off_adjacent: [is_before_off_day, is_after_off_day]
+    # 센서의 최근 수준(recent_level 절). 단절이나 계절로 수준이 변하는 센서를 따라간다.
+    recent_level: [level_same_hour, level_same_dow_hour]
+    # 추가 최근 수준(recent_level.extra).
+    recent_extra: [level_dow_hour_median, level_trend, level_last_year]
+    # 방학 달 여부(walk_forward.vacation_months). 실험에서 제외했다(E5).
+    vacation: [is_vacation]
+  categorical: [sensor_code, district]
+
+# 센서의 최근 수준 피처. 예측하려는 날의 gap_days 일 전까지의 데이터만 쓴다. 서비스는
+# 3일 앞까지 예측하므로 3일이다. 표본이 min_samples 미만이면 비운다.
+recent_level:
+  gap_days: 3
+  # 같은 시각(요일 무관) 최근 same_hour_days 일 평균
+  same_hour_days: 28
+  min_samples_hour: 5
+  # 같은 요일·시각 최근 same_dow_weeks 주 평균
+  same_dow_weeks: 8
+  min_samples_dow: 2
+  # 추가 피처(E4): 같은 요일·시각 최근 median_weeks 주 중앙값, 같은 시각 최근 short_days
+  # 일 평균 ÷ same_hour_days 일 평균(추세), last_year_weeks 주 전 같은 요일·시각 평균.
+  extra:
+    median_weeks: 4
+    min_samples_median: 2
+    short_days: 7
+    min_samples_short: 3
+    last_year_weeks: [51, 52, 53]
+
+# 타깃. ratio 는 사람 수를 센서의 최근 수준으로 나눈 비율을 맞추고, 예측값은 비율 × 최근
+# 수준(명/시간)이다. 최근 수준은 recent_level 의 같은 요일·시각 평균, 없으면 같은 시각
+# 평균, 그래도 없으면 센서·요일·시각 중앙값이다. absolute 는 사람 수를 그대로 맞춘다.
+target:
+  mode: ratio
+  # 최근 수준이 이보다 작으면 이 값으로 본다(0 으로 나누지 않는다).
+  floor: 1.0
+  # ref: 최근 수준만큼 가중해 사람 수 오차(MAE)를 그대로 줄인다. none: 모든 행을 같게
+  # 가중해 작은 센서도 같은 비중으로 본다.
+  weight: ref
+  # weight 가 ref 일 때 가중치 = 기준값 ** weight_power. 1 이면 사람 수 MAE 를 그대로 줄이고,
+  # 1 보다 크면 유동인구가 큰 행을 더 중시한다(작은 센서는 덜 맞춘다).
+  weight_power: 1.0
+
+model:
+  # walk_forward.early_stopping.method 가 patience 일 때만 쓰는 상한·인내 횟수.
+  num_boost_round: 3000
+  early_stopping_rounds: 100
+  seed: 42
+  params:
+    # 튜닝(E6)에서 0.05 보다 9 fold 평균이 낮았다.
+    learning_rate: 0.03
+    num_leaves: 127
+    min_data_in_leaf: 200
+    feature_fraction: 0.8
+    bagging_fraction: 0.8
+    bagging_freq: 1
+    lambda_l2: 1.0
+    verbosity: -1
+
+# walk-forward 검증(`python -m foot_traffic.walk_forward`)과 서비스 모델 학습의 전처리·
+# 피처. 모델·하이퍼파라미터는 위 model·target 절을 쓴다.
+walk_forward:
+  # pipeline 13 단계 output_full(센서 단절 정리 전 전체 행). 단절은 fold 마다 그 시점 데이터로 판단한다.
+  training_set: interim/training_wf/hourly.parquet
+  objective: regression_l1
+  # 학습 종료일 = 평가 시작일 - gap_days. 평가 직전 gap_days 일은 학습에 쓰지 않는다.
+  gap_days: 7
+  # 각 fold 검증은 이 날짜(월요일)부터 valid_days 일이다. 이전 fold 검증 구간은 이후 fold 학습에 들어간다.
+  valid_days: 7
+  folds: ["2025-03-10", "2025-05-12", "2025-07-14", "2025-09-08", "2026-03-09"]
+  # 보조 fold. 단절 이후 구간을 더 보려고 넣은 검증 주로, 요약은 기본 fold 와 따로 낸다.
+  extra_folds: ["2025-12-08", "2026-01-12", "2026-05-11", "2026-07-13"]
+  # 쓸 피처 그룹(features.groups).
+  feature_groups: [base, weather, holiday, off_adjacent, recent_level, recent_extra]
+  # 최종 테스트(그날 포함). 모델 선택·튜닝에 쓰지 않고 최종 단계에서만 읽는다.
+  test_start: "2026-08-31"
+  test_end: "2026-10-25"
+  # fold 학습 구간의 마지막 N일을 반복 수를 정하는 내부 검증으로 쓴다(그 fold 검증은 쓰지
+  # 않는다). 반복 수를 정한 뒤 학습 구간 전체로 다시 학습한다. 첫 실행은 28일이었고
+  # 반복 수가 59, 12, 195, 2981, 1회로 크게 흔들려 84일로 늘렸다.
+  early_stopping_days: 84
+  # smoothed: max_rounds 번까지 고정 학습하며 검증 곡선을 기록해 smooth_window 회 이동평균의
+  # 최솟값 지점을 고른다. patience: lightgbm 조기 종료(model.early_stopping_rounds, 상한
+  # model.num_boost_round). 첫 실행(models/walk_forward)은 patience + 28일이었다.
+  # 학습률 0.03 은 0.05 보다 반복이 더 필요해 상한을 1000 에서 늘렸다.
+  early_stopping:
+    method: smoothed
+    max_rounds: 1600
+    smooth_window: 50
+  output_dir: models/walk_forward_final
+  # 실험에서 켜 보았지만 9 fold 평균이 나빠져 끈 항목(없으면 끈다).
+  # - outage: {hour_from: 9, hour_to: 18, min_rows: 8} 낮 시간이 모두 0 인 날을 최근 수준
+  #   계산에서 뺀다(E3).
+  # - vacation_months: [1, 2, 8] 방학 달(feature_groups 에 vacation 도 넣는다, E5).
+  # - model_params: model.params 위에 덮어쓰는 하이퍼파라미터(튜닝 실험용).
+  # 센서 단절 판단 규칙. pipeline/config.yaml 의 training_set.level_break 와 같은 값이다.
+  level_break:
+    break_date: "2025-09-01"
+    before: ["2025-03-01", "2025-08-01"]
+    after: ["2025-10-01", "2026-06-01"]
+    hour_from: 9
+    hour_to: 14
+    min_rows: 200
+    drop_ratio: 0.85
+    # 단절 센서의 과도기 [시작, 끝). 이 구간과 그 앞 행을 뺀다(E1a).
+    transition: ["2025-08-01", "2025-11-01"]
+    # 과도기 앞 행 중 hour_from~hour_to 시는 (센서, 시각)별 계수로 이후(post) 수준에 맞춰
+    # 살린다(E1b). 계수 = 센서의 이후/이전 비 ÷ 단절 없는 센서들의 같은 비 중앙값.
+    rescale:
+      hour_from: 9
+      hour_to: 23
+      post: ["2025-11-01", "2026-06-01"]
+      min_rows: 30
+
+# 매일 예측 배치(`python -m foot_traffic.daily`). 오늘·내일·모레를 예측해 수집 DB
+# (ml/.env 의 COLLECTOR_DATABASE_URL)의 foot_traffic_forecasts 에 저장한다.
+daily:
+  # 배치 날부터 이만큼의 날을 예측한다. 이력이 전날까지 있으면 recent_level.gap_days(3)
+  # 조건으로 모레까지 예측할 수 있다.
+  days: 3
+  # 배치 날 전 이 기간 안에 학습셋 행이 있는 센서만 예측한다(끊긴 센서는 뺀다).
+  active_days: 3
+  # 이 기간이 지난 예측(issued_on 기준)은 지운다.
+  retention_days: 90
+  # 수집 DB weather_daily 의 이 시(KST) 발표분을 쓴다(backend collector_daily_issue_hour).
+  weather_issue_hour: 5
+  timezone: Asia/Seoul
+  connect_timeout_s: 10
+
+# 매일 배치(GitHub Actions)가 읽는 파일을 둘 Supabase Storage 버킷(`python -m
+# foot_traffic.storage`). 버킷 안 경로는 DATA_DIR 기준 상대경로와 같다. 학습셋(13 단계
+# 결과)은 배치가 매일 다시 만들므로 올리지 않는다.
+storage:
+  bucket: foot-traffic
+  files:
+    - interim/sdot/history.parquet
+    - interim/weather/hourly.parquet
+    - interim/calendar/daily.parquet
+    - models/foot_traffic_serve/foot_traffic_model.txt
+    - models/foot_traffic_serve/foot_traffic_meta.json
+  # Supabase 무료 플랜의 파일당 최대 크기
+  max_file_mb: 50
