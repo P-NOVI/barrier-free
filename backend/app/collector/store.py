@@ -5,9 +5,14 @@ from sqlalchemy import Engine, make_url
 from sqlalchemy.dialects import postgresql, sqlite
 from sqlalchemy.orm import Session
 
-from app.collector.models import CollectorBase
 from app.db import get_engine
 from app.services.weather_service import KST
+
+# 수집 DB에 마지막 마이그레이션이 적용되지 않았을 때 알려 주는 말
+STALE_SCHEMA = (
+    "수집 DB 테이블이 최신이 아닙니다. "
+    "backend/ 에서 `uv run alembic -n collector upgrade head` 를 실행하세요."
+)
 
 # 한 INSERT 에 넣는 행 수. PostgreSQL 바인드 변수 한도(65535)보다 넉넉히 작게 둔다.
 INSERT_CHUNK = 1000
@@ -18,9 +23,7 @@ def collector_engine(database_url: str, connect_timeout_s: int) -> Engine:
     url = make_url(database_url)
     if url.drivername == "postgresql":
         url = url.set(drivername="postgresql+psycopg")
-    engine = get_engine(url.render_as_string(hide_password=False), connect_timeout_s)
-    CollectorBase.metadata.create_all(engine)
-    return engine
+    return get_engine(url.render_as_string(hide_password=False), connect_timeout_s)
 
 
 def insert_new(session: Session, model: type, rows: list[dict[str, Any]]) -> int:

@@ -1,10 +1,13 @@
-"""유동인구·날씨를 한 번 받아 수집 DB에 넣고 끝난다. GitHub Actions 가 10분마다 부른다.
+"""유동인구·날씨를 한 번 받아 수집 DB에 넣고 끝난다.
 
-실행: backend/ 에서 uv run python -m app.collector
-필요한 환경변수: COLLECTOR_DATABASE_URL, SDOT_API_KEY, KMA_API_KEY
+실행: backend/ 에서 uv run python -m app.collector [sdot|weather]
+- 생략하면 둘 다 한다. GitHub Actions 는 유동인구를 하루 한 번(collect-sdot.yml),
+  날씨를 1시간마다(collect-weather.yml) 따로 부른다.
+필요한 환경변수: COLLECTOR_DATABASE_URL, SDOT_API_KEY(sdot), KMA_API_KEY(weather)
 한 작업이 실패해도 나머지는 하고, 실패가 있으면 종료 코드 1로 끝난다.
 """
 
+import argparse
 import sys
 from collections.abc import Callable
 from datetime import datetime, timedelta
@@ -13,13 +16,14 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.collector.sdot import collect_sdot
-from app.collector.store import collector_engine
+from app.collector.store import STALE_SCHEMA, collector_engine
 from app.collector.weather import (
     collect_weather_daily,
     collect_weather_now,
     district_grids,
 )
 from app.config import Settings, get_settings
+from app.migrate import COLLECTOR_DB, is_up_to_date
 from app.repositories.sensor_repository import load_sensors
 from app.services.congestion_service import CongestionError, create_sdot_client
 from app.services.weather_service import (
@@ -31,6 +35,7 @@ from app.services.weather_service import (
 )
 
 FAILURES = (CongestionError, WeatherError, SQLAlchemyError)
+JOBS = ("sdot", "weather")
 
 
 def run(name: str, session: Session, job: Callable[[], int]) -> bool:
@@ -47,12 +52,19 @@ def run(name: str, session: Session, job: Callable[[], int]) -> bool:
     return True
 
 
-def collect(session: Session, settings: Settings, now: datetime) -> bool:
+def collect(
+    session: Session, settings: Settings, now: datetime, jobs: tuple[str, ...] = JOBS
+) -> bool:
     ok = True
-    with create_sdot_client(settings) as client:
-        ok &= run(
-            "유동인구", session, lambda: collect_sdot(session, client, settings, now)
-        )
+    if "sdot" in jobs:
+        with create_sdot_client(settings) as client:
+            ok &= run(
+                "유동인구",
+                session,
+                lambda: collect_sdot(session, client, settings, now),
+            )
+    if "weather" not in jobs:
+        return ok
     grids = district_grids(
         session,
         load_sensors(settings.sensors_path),
@@ -74,6 +86,10 @@ def collect(session: Session, settings: Settings, now: datetime) -> bool:
 
 
 def main() -> int:
+    parser = argparse.ArgumentParser(description="유동인구·날씨를 수집 DB에 쌓는다.")
+    parser.add_argument("job", nargs="?", choices=JOBS, help="생략하면 둘 다")
+    args = parser.parse_args()
+    jobs = JOBS if args.job is None else (args.job,)
     settings = get_settings()
     database_url = settings.collector_database_url.get_secret_value()
     if not database_url:
@@ -81,11 +97,15 @@ def main() -> int:
         return 1
     try:
         engine = collector_engine(database_url, settings.collector_connect_timeout_s)
+        up_to_date = is_up_to_date(engine, COLLECTOR_DB)
     except SQLAlchemyError as error:
         print(f"수집 DB 연결 실패 ({type(error).__name__})")
         return 1
+    if not up_to_date:
+        print(STALE_SCHEMA)
+        return 1
     with Session(engine) as session:
-        ok = collect(session, settings, datetime.now(KST))
+        ok = collect(session, settings, datetime.now(KST), jobs)
     return 0 if ok else 1
 
 

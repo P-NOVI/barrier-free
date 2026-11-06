@@ -10,8 +10,9 @@ from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import Session
 
 from app.config import Settings, get_settings
-from app.db import create_tables, get_engine
+from app.db import get_engine
 from app.deps import DbSessionDep
+from app.migrate import APP_DB, is_up_to_date
 from app.repositories.report_repository import purge_expired_reports
 from app.repositories.road_repository import load_entrances, load_graph, load_sites
 from app.repositories.user_repository import purge_inactive_guests
@@ -36,13 +37,21 @@ DB_UNAVAILABLE = {
 
 
 def prepare_database(settings: Settings) -> None:
-    """테이블을 만들고 오래된 게스트·만료된 제보를 지운다. DB가 꺼져도 서버는 켠다."""
+    """테이블이 최신인지 보고 오래된 게스트·만료된 제보를 지운다.
+
+    DB가 꺼져 있어도 서버는 켠다.
+    """
     database_url = settings.database_url.get_secret_value()
     if not database_url:
         return
     engine = get_engine(database_url, settings.database_connect_timeout_s)
     try:
-        create_tables(engine)
+        if not is_up_to_date(engine, APP_DB):
+            logger.warning(
+                "DB 테이블이 최신이 아닙니다. "
+                "backend/ 에서 `uv run alembic upgrade head` 를 실행하세요."
+            )
+            return
         with Session(engine) as session:
             purge_inactive_guests(session, settings.guest_retention_days)
             photo_names = purge_expired_reports(session, settings.report_retention_days)
