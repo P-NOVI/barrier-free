@@ -1,7 +1,14 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ApiError } from './apiClient';
-import { fetchRoute, type RouteRequest } from './routeApi';
+import {
+    chosenRoute,
+    fetchRoute,
+    otherRoute,
+    type RouteOption,
+    type RouteRequest,
+    type RouteResponse,
+} from './routeApi';
 
 const BASE_URL = 'http://api.test';
 const REQUEST: RouteRequest = {
@@ -109,5 +116,26 @@ describe('fetchRoute', () => {
             'VITE_API_BASE_URL',
         );
         expect(fetchMock).not.toHaveBeenCalled();
+    });
+});
+
+describe('chosenRoute / otherRoute', () => {
+    const option = (distance_m: number) =>
+        ({ distance_m, busy_m: 0 }) as unknown as RouteOption;
+    const primary = option(100);
+    const alternative = option(140);
+
+    it('2안이 있으면 고른 쪽과 다른 쪽을 나눈다', () => {
+        const route = { ...primary, alternative } as RouteResponse;
+        expect(chosenRoute(route, 'alternative')).toBe(alternative);
+        expect(otherRoute(route, 'alternative')).toBe(route);
+        expect(chosenRoute(route, 'primary')).toBe(route);
+        expect(otherRoute(route, 'primary')).toBe(alternative);
+    });
+
+    it('2안이 없으면 2안을 골라도 1안이다', () => {
+        const route = { ...primary, alternative: null } as RouteResponse;
+        expect(chosenRoute(route, 'alternative')).toBe(route);
+        expect(otherRoute(route, 'alternative')).toBeNull();
     });
 });

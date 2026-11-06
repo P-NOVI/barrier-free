@@ -4,12 +4,18 @@ import type { NavigationState } from '../hooks/useNavigation';
 import type { RouteState } from '../hooks/useRoute';
 import { formatDistance } from '../lib/format';
 import type { GoalGap } from '../lib/navigation';
-import type { RouteReport } from '../lib/routeApi';
+import {
+    chosenRoute,
+    type RouteChoice,
+    type RouteReport,
+} from '../lib/routeApi';
 import { DIRECTION_LABELS, type Turn } from '../lib/turns';
 import ReviewPrompt from './ReviewPrompt';
 
 type NavigationPanelProps = {
     route: RouteState;
+    /** 안내하는 경로(1안·2안). 도착 후 그 경로의 제보만 리뷰를 받는다. */
+    choice?: RouteChoice;
     navigation: NavigationState;
     /** 지도가 내 위치를 따라가는 중인지 */
     following: boolean;
@@ -61,12 +67,18 @@ function notice(route: RouteState, navigation: NavigationState): Notice | null {
     }
 }
 
-/** 지금 경로가 지나는 승인된 제보. 경로를 다시 찾는 동안에는 바로 전 경로의 것 */
-function routeReports(route: RouteState): RouteReport[] {
+/**
+ * 지금 안내하는 경로(고른 1안·2안)가 지나는 승인된 제보.
+ * 경로를 다시 찾는 동안에는 바로 전 경로의 것
+ */
+function routeReports(route: RouteState, choice: RouteChoice): RouteReport[] {
     if (route.status === 'success') {
-        return route.route.reports;
+        return chosenRoute(route.route, choice).reports;
     }
-    return route.status === 'loading' ? (route.previous?.reports ?? []) : [];
+    if (route.status === 'loading' && route.previous) {
+        return chosenRoute(route.previous, choice).reports;
+    }
+    return [];
 }
 
 /** 다음 회전 방향 화살표. 회전이 더 없으면 도착 깃발 */
@@ -112,6 +124,7 @@ function instruction({ next, judgement }: NavigationState): string {
 /** 안내 중 경로 패널 자리에 다음 회전, 남은 거리, 안내 상태를 보인다. */
 export default function NavigationPanel({
     route,
+    choice = 'primary',
     navigation,
     following,
     voice,
@@ -125,7 +138,7 @@ export default function NavigationPanel({
         null,
     );
     if (judgement === 'arrived' && reviewReports === null) {
-        const reports = routeReports(route);
+        const reports = routeReports(route, choice);
         if (reports.length > 0) {
             setReviewReports(reports);
         }

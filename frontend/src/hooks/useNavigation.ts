@@ -14,7 +14,7 @@ import {
     trackOffRoute,
     withGoalGap,
 } from '../lib/navigation';
-import type { RouteResponse } from '../lib/routeApi';
+import type { RouteOption } from '../lib/routeApi';
 import { type NextTurn, nextTurn, routeTurns } from '../lib/turns';
 
 export type NavigationState = {
@@ -38,7 +38,7 @@ export type NavigationState = {
  */
 export function useNavigation(
     active: boolean,
-    route: RouteResponse | null,
+    route: RouteOption | null,
     rerouting: boolean,
     onReroute: (position: LngLat) => void,
     goal: LngLat | null = null,

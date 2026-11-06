@@ -73,8 +73,60 @@ class Route:
     # 경로가 건물·시설 출입구에서 시작·끝나면 그 출입구 위치
     start_entrance: LngLat | None = None
     goal_entrance: LngLat | None = None
+    # 지나는 구간마다 (edge_id, 길이). 붐비는 길 길이(busy_length)를 셀 때 쓴다.
+    segments: tuple[tuple[int, float], ...] = ()
     # 경로가 지나는 길(core.graph.Arc.edge_id). 길 위 제보를 찾는 데 쓴다.
     edge_ids: frozenset[int] = frozenset()
+
+
+@dataclass(frozen=True)
+class RouteChoice:
+    # 1안: 혼잡도 없이 이동 조건만으로 찾은 경로
+    primary: Route
+    # 2안: 혼잡도를 반영한 경로. 혼잡도 정보가 없거나 1안과 같으면 None
+    alternative: Route | None
+
+
+def busy_length(route: Route, congestion: Mapping[int, float], level: float) -> float:
+    """혼잡도가 level 이상인 구간의 길이 합(m)."""
+    return sum(
+        length
+        for edge_id, length in route.segments
+        if congestion.get(edge_id, 0.0) >= level
+    )
+
+
+def find_routes(
+    graph: Graph,
+    start: LngLat,
+    goal: LngLat,
+    profile: Profile,
+    max_snap_distance_m: float,
+    entrances: EntranceIndex = NO_ENTRANCES,
+    sites: SiteIndex = NO_SITES,
+    congestion: Mapping[int, float] | None = None,
+    busy_level: float = 0.5,
+) -> RouteChoice:
+    """1안(혼잡도 없이)과 2안(혼잡도 반영)을 찾는다.
+
+    2안은 1안과 다르고 붐비는 길(busy_level 이상) 길이가 1안보다 짧을 때만 둔다.
+    조금 붐비는 길만 피해 돌아가는 2안은 화면에서 나아진 점이 보이지 않아서다.
+    RouteNotFoundError: 1안을 찾지 못했을 때. 2안은 같은 길을 다른 비용으로 찾으므로
+    1안이 있으면 있다.
+    """
+    primary = find_route(
+        graph, start, goal, profile, max_snap_distance_m, entrances, sites
+    )
+    if not congestion:
+        return RouteChoice(primary, None)
+    alternative = find_route(
+        graph, start, goal, profile, max_snap_distance_m, entrances, sites, congestion
+    )
+    if alternative.coordinates == primary.coordinates or busy_length(
+        alternative, congestion, busy_level
+    ) >= busy_length(primary, congestion, busy_level):
+        return RouteChoice(primary, None)
+    return RouteChoice(primary, alternative)
 
 
 def find_route(
@@ -135,6 +187,7 @@ def find_route(
         goal_gap_m=goals[path.nodes[-1]].gap_m,
         start_entrance=starts[path.nodes[0]].entrance,
         goal_entrance=goals[path.nodes[-1]].entrance,
+        segments=tuple((arc.edge_id, arc.length) for arc in path.arcs),
         edge_ids=frozenset(arc.edge_id for arc in path.arcs),
     )
 

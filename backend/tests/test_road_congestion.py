@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 
 from app import deps
 from app.config import Settings
-from app.deps import get_graph, get_road_congestion
+from app.deps import get_graph, get_realtime_congestion, get_road_congestion
 from app.main import app
 from app.repositories.sensor_repository import Sensor
 from app.services.congestion_service import Reading, TtlCache, road_congestion
@@ -149,9 +149,10 @@ def test_no_sdot_key_means_no_congestion(
     assert levels == {}
 
 
-def route_via(graph: Graph, congestion: dict[int, float]) -> list[list[float]]:
+def route_via(graph: Graph, congestion: dict[int, float]) -> dict:
+    """지금 출발하는 경로. 실시간 혼잡도를 congestion 으로 둔다."""
     app.dependency_overrides[get_graph] = lambda: graph
-    app.dependency_overrides[get_road_congestion] = lambda: congestion
+    app.dependency_overrides[get_realtime_congestion] = lambda: lambda: congestion
     try:
         response = client.post(
             "/api/route",
@@ -160,17 +161,51 @@ def route_via(graph: Graph, congestion: dict[int, float]) -> list[list[float]]:
     finally:
         app.dependency_overrides.clear()
     assert response.status_code == 200
-    return response.json()["coordinates"]
+    return response.json()
 
 
 @pytest.mark.parametrize(("crowded", "detour"), [(1, 10), (10, 1)])
-def test_route_avoids_crowded_road(
+def test_congestion_route_avoids_crowded_road(
     sample_graph: Graph, crowded: int, detour: int
 ) -> None:
     # 0 → 11 은 1 을 거치거나 10 을 거치는 같은 길이(100m) 두 갈래다.
     congestion = dict.fromkeys(edges_at(sample_graph, crowded), 1.0)
 
-    coordinates = route_via(sample_graph, congestion)
+    body = route_via(sample_graph, congestion)
 
-    assert list(position(sample_graph, detour)) in coordinates
-    assert list(position(sample_graph, crowded)) not in coordinates
+    # 1안이 붐비는 길로 가면 2안이 피하고, 1안이 이미 피했으면 2안은 없다.
+    avoiding = body["alternative"] or body
+    assert list(position(sample_graph, detour)) in avoiding["coordinates"]
+    assert list(position(sample_graph, crowded)) not in avoiding["coordinates"]
+    assert avoiding["busy_m"] == 0
+
+
+def test_primary_route_ignores_congestion_and_reports_busy_length(
+    sample_graph: Graph,
+) -> None:
+    # 혼잡도 없이 찾은 1안이 지나는 쪽을 붐비게 하면 1안은 그대로, 2안은 돌아간다.
+    plain = route_via(sample_graph, {})
+    assert plain["alternative"] is None
+    crowded = 1 if list(position(sample_graph, 1)) in plain["coordinates"] else 10
+
+    body = route_via(sample_graph, dict.fromkeys(edges_at(sample_graph, crowded), 1.0))
+
+    assert body["coordinates"] == plain["coordinates"]
+    assert body["busy_m"] > 0
+    assert body["alternative"] is not None
+    assert body["alternative"]["busy_m"] == 0
+    assert body["alternative"]["coordinates"] != plain["coordinates"]
+
+
+def test_no_alternative_when_it_only_avoids_lightly_busy_roads(
+    sample_graph: Graph,
+) -> None:
+    # 1안이 지나는 쪽을 기준(0.5) 아래로만 붐비게 하면 2안은 돌아가도 붐비는 길 m 가
+    # 줄지 않으므로 보여 주지 않는다.
+    plain = route_via(sample_graph, {})
+    crowded = 1 if list(position(sample_graph, 1)) in plain["coordinates"] else 10
+
+    body = route_via(sample_graph, dict.fromkeys(edges_at(sample_graph, crowded), 0.3))
+
+    assert body["busy_m"] == 0
+    assert body["alternative"] is None

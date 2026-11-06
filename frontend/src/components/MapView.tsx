@@ -41,6 +41,21 @@ const ROUTE_LINE: Omit<kakao.maps.PolylineOptions, 'path'> = {
     strokeStyle: 'solid',
     zIndex: 2,
 };
+// 고르지 않은 다른 추천 경로(1안·2안): 고른 경로 아래에 연하게 그린다. 누르면 그 경로를 고른다.
+const OTHER_ROUTE_OUTLINE: Omit<kakao.maps.PolylineOptions, 'path'> = {
+    strokeWeight: 10,
+    strokeColor: '#ffffff',
+    strokeOpacity: 0.9,
+    strokeStyle: 'solid',
+    zIndex: 0,
+};
+const OTHER_ROUTE_LINE: Omit<kakao.maps.PolylineOptions, 'path'> = {
+    strokeWeight: 6,
+    strokeColor: '#8d97c9',
+    strokeOpacity: 1,
+    strokeStyle: 'solid',
+    zIndex: 0,
+};
 // 경로 선 안 진행 방향 화살표 간격(화면 px)
 const ROUTE_ARROW_SPACING_PX = 40;
 // 찍은 위치와 실제 경로 시작·끝 지점 사이를 잇는 점선
@@ -109,6 +124,10 @@ type MapViewProps = {
     /** picked 위치 위에 띄울 카드. 아래 꼬리가 그 위치를 가리킨다. */
     popup?: ReactNode;
     path?: LngLat[] | null;
+    /** 고르지 않은 다른 추천 경로. path 아래에 연하게 그린다. */
+    otherPath?: LngLat[] | null;
+    /** otherPath 를 눌렀을 때(그 경로를 고른다) */
+    onOtherPathClick?: () => void;
     /** 경로가 건물 출입구에서 시작·끝나면 그 출입구. 점선이 출입구를 거쳐 간다. */
     startEntrance?: LngLat | null;
     goalEntrance?: LngLat | null;
@@ -489,6 +508,39 @@ function useRouteLine(
     }, [map, path, start, goal, startEntrance, goalEntrance, padding, fit]);
 }
 
+/** 고르지 않은 추천 경로를 연하게 그린다. 선을 누르면 onClick. */
+function useOtherRouteLine(
+    map: kakao.maps.Map | null,
+    path: LngLat[] | null | undefined,
+    onClick: (() => void) | undefined,
+) {
+    useEffect(() => {
+        if (!map || !path || path.length < 2) {
+            return;
+        }
+        const lines = [OTHER_ROUTE_OUTLINE, OTHER_ROUTE_LINE].map(
+            (style) =>
+                new kakao.maps.Polyline({
+                    ...style,
+                    path: path.map(toLatLng),
+                }),
+        );
+        lines.forEach((line) => {
+            line.setMap(map);
+            if (onClick) {
+                kakao.maps.event.addListener(line, 'click', onClick);
+            }
+        });
+        return () =>
+            lines.forEach((line) => {
+                if (onClick) {
+                    kakao.maps.event.removeListener(line, 'click', onClick);
+                }
+                line.setMap(null);
+            });
+    }, [map, path, onClick]);
+}
+
 /** position 을 지도 가운데에 계속 둔다. 따라가기를 시작할 때 걷기 좋게 확대한다. */
 function useFollow(
     map: kakao.maps.Map | null,
@@ -557,6 +609,8 @@ export default function MapView({
     picked,
     popup,
     path,
+    otherPath,
+    onOtherPathClick,
     startEntrance,
     goalEntrance,
     savedPlaces = NO_SAVED_PLACES,
@@ -650,6 +704,11 @@ export default function MapView({
 
     // 선과 화살표만 다듬은 모양으로 그린다. 안내는 원래 좌표로 계산한다(lib/routeShape.ts).
     const routeShape = useMemo(() => path && smoothJogs(path), [path]);
+    const otherShape = useMemo(
+        () => otherPath && smoothJogs(otherPath),
+        [otherPath],
+    );
+    useOtherRouteLine(map, otherShape, onOtherPathClick);
     useRouteLine(
         map,
         routeShape,
