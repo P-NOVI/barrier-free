@@ -28,7 +28,7 @@ function detailOf(report: Report): string {
     return report.description ? `${base} · ${report.description}` : base;
 }
 
-/** My 탭의 내 제보. 검토 중인 제보는 눌러서 고치고, 모든 제보는 지울 수 있다. */
+/** 제보 탭의 내 제보. 검토 중인 제보는 눌러서 고치고, 모든 제보는 지울 수 있다. */
 export default function MyReports({
     reports,
     onUpdate,
@@ -43,7 +43,7 @@ export default function MyReports({
     const list =
         reports.length === 0 ? (
             <p className="my-tab__status">
-                지도에서 장소를 눌러 길 위 문제를 제보하면 여기에 모여요.
+                위에서 길 위 문제를 제보하면 여기에 모여요.
             </p>
         ) : (
             <ul className="my-list">

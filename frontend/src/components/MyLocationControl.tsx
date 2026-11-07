@@ -4,6 +4,9 @@ import { getCurrentPosition, type LocationFix } from '../lib/geolocation';
 
 type MyLocationControlProps = {
     onLocate: (fix: LocationFix) => void;
+    /** 내 위치를 따라가는 중이면 true. 이때 버튼을 누르면 끈다. */
+    tracking: boolean;
+    onStop: () => void;
     /** 위치를 찾는 방법. 안내 중에는 이미 받은 위치를 바로 쓴다. */
     locate?: () => Promise<LocationFix>;
 };
@@ -16,12 +19,18 @@ type LocateState =
 /** 지도 위 '내 위치' 버튼. 찾으면 알리고, 못 찾으면 이유를 버튼 옆에 띄운다. */
 export default function MyLocationControl({
     onLocate,
+    tracking,
+    onStop,
     locate: findLocation = getCurrentPosition,
 }: MyLocationControlProps) {
     const [locate, setLocate] = useState<LocateState>({ status: 'idle' });
     const locating = locate.status === 'locating';
 
     const handleClick = () => {
+        if (tracking) {
+            onStop();
+            return;
+        }
         setLocate({ status: 'locating' });
         findLocation()
             .then((fix) => {
@@ -47,8 +56,15 @@ export default function MyLocationControl({
             <button
                 type="button"
                 className="my-location-control__button"
-                aria-label={locating ? '내 위치 찾는 중' : '내 위치 보기'}
-                title="내 위치 보기"
+                aria-label={
+                    locating
+                        ? '내 위치 찾는 중'
+                        : tracking
+                          ? '내 위치 끄기'
+                          : '내 위치 보기'
+                }
+                title={tracking ? '내 위치 끄기' : '내 위치 보기'}
+                aria-pressed={tracking}
                 disabled={locating}
                 onClick={handleClick}
             >

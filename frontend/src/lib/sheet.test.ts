@@ -75,6 +75,27 @@ describe('selectTab', () => {
         });
     });
 
+    it('제보 탭도 끝까지 올려 연다', () => {
+        expect(selectTab({ tab: 'my', snap: 'half' }, 'report')).toEqual({
+            tab: 'report',
+            snap: 'full',
+        });
+    });
+
+    it('길찾기 탭은 끝까지 올려 연다', () => {
+        expect(selectTab({ tab: 'search', snap: 'half' }, 'route')).toEqual({
+            tab: 'route',
+            snap: 'full',
+        });
+        expect(selectTab({ tab: 'route', snap: 'collapsed' }, 'route')).toEqual(
+            { tab: 'route', snap: 'full' },
+        );
+        expect(selectTab({ tab: 'route', snap: 'full' }, 'route')).toEqual({
+            tab: 'route',
+            snap: 'collapsed',
+        });
+    });
+
     it('검색 탭은 시트가 없어 단계를 바꾸지 않는다', () => {
         expect(selectTab({ tab: 'search', snap: 'half' }, 'search')).toEqual({
             tab: 'search',

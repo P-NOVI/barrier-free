@@ -1,6 +1,5 @@
 import { type CSSProperties, type ReactNode, useId, useState } from 'react';
 
-import type { MyReports as MyReportsState } from '../hooks/useMyReports';
 import type { SavedPlaces } from '../hooks/useSavedPlaces';
 import type { SavedRoutes } from '../hooks/useSavedRoutes';
 import { formatDistance } from '../lib/format';
@@ -12,22 +11,19 @@ import { MY_LIST_ICONS as ICONS } from '../lib/myListIcons';
 import InstallApp from './InstallApp';
 import MyListRow from './MyListRow';
 import MyPlaces from './MyPlaces';
-import MyReports from './MyReports';
 
-type Section = 'favorite' | 'mine' | 'routes' | 'reports';
+type Section = 'favorite' | 'mine' | 'routes';
 
 const SECTIONS: { id: Section; label: string }[] = [
     { id: 'favorite', label: '즐겨찾기' },
     { id: 'mine', label: '내 장소' },
     { id: 'routes', label: '내 경로' },
-    { id: 'reports', label: '내 제보' },
 ];
 const UNAVAILABLE = '불러오지 못했어요. 잠시 뒤 다시 열어 주세요.';
 
 type MyTabProps = {
     savedPlaces: SavedPlaces;
     savedRoutes: SavedRoutes;
-    myReports: MyReportsState;
     /** 내 장소를 등록할 때 이 근처 장소를 앞에 둔다. */
     near: LngLat;
     onSelectPlace: (place: SavedPlace) => void;
@@ -37,11 +33,10 @@ type MyTabProps = {
     children?: ReactNode;
 };
 
-/** My 탭: 즐겨찾기, 내 장소, 내 경로, 내 제보, 앱 설치 */
+/** My 탭: 즐겨찾기, 내 장소, 내 경로, 앱 설치. 내 제보는 제보 탭에 있다. */
 export default function MyTab({
     savedPlaces,
     savedRoutes,
-    myReports,
     near,
     onSelectPlace,
     onSelectRoute,
@@ -49,12 +44,7 @@ export default function MyTab({
 }: MyTabProps) {
     const [section, setSection] = useState<Section>('favorite');
     const id = useId();
-    const source =
-        section === 'routes'
-            ? savedRoutes
-            : section === 'reports'
-              ? myReports
-              : savedPlaces;
+    const source = section === 'routes' ? savedRoutes : savedPlaces;
     const { error, available } = source;
 
     return (
@@ -125,13 +115,6 @@ export default function MyTab({
                         routes={savedRoutes.routes}
                         onSelect={onSelectRoute}
                         onDelete={savedRoutes.remove}
-                    />
-                )}
-                {available && section === 'reports' && (
-                    <MyReports
-                        reports={myReports.reports}
-                        onUpdate={myReports.update}
-                        onDelete={myReports.remove}
                     />
                 )}
             </div>
