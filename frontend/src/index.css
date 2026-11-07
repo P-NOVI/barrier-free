@@ -1129,20 +1129,50 @@ input::placeholder {
     background: transparent;
 }
 
-.place-search__locate {
-    flex: none;
-    min-height: 42px;
-    padding: 0 10px;
+/* 입력칸 아래 내 위치·지도에서 선택·즐겨찾기: 같은 폭 세 칸에 가운데 맞춰 둔다. */
+.place-search__actions {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+}
+
+.place-search__action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-width: 0;
+    min-height: 40px;
+    padding: 0 4px;
     border: 1px solid transparent;
     border-radius: 10px;
     font: inherit;
     font-size: 14px;
+    font-weight: 600;
+    white-space: nowrap;
     color: var(--text);
-    background: var(--soft-bg);
+    background: none;
     cursor: pointer;
 }
 
-.place-search__locate:disabled {
+.place-search__action svg {
+    flex: none;
+    width: 18px;
+    height: 18px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+/* 지도에서 고르는 중이거나 즐겨찾기 목록을 연 버튼 */
+.place-search__action[aria-pressed='true'],
+.place-search__action[aria-expanded='true'] {
+    border-color: var(--text);
+}
+
+.place-search__action:disabled {
     color: var(--muted);
     cursor: default;
 }
@@ -1684,6 +1714,39 @@ input::placeholder {
     background: transparent;
 }
 
+/* 길찾기 '지도에서 선택' 중에 위 검색창 자리에 띄우는 안내 */
+.map-pick-hint {
+    position: absolute;
+    top: 12px;
+    left: 12px;
+    right: 12px;
+    z-index: 30;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    min-height: 48px;
+    padding: 0 6px 0 16px;
+    border-radius: 16px;
+    font-weight: 600;
+    color: var(--text);
+    background: var(--bg);
+    box-shadow: var(--panel-shadow);
+}
+
+.map-pick-hint button {
+    flex: none;
+    min-height: 36px;
+    padding: 0 14px;
+    border: 0;
+    border-radius: 10px;
+    font: inherit;
+    font-size: 14px;
+    color: var(--text);
+    background: var(--soft-bg);
+    cursor: pointer;
+}
+
 /* 누르면 펼쳐지는 최근 경로·검색과 검색 결과 */
 .top-search__list {
     max-height: 60vh;
@@ -2125,6 +2188,12 @@ input::placeholder {
     .my-location-control {
         top: auto;
         bottom: 32px;
+    }
+
+    /* 지도에서 선택 안내는 패널 오른쪽 지도 위에 띄운다. */
+    .map-pick-hint {
+        left: calc(var(--panel-width) + 24px);
+        right: auto;
     }
 }
 
