@@ -66,6 +66,13 @@ type LocateState =
     // 출발지가 다른 방법으로 바뀌면 오류 안내를 감추려고 그때의 출발지를 같이 둔다.
     | { status: 'error'; message: string; start: Endpoint | null };
 
+// 목록을 눌러도 입력창 포커스가 남아 목록이 닫히지 않게 한다.
+// iPhone(Safari·홈 화면 앱)은 버튼을 눌러도 버튼에 포커스가 가지 않아, 이것이 없으면
+// 입력창 blur 로 목록이 먼저 사라져 누른 항목이 선택되지 않는다.
+function keepFocus(event: MouseEvent) {
+    event.preventDefault();
+}
+
 export function SearchResults({
     listId,
     search,
@@ -98,7 +105,11 @@ export function SearchResults({
                 <ul id={listId} className="place-search__results">
                     {search.places.map((place) => (
                         <li key={`${place.name}@${place.position}`}>
-                            <button type="button" onClick={() => onPick(place)}>
+                            <button
+                                type="button"
+                                onMouseDown={keepFocus}
+                                onClick={() => onPick(place)}
+                            >
                                 <span className="place-search__name">
                                     {place.name}
                                 </span>
@@ -113,11 +124,6 @@ export function SearchResults({
                 </ul>
             );
     }
-}
-
-// 목록을 눌러도 입력창 포커스가 남아 목록이 닫히지 않게 한다.
-function keepFocus(event: MouseEvent) {
-    event.preventDefault();
 }
 
 function RecentItem({
