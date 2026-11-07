@@ -59,12 +59,13 @@ import {
     CURRENT_LOCATION_LABEL,
     type Endpoint,
     type EndpointRole,
+    type Endpoints,
     MAP_CLICK_LABEL,
     NO_ENDPOINTS,
     type PickedPlace,
     toPickedPlace,
 } from './lib/selection';
-import { selectTab, type SheetSnap, type Tab } from './lib/sheet';
+import { openSnap, selectTab, type SheetSnap, type Tab } from './lib/sheet';
 import {
     elevatorExitsText,
     elevatorStopText,
@@ -109,6 +110,8 @@ export default function App() {
     const [myLocation, setMyLocation] = useState<LocationFix | null>(null);
     // 길 위 문제를 제보하는 중인 장소
     const [reporting, setReporting] = useState<PickedPlace | null>(null);
+    // 길찾기 '지도에서 선택'으로 지도를 눌러 고르는 중인 칸(출발지·도착지)
+    const [mapPick, setMapPick] = useState<EndpointRole | null>(null);
     const [navigating, setNavigating] = useState(false);
     // 안내 중 지도가 내 위치를 따라가는지. 지도를 끌면 멈추고, 내 위치 버튼을 누르면 다시 따라간다.
     const [following, setFollowing] = useState(true);
@@ -289,6 +292,8 @@ export default function App() {
         if (next === 'search' && sheet.tab === 'search') {
             searchInput.current?.focus();
         }
+        // 메뉴를 누르면 지도에서 선택은 그만둔다.
+        setMapPick(null);
         setSheet((current) => selectTab(current, next));
     };
 
@@ -300,6 +305,69 @@ export default function App() {
             setFocus([lng, lat]);
         },
         [],
+    );
+
+    // 좁은 화면에서 출발·도착이 둘 다 정해지면 시트를 절반으로 내려 지도에서 경로가 보이게 한다.
+    // 하나만 정했으면 나머지를 바로 입력하게 길찾기 단계(끝까지)로 둔다.
+    const settleRouteSheet = useCallback((next: Endpoints) => {
+        setSheet((current) =>
+            current.tab === 'route'
+                ? {
+                      ...current,
+                      snap:
+                          next.start && next.goal ? 'half' : openSnap('route'),
+                  }
+                : current,
+        );
+    }, []);
+
+    // 길찾기 입력칸·아래 버튼에서 고른 출발·도착
+    const handleSelectEndpoint = (role: EndpointRole, endpoint: Endpoint) => {
+        handleSelect(role, endpoint);
+        settleRouteSheet({ ...endpoints, [role]: endpoint });
+    };
+
+    // 지도에서 선택: 시작하면 좁은 화면은 시트를 접어 지도를 보이고, 그만두면 다시 연다.
+    const changeMapPick = useCallback(
+        (role: EndpointRole | null) => {
+            setMapPick(role);
+            setPicked(null);
+            if (role) {
+                setSheet((current) => ({ ...current, snap: 'collapsed' }));
+            } else {
+                settleRouteSheet(endpoints);
+            }
+        },
+        [endpoints, settleRouteSheet],
+    );
+
+    // 지도에서 선택 중에 누른 곳을 그 칸에 넣는다. 이름은 주소 검색으로 찾는다.
+    const finishMapPick = useCallback(
+        (position: LngLat, name?: string) => {
+            if (!mapPick) {
+                return;
+            }
+            const role = mapPick;
+            setMapPick(null);
+            latestClick.current = position;
+            const done = (found: string | null) => {
+                // 기다리는 사이 다른 곳을 눌렀으면 버린다.
+                if (latestClick.current !== position) {
+                    return;
+                }
+                const endpoint = { position, label: found ?? MAP_CLICK_LABEL };
+                setEndpoints((current) => ({ ...current, [role]: endpoint }));
+                settleRouteSheet({ ...endpoints, [role]: endpoint });
+            };
+            if (name) {
+                done(name);
+                return;
+            }
+            findAddress(position)
+                .then((address) => done(address?.name ?? null))
+                .catch(() => done(null));
+        },
+        [mapPick, endpoints, settleRouteSheet],
     );
 
     // 최근 경로: 그때의 출발·도착과 프리셋으로 다시 찾는다.
@@ -408,7 +476,7 @@ export default function App() {
                 <PlaceSearch
                     endpoints={endpoints}
                     near={mapCenter}
-                    onSelect={handleSelect}
+                    onSelect={handleSelectEndpoint}
                     onSelectRoute={handleSelectRoute}
                     onLocate={setMyLocation}
                     myPlaces={
@@ -418,6 +486,15 @@ export default function App() {
                               )
                             : undefined
                     }
+                    favorites={
+                        savedPlaces.available
+                            ? savedPlaces.places.filter(
+                                  (place) => place.kind === 'favorite',
+                              )
+                            : undefined
+                    }
+                    mapPick={mapPick}
+                    onMapPickChange={changeMapPick}
                 />
                 <RoutePanel
                     preset={preset}
@@ -530,8 +607,21 @@ export default function App() {
                         : null
                 }
                 // 안내 중에는 지도를 눌러도 출발·도착을 바꾸지 않는다.
-                onMapClick={navigating ? undefined : handleMapClick}
-                onSavedPlaceClick={navigating ? undefined : showSavedPlace}
+                // 지도에서 선택 중이면 누른 곳을 고르던 칸에 바로 넣는다.
+                onMapClick={
+                    navigating
+                        ? undefined
+                        : mapPick
+                          ? finishMapPick
+                          : handleMapClick
+                }
+                onSavedPlaceClick={
+                    navigating
+                        ? undefined
+                        : mapPick
+                          ? (place) => finishMapPick(place.position, place.name)
+                          : showSavedPlace
+                }
                 onCenterChange={setMapCenter}
                 onDragStart={stopFollowing}
                 myLocation={navigationFix ?? myLocation}
@@ -553,7 +643,19 @@ export default function App() {
                     onSessionChange={reloadSaved}
                 />
             )}
-            {!wide && !navigating && searchBox}
+            {/* 길찾기 탭은 위 검색창 없이 시트의 출발·도착 입력을 맨 위에 둔다. */}
+            {!wide && !navigating && sheet.tab !== 'route' && searchBox}
+            {mapPick && !navigating && (
+                <div className="map-pick-hint" role="status">
+                    <span>
+                        지도를 눌러 {mapPick === 'start' ? '출발지' : '도착지'}
+                        를 고르세요
+                    </span>
+                    <button type="button" onClick={() => changeMapPick(null)}>
+                        취소
+                    </button>
+                </div>
+            )}
             {navigating && (
                 <NavigationPanel
                     route={route}

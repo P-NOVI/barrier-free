@@ -64,18 +64,26 @@ export function toggleSnap(snap: SheetSnap): SheetSnap {
 }
 
 /**
- * 메뉴를 눌렀을 때 다음 탭·단계. 다른 탭이면 절반으로 열고,
- * 열려 있는 탭을 다시 누르면 접거나 절반으로 편다.
+ * 메뉴로 탭을 열 때의 단계. 길찾기는 위 검색창 자리까지 올려 바로 출발·도착을 입력하게 하고
+ * (입력 목록이 키보드에 가리지 않는다), 나머지는 지도가 보이게 절반으로 연다.
+ */
+export function openSnap(tab: Tab): SheetSnap {
+    return tab === 'route' ? 'full' : 'half';
+}
+
+/**
+ * 메뉴를 눌렀을 때 다음 탭·단계. 다른 탭이면 그 탭의 단계(openSnap)로 열고,
+ * 열려 있는 탭을 다시 누르면 접거나 그 단계로 편다.
  */
 export function selectTab(
     current: { tab: Tab; snap: SheetSnap },
     next: Tab,
 ): { tab: Tab; snap: SheetSnap } {
     if (next !== current.tab || next === 'search') {
-        return { tab: next, snap: 'half' };
+        return { tab: next, snap: openSnap(next) };
     }
     return {
         tab: next,
-        snap: current.snap === 'collapsed' ? 'half' : 'collapsed',
+        snap: current.snap === 'collapsed' ? openSnap(next) : 'collapsed',
     };
 }
