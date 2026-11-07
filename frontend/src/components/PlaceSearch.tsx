@@ -1,10 +1,4 @@
-import {
-    type MouseEvent,
-    type ReactNode,
-    useId,
-    useRef,
-    useState,
-} from 'react';
+import { type MouseEvent, useId, useRef, useState } from 'react';
 
 import { useDebouncedValue } from '../hooks/useDebouncedValue';
 import { type PlaceSearchState, usePlaceSearch } from '../hooks/usePlaceSearch';
@@ -23,7 +17,7 @@ import {
     toSearchEntry,
 } from '../lib/historyApi';
 import type { LngLat } from '../lib/kakaoMap';
-import { MY_PLACE_SLOTS } from '../lib/myListIcons';
+import { MY_LIST_ICONS, MY_PLACE_SLOTS } from '../lib/myListIcons';
 import type { Place } from '../lib/placeApi';
 import { presetLabel } from '../lib/presets';
 import type { SavedPlace } from '../lib/savedPlacesApi';
@@ -58,13 +52,26 @@ type PlaceSearchProps = {
     onLocate: (fix: LocationFix) => void;
     /** 내 장소. 있으면 입력칸 아래에 집·회사 버튼을 둔다(못 불러왔으면 숨김). */
     myPlaces?: SavedPlace[];
+    /** 즐겨찾기 버튼으로 고를 장소. 없으면 못 불러온 것이다. */
+    favorites?: SavedPlace[];
+    /** 지도를 눌러 고르는 중인 칸 */
+    mapPick?: EndpointRole | null;
+    /** 지도에서 선택을 시작(칸)하거나 그만둔다(null). 없으면 버튼을 숨긴다. */
+    onMapPickChange?: (role: EndpointRole | null) => void;
 };
 
 type LocateState =
     | { status: 'idle' }
     | { status: 'locating' }
-    // 출발지가 다른 방법으로 바뀌면 오류 안내를 감추려고 그때의 출발지를 같이 둔다.
-    | { status: 'error'; message: string; start: Endpoint | null };
+    // 출발·도착이 다른 방법으로 바뀌면 오류 안내를 감추려고 그때의 출발·도착을 같이 둔다.
+    | { status: 'error'; message: string; endpoints: Endpoints };
+
+// 입력칸 아래 버튼 아이콘(24×24 선)
+const ACTION_ICONS = {
+    locate: 'M20 4 4 11l7 2 2 7Z',
+    map: 'M9 4 3 6v14l6-2 6 2 6-2V4l-6 2ZM9 4v14M15 6v14',
+    star: MY_LIST_ICONS.star,
+};
 
 // 목록을 눌러도 입력창 포커스가 남아 목록이 닫히지 않게 한다.
 // iPhone(Safari·홈 화면 앱)은 버튼을 눌러도 버튼에 포커스가 가지 않아, 이것이 없으면
@@ -217,14 +224,15 @@ function PlaceField({
     role,
     endpoint,
     near,
-    action,
+    onFocus,
     onSelect,
     onSelectRoute,
 }: {
     role: EndpointRole;
     endpoint: Endpoint | null;
     near: LngLat | null;
-    action?: ReactNode;
+    /** 입력칸을 누르면 알린다. */
+    onFocus: () => void;
     onSelect: (endpoint: Endpoint) => void;
     onSelectRoute: (entry: RouteHistory) => void;
 }) {
@@ -293,7 +301,10 @@ function PlaceField({
                         data-role={role}
                         autoComplete="off"
                         aria-controls={listId}
-                        onFocus={() => setListOpen(true)}
+                        onFocus={() => {
+                            setListOpen(true);
+                            onFocus();
+                        }}
                         onClick={() => setListOpen(true)}
                         onChange={(event) => {
                             setText(event.target.value);
@@ -308,7 +319,6 @@ function PlaceField({
                         }}
                     />
                 </label>
-                {action}
             </div>
             {/* 검색 결과·최근 기록은 두 입력칸과 내 장소 버튼 아래에 연다(index.css). */}
             <div className="place-search__dropdown">
@@ -334,6 +344,18 @@ function PlaceField({
     );
 }
 
+/** section 안에서 포커스가 있는 입력칸(출발지·도착지). 없으면 null */
+function focusedRoleIn(
+    section: Element | null | undefined,
+): EndpointRole | null {
+    const active = document.activeElement;
+    if (!(active instanceof HTMLElement) || !section?.contains(active)) {
+        return null;
+    }
+    const { role } = active.dataset;
+    return isEndpointRole(role) ? role : null;
+}
+
 /** 입력칸 아래 집·회사 버튼. 누르면 그 장소를 출발지나 도착지에 넣는다. */
 function MyPlaceShortcuts({
     places,
@@ -356,15 +378,8 @@ function MyPlaceShortcuts({
     );
 
     // 버튼을 눌러도 포커스가 입력칸에 남아(keepFocus) 누르고 있던 칸을 알 수 있다.
-    const focusedRole = (): EndpointRole | null => {
-        const active = document.activeElement;
-        const section = rowRef.current?.closest('.place-search');
-        if (!(active instanceof HTMLElement) || !section?.contains(active)) {
-            return null;
-        }
-        const { role } = active.dataset;
-        return isEndpointRole(role) ? role : null;
-    };
+    const focusedRole = () =>
+        focusedRoleIn(rowRef.current?.closest('.place-search'));
 
     return (
         <>
@@ -416,6 +431,101 @@ function MyPlaceShortcuts({
     );
 }
 
+/** 입력칸 아래 내 위치·지도에서 선택·즐겨찾기 버튼 한 칸 */
+function ActionButton({
+    icon,
+    label,
+    disabled,
+    pressed,
+    expanded,
+    onMouseDown,
+    onClick,
+}: {
+    icon: string;
+    label: string;
+    disabled?: boolean;
+    pressed?: boolean;
+    expanded?: boolean;
+    onMouseDown: () => void;
+    onClick: () => void;
+}) {
+    return (
+        <button
+            type="button"
+            className="place-search__action"
+            disabled={disabled}
+            aria-pressed={pressed}
+            aria-expanded={expanded}
+            onMouseDown={onMouseDown}
+            onClick={onClick}
+        >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d={icon} />
+            </svg>
+            {label}
+        </button>
+    );
+}
+
+/** 즐겨찾기 버튼을 누르면 입력칸 아래에 여는 목록. places 가 없으면 못 불러온 것이다. */
+function FavoriteList({
+    role,
+    places,
+    onPick,
+}: {
+    role: EndpointRole;
+    places: SavedPlace[] | undefined;
+    onPick: (place: SavedPlace) => void;
+}) {
+    const title = (
+        <p className="place-search__recent-title">
+            즐겨찾기에서 {FIELD_LABELS[role]} 고르기
+        </p>
+    );
+    if (!places) {
+        return (
+            <>
+                {title}
+                <p className="place-search__message">
+                    즐겨찾기를 불러오지 못했습니다.
+                </p>
+            </>
+        );
+    }
+    if (places.length === 0) {
+        return (
+            <>
+                {title}
+                <p className="place-search__message">
+                    즐겨찾기한 장소가 없습니다. 지도에서 장소를 누르고 장소
+                    카드의 북마크에서 즐겨찾기를 눌러 추가하세요.
+                </p>
+            </>
+        );
+    }
+    return (
+        <>
+            {title}
+            <ul className="place-search__results">
+                {places.map((place) => (
+                    <li key={place.id}>
+                        <button type="button" onClick={() => onPick(place)}>
+                            <span className="place-search__name">
+                                {place.name}
+                            </span>
+                            {place.address && (
+                                <span className="place-search__address">
+                                    {place.address}
+                                </span>
+                            )}
+                        </button>
+                    </li>
+                ))}
+            </ul>
+        </>
+    );
+}
+
 function fieldKey(role: EndpointRole, endpoint: Endpoint | null): string {
     return endpoint ? `${role}:${endpoint.label}@${endpoint.position}` : role;
 }
@@ -427,15 +537,36 @@ export default function PlaceSearch({
     onSelectRoute,
     onLocate,
     myPlaces,
+    favorites,
+    mapPick = null,
+    onMapPickChange,
 }: PlaceSearchProps) {
+    const sectionRef = useRef<HTMLElement>(null);
     const [locate, setLocate] = useState<LocateState>({ status: 'idle' });
+    // 즐겨찾기 목록을 열었을 때, 고른 장소를 넣을 칸
+    const [favoritesFor, setFavoritesFor] = useState<EndpointRole | null>(null);
+    // 아래 버튼을 누르는 순간 포커스가 있던 입력칸. 누르면 입력칸에서 포커스가 빠지므로
+    // (휴대폰 키보드도 내려간다) 누르기 시작할 때(mousedown) 기억해 둔다.
+    const pressedRole = useRef<EndpointRole | null>(null);
+    const rememberRole = () => {
+        pressedRole.current = focusedRoleIn(sectionRef.current);
+    };
+    // 누르고 있던 칸. 없으면(키보드로 눌렀거나 칸을 누르지 않음) null
+    const takeRole = (): EndpointRole | null => {
+        const role = pressedRole.current ?? focusedRoleIn(sectionRef.current);
+        pressedRole.current = null;
+        return role;
+    };
 
-    const locateStart = () => {
+    // 내 위치는 누르고 있던 칸, 없으면 출발지에 넣는다.
+    const locateHere = () => {
+        const role = takeRole() ?? 'start';
+        setFavoritesFor(null);
         setLocate({ status: 'locating' });
         getCurrentPosition()
             .then((fix) => {
                 setLocate({ status: 'idle' });
-                onSelect('start', {
+                onSelect(role, {
                     position: fix.position,
                     label: CURRENT_LOCATION_LABEL,
                 });
@@ -446,52 +577,111 @@ export default function PlaceSearch({
                     status: 'error',
                     message:
                         error instanceof Error ? error.message : String(error),
-                    start: endpoints.start,
+                    endpoints,
                 }),
             );
     };
 
+    // 지도에서 선택·즐겨찾기는 누르고 있던 칸, 없으면 집·회사 버튼처럼 빈 칸에 넣는다.
+    const toggleMapPick = () => {
+        const role = shortcutRole(takeRole(), endpoints);
+        setFavoritesFor(null);
+        onMapPickChange?.(mapPick ? null : role);
+    };
+
+    const toggleFavorites = () => {
+        const role = shortcutRole(takeRole(), endpoints);
+        setFavoritesFor((current) => (current ? null : role));
+        if (mapPick) {
+            onMapPickChange?.(null);
+        }
+    };
+
+    // 입력칸을 다시 누르면 즐겨찾기 목록과 지도에서 선택을 닫고 검색·최근 기록을 보인다.
+    const handleFieldFocus = () => {
+        setFavoritesFor(null);
+        if (mapPick) {
+            onMapPickChange?.(null);
+        }
+    };
+
     return (
-        <section className="place-search" aria-label="출발지·도착지 검색">
+        <section
+            ref={sectionRef}
+            className="place-search"
+            aria-label="출발지·도착지 검색"
+        >
             <PlaceField
                 key={fieldKey('start', endpoints.start)}
                 role="start"
                 endpoint={endpoints.start}
                 near={near}
+                onFocus={handleFieldFocus}
                 onSelect={(endpoint) => onSelect('start', endpoint)}
                 onSelectRoute={onSelectRoute}
-                action={
-                    <button
-                        type="button"
-                        className="place-search__locate"
-                        disabled={locate.status === 'locating'}
-                        onClick={locateStart}
-                    >
-                        {locate.status === 'locating'
-                            ? '찾는 중…'
-                            : CURRENT_LOCATION_LABEL}
-                    </button>
-                }
             />
-            {locate.status === 'error' && locate.start === endpoints.start && (
-                <p role="alert" className="place-search__error">
-                    {locate.message}
-                </p>
-            )}
             <PlaceField
                 key={fieldKey('goal', endpoints.goal)}
                 role="goal"
                 endpoint={endpoints.goal}
                 near={near}
+                onFocus={handleFieldFocus}
                 onSelect={(endpoint) => onSelect('goal', endpoint)}
                 onSelectRoute={onSelectRoute}
             />
+            <div className="place-search__actions">
+                <ActionButton
+                    icon={ACTION_ICONS.locate}
+                    label={
+                        locate.status === 'locating' ? '찾는 중…' : '내 위치'
+                    }
+                    disabled={locate.status === 'locating'}
+                    onMouseDown={rememberRole}
+                    onClick={locateHere}
+                />
+                {onMapPickChange && (
+                    <ActionButton
+                        icon={ACTION_ICONS.map}
+                        label="지도에서 선택"
+                        pressed={mapPick !== null}
+                        onMouseDown={rememberRole}
+                        onClick={toggleMapPick}
+                    />
+                )}
+                <ActionButton
+                    icon={ACTION_ICONS.star}
+                    label="즐겨찾기"
+                    expanded={favoritesFor !== null}
+                    onMouseDown={rememberRole}
+                    onClick={toggleFavorites}
+                />
+            </div>
+            {locate.status === 'error' && locate.endpoints === endpoints && (
+                <p role="alert" className="place-search__error">
+                    {locate.message}
+                </p>
+            )}
             {myPlaces && (
                 <MyPlaceShortcuts
                     places={myPlaces}
                     endpoints={endpoints}
                     onSelect={onSelect}
                 />
+            )}
+            {favoritesFor && (
+                <div className="place-search__dropdown">
+                    <FavoriteList
+                        role={favoritesFor}
+                        places={favorites}
+                        onPick={(place) => {
+                            setFavoritesFor(null);
+                            onSelect(favoritesFor, {
+                                position: place.position,
+                                label: place.name,
+                            });
+                        }}
+                    />
+                </div>
             )}
         </section>
     );
