@@ -23,6 +23,7 @@ import RoutePanel from './components/RoutePanel';
 import TopSearch from './components/TopSearch';
 import { useElementHeight } from './hooks/useElementHeight';
 import { useMediaQuery } from './hooks/useMediaQuery';
+import { useMyLocationWatch } from './hooks/useMyLocationWatch';
 import { useNavigation } from './hooks/useNavigation';
 import { useRoute } from './hooks/useRoute';
 import { useRouteHistory } from './hooks/useRouteHistory';
@@ -107,6 +108,8 @@ export default function App() {
     const [mapCenter, setMapCenter] = useState<LngLat>(SEOUL_CITY_HALL);
     // 마지막으로 찾은 내 위치. 지도에 파란 점으로 보인다.
     const [myLocation, setMyLocation] = useState<LocationFix | null>(null);
+    // 내 위치를 따라가는 중인지. 내 위치 버튼을 다시 누르면 끈다.
+    const [tracking, setTracking] = useState(false);
     // 길 위 문제를 제보하는 중인 장소
     const [reporting, setReporting] = useState<PickedPlace | null>(null);
     const [navigating, setNavigating] = useState(false);
@@ -341,7 +344,16 @@ export default function App() {
         setMyLocation(fix);
         setFocus(fix.position);
         setFollowing(true);
+        setTracking(true);
     }, []);
+
+    const stopTracking = useCallback(() => {
+        setTracking(false);
+        setMyLocation(null);
+    }, []);
+
+    // 안내 중에는 안내가 위치를 받으므로 따로 받지 않는다.
+    useMyLocationWatch(tracking && !navigating, setMyLocation, stopTracking);
 
     // 휴대폰 브라우저는 버튼을 누를 때 처음 소리를 내야 이후 안내도 읽어 준다.
     const startNavigation = useCallback(() => {
@@ -587,6 +599,8 @@ export default function App() {
             )}
             <MyLocationControl
                 onLocate={showMyLocation}
+                tracking={tracking && !navigating}
+                onStop={stopTracking}
                 locate={
                     navigationFix
                         ? () => Promise.resolve(navigationFix)

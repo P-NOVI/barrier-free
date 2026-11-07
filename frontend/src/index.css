@@ -293,6 +293,10 @@ input::placeholder {
     height: 22px;
 }
 
+.my-location-control__button[aria-pressed='true'] {
+    color: var(--my-location);
+}
+
 .my-location-control__button:disabled {
     color: var(--muted);
     cursor: default;
