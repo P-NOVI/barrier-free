@@ -1710,6 +1710,110 @@ input::placeholder {
     background: transparent;
 }
 
+/* 제보 탭 */
+.report-tab__intro {
+    margin: 0 0 12px;
+    font-size: 14px;
+    line-height: 1.5;
+    color: var(--muted);
+}
+
+/* 제보하는 두 가지 방법: 같은 폭 두 칸 */
+.report-tab__actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+}
+
+.report-tab__action {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+    min-width: 0;
+    padding: 14px;
+    border: 1px solid transparent;
+    border-radius: 14px;
+    font: inherit;
+    text-align: left;
+    color: var(--text);
+    background: var(--soft-bg);
+    cursor: pointer;
+}
+
+.report-tab__action[aria-pressed='true'] {
+    border-color: var(--text);
+    background: var(--bg);
+}
+
+.report-tab__action:disabled {
+    cursor: default;
+}
+
+.report-tab__icon {
+    display: grid;
+    place-items: center;
+    width: 36px;
+    height: 36px;
+    margin-bottom: 6px;
+    border-radius: 50%;
+    color: #fff;
+    background: var(--saved-place);
+}
+
+.report-tab__icon svg {
+    width: 20px;
+    height: 20px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+.report-tab__action-title {
+    font-size: 15px;
+    font-weight: 700;
+}
+
+.report-tab__action-detail {
+    font-size: 13px;
+    color: var(--muted);
+}
+
+/* 제보 순서: 번호를 동그라미로 */
+.report-tab__steps {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin: 8px 0 0;
+    padding: 0;
+    list-style: none;
+    counter-reset: report-step;
+    font-size: 14px;
+}
+
+.report-tab__steps li {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    counter-increment: report-step;
+}
+
+.report-tab__steps li::before {
+    content: counter(report-step);
+    display: grid;
+    flex: none;
+    place-items: center;
+    width: 22px;
+    height: 22px;
+    border-radius: 50%;
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--tactile-text);
+    background: var(--tactile-soft);
+}
+
 /* 길찾기 '지도에서 선택' 중에 위 검색창 자리에 띄우는 안내 */
 .map-pick-hint {
     position: absolute;
@@ -1728,6 +1832,13 @@ input::placeholder {
     color: var(--text);
     background: var(--bg);
     box-shadow: var(--panel-shadow);
+}
+
+/* 제보할 위치를 고를 때는 위에 검색창이 있어 접힌 시트 위에 띄운다.
+   지도 오른쪽 아래 OpenStreetMap 출처 표기(높이 약 24px)를 가리지 않게 그 위로 올린다. */
+.map-pick-hint[data-below] {
+    top: auto;
+    bottom: calc(var(--map-bottom) + 36px);
 }
 
 .map-pick-hint button {

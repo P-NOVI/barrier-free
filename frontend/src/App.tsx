@@ -19,6 +19,7 @@ import NavigationPanel from './components/NavigationPanel';
 import PlaceInfoCard from './components/PlaceInfoCard';
 import PlaceSearch from './components/PlaceSearch';
 import ReportForm from './components/ReportForm';
+import ReportTab from './components/ReportTab';
 import RoutePanel from './components/RoutePanel';
 import TopSearch from './components/TopSearch';
 import { useElementHeight } from './hooks/useElementHeight';
@@ -33,7 +34,7 @@ import { useVoiceGuidance } from './hooks/useVoiceGuidance';
 import { useWakeLock } from './hooks/useWakeLock';
 import { takeLoginFailure } from './lib/authApi';
 import { type Elevator, fetchElevators } from './lib/elevators';
-import type { LocationFix } from './lib/geolocation';
+import { getCurrentPosition, type LocationFix } from './lib/geolocation';
 import {
     type RouteHistory,
     routeEndpoints,
@@ -92,7 +93,15 @@ const FIT_PADDING: Record<'wide' | 'narrow', FitPadding> = {
 };
 const SHEET_TITLES: Record<Exclude<Tab, 'search'>, string> = {
     route: '길찾기',
+    report: '제보',
     my: 'My',
+};
+// 지도를 눌러 고르는 것: 길찾기 칸이나 제보할 위치
+type MapPick = EndpointRole | 'report';
+const MAP_PICK_TARGETS: Record<MapPick, string> = {
+    start: '출발지를',
+    goal: '도착지를',
+    report: '제보할 위치를',
 };
 const LOGIN_FAILED_MESSAGE = '로그인하지 못했어요. 다시 시도해 주세요.';
 
@@ -110,8 +119,13 @@ export default function App() {
     const [myLocation, setMyLocation] = useState<LocationFix | null>(null);
     // 길 위 문제를 제보하는 중인 장소
     const [reporting, setReporting] = useState<PickedPlace | null>(null);
-    // 길찾기 '지도에서 선택'으로 지도를 눌러 고르는 중인 칸(출발지·도착지)
-    const [mapPick, setMapPick] = useState<EndpointRole | null>(null);
+    // 지도를 눌러 고르는 중인 것: 길찾기 '지도에서 선택'의 칸(출발지·도착지)이나 제보할 위치
+    const [mapPick, setMapPick] = useState<MapPick | null>(null);
+    // 제보 탭 '지금 위치 제보'
+    const [reportLocate, setReportLocate] = useState<{
+        locating: boolean;
+        error: string | null;
+    }>({ locating: false, error: null });
     const [navigating, setNavigating] = useState(false);
     // 안내 중 지도가 내 위치를 따라가는지. 지도를 끌면 멈추고, 내 위치 버튼을 누르면 다시 따라간다.
     const [following, setFollowing] = useState(true);
@@ -287,6 +301,17 @@ export default function App() {
         setSheet((current) => ({ ...current, snap: 'collapsed' }));
     }, []);
 
+    // 위 검색창에서 고른 장소. 제보할 위치를 고르는 중이면 지도만 그리로 옮기고,
+    // 정확한 자리는 지도를 눌러 고르게 한다.
+    const handleSearchedPlace = (place: PickedPlace) => {
+        if (mapPick === 'report') {
+            const [lng, lat] = place.position;
+            setFocus([lng, lat]);
+            return;
+        }
+        showSearchedPlace(place);
+    };
+
     const handleSelectTab = (next: Tab) => {
         // 검색 탭을 한 번 더 누르면 검색창에 포커스를 준다.
         if (next === 'search' && sheet.tab === 'search') {
@@ -329,17 +354,56 @@ export default function App() {
 
     // 지도에서 선택: 시작하면 좁은 화면은 시트를 접어 지도를 보이고, 그만두면 다시 연다.
     const changeMapPick = useCallback(
-        (role: EndpointRole | null) => {
+        (role: MapPick | null) => {
             setMapPick(role);
             setPicked(null);
             if (role) {
                 setSheet((current) => ({ ...current, snap: 'collapsed' }));
-            } else {
+            } else if (sheet.tab === 'route') {
                 settleRouteSheet(endpoints);
+            } else {
+                setSheet((current) => ({
+                    ...current,
+                    snap: openSnap(current.tab),
+                }));
             }
         },
-        [endpoints, settleRouteSheet],
+        [endpoints, settleRouteSheet, sheet.tab],
     );
+
+    // 제보할 위치를 정하면 이름·주소를 찾아 제보 창을 연다.
+    const openReportAt = useCallback((position: LngLat) => {
+        const open = (found: { name: string; address: string } | null) =>
+            setReporting(toPickedPlace(position, found));
+        findAddress(position)
+            .then((address) =>
+                open(
+                    address && {
+                        name: address.name,
+                        address: address.road_address || address.address,
+                    },
+                ),
+            )
+            .catch(() => open(null));
+    }, []);
+
+    // 제보 탭 '지금 위치 제보': 내 위치를 찾아 지도에 보이고 그 자리로 제보 창을 연다.
+    const reportHere = () => {
+        setReportLocate({ locating: true, error: null });
+        getCurrentPosition()
+            .then((fix) => {
+                setReportLocate({ locating: false, error: null });
+                showMyLocation(fix);
+                openReportAt(fix.position);
+            })
+            .catch((error: unknown) =>
+                setReportLocate({
+                    locating: false,
+                    error:
+                        error instanceof Error ? error.message : String(error),
+                }),
+            );
+    };
 
     // 지도에서 선택 중에 누른 곳을 그 칸에 넣는다. 이름은 주소 검색으로 찾는다.
     const finishMapPick = useCallback(
@@ -349,6 +413,14 @@ export default function App() {
             }
             const role = mapPick;
             setMapPick(null);
+            if (role === 'report') {
+                setSheet((current) => ({
+                    ...current,
+                    snap: openSnap(current.tab),
+                }));
+                openReportAt(position);
+                return;
+            }
             latestClick.current = position;
             const done = (found: string | null) => {
                 // 기다리는 사이 다른 곳을 눌렀으면 버린다.
@@ -367,7 +439,7 @@ export default function App() {
                 .then((address) => done(address?.name ?? null))
                 .catch(() => done(null));
         },
-        [mapPick, endpoints, settleRouteSheet],
+        [mapPick, endpoints, settleRouteSheet, openReportAt],
     );
 
     // 최근 경로: 그때의 출발·도착과 프리셋으로 다시 찾는다.
@@ -444,7 +516,7 @@ export default function App() {
         <TopSearch
             near={mapCenter}
             inputRef={searchInput}
-            onPickPlace={showSearchedPlace}
+            onPickPlace={handleSearchedPlace}
             onSelectRoute={handleSelectRoute}
             inline={wide}
         />
@@ -493,7 +565,7 @@ export default function App() {
                               )
                             : undefined
                     }
-                    mapPick={mapPick}
+                    mapPick={mapPick === 'report' ? null : mapPick}
                     onMapPickChange={changeMapPick}
                 />
                 <RoutePanel
@@ -518,12 +590,23 @@ export default function App() {
                 />
             </>
         ),
+        report: (
+            <ReportTab
+                myReports={myReports}
+                locating={reportLocate.locating}
+                locateError={reportLocate.error}
+                picking={mapPick === 'report'}
+                onReportHere={reportHere}
+                onPickOnMap={() =>
+                    changeMapPick(mapPick === 'report' ? null : 'report')
+                }
+            />
+        ),
         // 넓은 화면은 로그인·로그아웃을 오른쪽 위 계정 메뉴에 둔다.
         my: (
             <MyTab
                 savedPlaces={savedPlaces}
                 savedRoutes={savedRoutes}
-                myReports={myReports}
                 near={mapCenter}
                 onSelectPlace={handleSelectSavedPlace}
                 onSelectRoute={handleSelectRoute}
@@ -643,13 +726,23 @@ export default function App() {
                     onSessionChange={reloadSaved}
                 />
             )}
-            {/* 길찾기 탭은 위 검색창 없이 시트의 출발·도착 입력을 맨 위에 둔다. */}
-            {!wide && !navigating && sheet.tab !== 'route' && searchBox}
+            {/* 길찾기·제보 탭은 위 검색창 없이 시트를 맨 위까지 쓴다.
+                제보할 위치를 지도에서 고를 때는 검색창을 다시 보여 그 근처로 지도를 옮기게 한다. */}
+            {!wide &&
+                !navigating &&
+                (sheet.tab === 'search' ||
+                    sheet.tab === 'my' ||
+                    mapPick === 'report') &&
+                searchBox}
             {mapPick && !navigating && (
-                <div className="map-pick-hint" role="status">
+                <div
+                    className="map-pick-hint"
+                    // 검색창이 위에 있으면 안내는 지도 아래쪽에 띄운다(index.css).
+                    data-below={(!wide && mapPick === 'report') || undefined}
+                    role="status"
+                >
                     <span>
-                        지도를 눌러 {mapPick === 'start' ? '출발지' : '도착지'}
-                        를 고르세요
+                        지도를 눌러 {MAP_PICK_TARGETS[mapPick]} 고르세요
                     </span>
                     <button type="button" onClick={() => changeMapPick(null)}>
                         취소
