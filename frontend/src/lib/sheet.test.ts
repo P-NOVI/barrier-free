@@ -75,6 +75,13 @@ describe('selectTab', () => {
         });
     });
 
+    it('제보 탭도 끝까지 올려 연다', () => {
+        expect(selectTab({ tab: 'my', snap: 'half' }, 'report')).toEqual({
+            tab: 'report',
+            snap: 'full',
+        });
+    });
+
     it('길찾기 탭은 끝까지 올려 연다', () => {
         expect(selectTab({ tab: 'search', snap: 'half' }, 'route')).toEqual({
             tab: 'route',

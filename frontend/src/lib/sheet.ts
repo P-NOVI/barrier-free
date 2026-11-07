@@ -3,7 +3,7 @@
 export type SheetSnap = 'collapsed' | 'half' | 'full';
 
 /** 아래 메뉴 탭. 검색은 시트를 닫고 지도와 위 검색창만 보인다. */
-export type Tab = 'search' | 'route' | 'my';
+export type Tab = 'search' | 'route' | 'report' | 'my';
 
 /** 단계마다 화면에 보이는 시트 높이(px) */
 export type SnapHeights = Record<SheetSnap, number>;
@@ -64,11 +64,11 @@ export function toggleSnap(snap: SheetSnap): SheetSnap {
 }
 
 /**
- * 메뉴로 탭을 열 때의 단계. 길찾기는 위 검색창 자리까지 올려 바로 출발·도착을 입력하게 하고
- * (입력 목록이 키보드에 가리지 않는다), 나머지는 지도가 보이게 절반으로 연다.
+ * 메뉴로 탭을 열 때의 단계. 길찾기·제보는 위 검색창 자리까지 끝까지 올려 바로 쓰게 하고
+ * (내리면 절반에서 멈춘다), My 는 지도가 보이게 절반으로 연다.
  */
 export function openSnap(tab: Tab): SheetSnap {
-    return tab === 'route' ? 'full' : 'half';
+    return tab === 'route' || tab === 'report' ? 'full' : 'half';
 }
 
 /**
