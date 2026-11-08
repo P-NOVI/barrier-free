@@ -693,6 +693,7 @@ export default function App() {
                 startEntrance={shownRoute?.start_entrance}
                 goalEntrance={shownRoute?.goal_entrance}
                 savedPlaces={savedPlaces.places}
+                reports={shownRoute?.reports}
                 fitPadding={wide ? FIT_PADDING.wide : FIT_PADDING.narrow}
                 fitRoute={!navigating}
                 resizing={mapStretched}

@@ -1,4 +1,4 @@
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from datetime import datetime, time, timedelta
 
 from fastapi import APIRouter, HTTPException, status
@@ -13,6 +13,7 @@ from app.deps import (
     SettingsDep,
     SitesDep,
 )
+from app.models import Report
 from app.schemas import (
     RouteError,
     RouteOption,
@@ -30,6 +31,7 @@ from app.services.route_service import (
     find_routes,
 )
 from core.profiles import PRESETS
+from core.snap import LngLat, project
 
 router = APIRouter(tags=["route"])
 
@@ -71,11 +73,37 @@ def depart_slot(
     return slot
 
 
+def reports_on_route(
+    reports: Sequence[Report], coordinates: Sequence[LngLat], max_distance_m: float
+) -> list[RouteReport]:
+    """경로 선에서 max_distance_m 안인 제보만, 경로 선 위 지점에 찍어 돌려준다.
+
+    제보는 길 한 줄(edge_id)에 붙어 있어서, 출발·도착이 그 길 중간이면 경로가
+    지나지 않는 구간의 제보까지 걸린다. 그런 제보를 뺀다.
+    """
+    if len(coordinates) < 2:
+        return []
+    shown = []
+    for report in reports:
+        hit = project(report.lon, report.lat, coordinates)
+        if hit.distance_m <= max_distance_m:
+            shown.append(
+                RouteReport(
+                    id=report.id,
+                    kind=report.kind,
+                    description=report.description,
+                    position=hit.point,
+                )
+            )
+    return shown
+
+
 def route_option(
     route: Route,
     congestion: Mapping[int, float],
     busy_level: float,
     find_reports: ReportFinder,
+    report_max_distance_m: float,
 ) -> RouteOption:
     """경로 하나의 응답. 1안·2안은 지나는 길이 달라 제보도 따로 찾는다."""
     summary = route.summary
@@ -94,15 +122,9 @@ def route_option(
         start_entrance=route.start_entrance,
         goal_entrance=route.goal_entrance,
         busy_m=busy_length(route, congestion, busy_level),
-        reports=[
-            RouteReport(
-                id=report.id,
-                kind=report.kind,
-                description=report.description,
-                position=(report.lon, report.lat),
-            )
-            for report in find_reports(route.edge_ids)
-        ],
+        reports=reports_on_route(
+            find_reports(route.edge_ids), route.coordinates, report_max_distance_m
+        ),
     )
 
 
@@ -156,10 +178,13 @@ def post_route(
             },
         ) from error
     level = settings.congestion_busy_level
-    primary = route_option(choice.primary, congestion, level, find_reports)
+    report_max = settings.report_route_max_distance_m
+    primary = route_option(choice.primary, congestion, level, find_reports, report_max)
     alternative = (
         None
         if choice.alternative is None
-        else route_option(choice.alternative, congestion, level, find_reports)
+        else route_option(
+            choice.alternative, congestion, level, find_reports, report_max
+        )
     )
     return RouteResponse(**primary.model_dump(), alternative=alternative)

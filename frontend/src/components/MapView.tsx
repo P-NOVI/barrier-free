@@ -17,7 +17,10 @@ import {
     toLatLng,
     toLngLat,
 } from '../lib/kakaoMap';
+import { reportKindLabel } from '../lib/reportApi';
+import { reportMarkerLabel } from '../lib/reportMarkers';
 import { arrowsAlong } from '../lib/routeArrows';
+import type { RouteReport } from '../lib/routeApi';
 import { type SavedPlace, savedPlaceTitle } from '../lib/savedPlacesApi';
 import { smoothJogs } from '../lib/routeShape';
 
@@ -73,13 +76,14 @@ const ACCURACY_CIRCLE: Omit<kakao.maps.CircleOptions, 'center' | 'radius'> = {
     fillColor: '#1a73e8',
     fillOpacity: 0.12,
 };
-// 화살표 < 저장한 장소 별 < 내 위치 점 < 출발·도착 핀 순으로 위에 그린다.
+// 화살표 < 저장한 장소 별 < 제보 마커 < 내 위치 점 < 출발·도착 핀 순으로 위에 그린다.
 const ROUTE_ARROW_Z_INDEX = 0;
 const SAVED_PLACE_Z_INDEX = 1;
-const MY_LOCATION_Z_INDEX = 2;
-const PIN_Z_INDEX = 3;
+const REPORT_Z_INDEX = 2;
+const MY_LOCATION_Z_INDEX = 3;
+const PIN_Z_INDEX = 4;
 // 선택한 장소 카드는 핀 위에 뜬다.
-const POPUP_Z_INDEX = 4;
+const POPUP_Z_INDEX = 5;
 // 카드 아래 꼬리 높이(px). index.css 의 .place-info::after 와 같은 값.
 const POPUP_TAIL = 10;
 // 핀 크기(px). index.css 의 .map-pin 과 같은 값.
@@ -96,10 +100,17 @@ const STAR_SVG =
     '<circle cx="12" cy="12" r="12"/>' +
     '<path d="M12 6.2 13.62 10.38 18.09 10.62 14.62 13.45 15.76 17.78 12 15.35 8.24 17.78 9.38 13.45 5.91 10.62 10.38 10.38Z"/>' +
     '</svg>';
+// 경로 위 제보: 동그라미 안 느낌표. 색은 유형별로 CSS 가 정한다.
+const REPORT_SVG =
+    '<svg viewBox="0 0 24 24" aria-hidden="true">' +
+    '<circle cx="12" cy="12" r="12"/>' +
+    '<path d="M10.8 5.5h2.4l-.5 8h-1.4Z"/><circle cx="12" cy="17.2" r="1.4"/>' +
+    '</svg>';
 // OSMF 출처 가이드라인: 처음에 보인 출처는 5초 뒤 접어도 되고, 접은 뒤에도 찾을 수 있어야 한다.
 const ATTRIBUTION_COLLAPSE_MS = 5000;
 // 기본값을 렌더마다 새 배열로 만들면 마커 effect 가 매번 다시 돈다
 const NO_SAVED_PLACES: SavedPlace[] = [];
+const NO_REPORTS: RouteReport[] = [];
 /** 경로 전체가 보이게 맞출 때 지도 가장자리 여백(px) */
 export type FitPadding = {
     top: number;
@@ -133,6 +144,8 @@ type MapViewProps = {
     goalEntrance?: LngLat | null;
     /** 별 아이콘으로 보여 줄 즐겨찾기·내 장소 */
     savedPlaces?: SavedPlace[];
+    /** 지금 보이는 경로 위의 승인된 제보. 마커로 그리고, 누르면 설명을 보여 준다. */
+    reports?: RouteReport[];
     /** 내 위치. 파란 점과 오차 반경 원으로 그린다. */
     myLocation?: LocationFix | null;
     /** 지도 위에 패널이 떠 있으면 그만큼 여백을 더 준다. 바뀌면 경로에 다시 맞춘다. */
@@ -348,6 +361,56 @@ function useSavedPlaceMarkers(
         });
         return () => overlays.forEach((overlay) => overlay.setMap(null));
     }, [map, places, onClick]);
+}
+
+/** 경로 위 제보마다 마커를 그린다. 누르면 설명 말풍선이 열리고, 다른 마커나 같은 마커를 누르면 닫힌다. */
+function useReportMarkers(map: kakao.maps.Map | null, reports: RouteReport[]) {
+    useEffect(() => {
+        if (!map) {
+            return;
+        }
+        const wrappers: HTMLElement[] = [];
+        const overlays: kakao.maps.CustomOverlay[] = [];
+        // 열린 말풍선이 출발·도착 핀에 가려지지 않게 그 마커만 맨 위로 올린다.
+        const closeAll = () => {
+            wrappers.forEach((node) =>
+                node.classList.remove('report-pin--open'),
+            );
+            overlays.forEach((overlay) => overlay.setZIndex(REPORT_Z_INDEX));
+        };
+        reports.forEach((report, index) => {
+            const wrapper = document.createElement('div');
+            wrapper.className = `report-pin report-pin--${report.kind}`;
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'report-pin__button';
+            button.setAttribute('aria-label', reportMarkerLabel(report));
+            button.innerHTML = REPORT_SVG;
+            const bubble = document.createElement('span');
+            bubble.className = 'report-pin__bubble';
+            bubble.textContent = reportKindLabel(report.kind);
+            wrapper.append(button, bubble);
+            button.addEventListener('click', () => {
+                const wasOpen = wrapper.classList.contains('report-pin--open');
+                closeAll();
+                if (!wasOpen) {
+                    wrapper.classList.add('report-pin--open');
+                    overlays[index].setZIndex(POPUP_Z_INDEX);
+                }
+            });
+            wrappers.push(wrapper);
+            const overlay = new kakao.maps.CustomOverlay({
+                position: toLatLng(report.position),
+                content: wrapper,
+                // 눌러도 지도 클릭(출발·도착 고르기)으로 번지지 않게 한다.
+                clickable: true,
+                zIndex: REPORT_Z_INDEX,
+            });
+            overlay.setMap(map);
+            overlays.push(overlay);
+        });
+        return () => overlays.forEach((overlay) => overlay.setMap(null));
+    }, [map, reports]);
 }
 
 /** 경로 데이터의 OpenStreetMap 출처. 5초 뒤 (i) 버튼으로 접히고, 누르면 다시 펼친다. */
@@ -614,6 +677,7 @@ export default function MapView({
     startEntrance,
     goalEntrance,
     savedPlaces = NO_SAVED_PLACES,
+    reports = NO_REPORTS,
     myLocation,
     fitPadding = DEFAULT_FIT_PADDING,
     fitRoute = true,
@@ -724,6 +788,7 @@ export default function MapView({
     useRouteArrows(map, routeShape);
     useMyLocation(map, myLocation);
     useSavedPlaceMarkers(map, savedPlaces, onSavedPlaceClick);
+    useReportMarkers(map, reports);
     usePin(map, start, '출발', 'start');
     usePin(map, goal, '도착', 'goal');
     // 넓은 화면은 고른 자리 위에 카드를 띄운다. 좁은 화면은 카드를 아래 시트로 보이고 지도에는 핀만 둔다.
