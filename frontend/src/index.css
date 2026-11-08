@@ -1667,6 +1667,89 @@ input::placeholder {
     background: var(--overlay-bg);
 }
 
+/* 경로 위 제보 마커. 유형마다 색이 다르고, 누르면 설명 말풍선이 위에 뜬다. */
+.report-pin {
+    --report-color: #d93025;
+    position: relative;
+}
+
+.report-pin--curb {
+    --report-color: #e8710a;
+}
+
+.report-pin--construction {
+    --report-color: #d93025;
+}
+
+.report-pin--obstacle {
+    --report-color: #7b1fa2;
+}
+
+.report-pin--damage {
+    --report-color: #5f6368;
+}
+
+.report-pin__button {
+    position: relative;
+    display: block;
+    width: 32px;
+    height: 32px;
+    padding: 0;
+    border: 0;
+    border-radius: 50%;
+    background: none;
+    filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.4));
+    cursor: pointer;
+}
+
+/* 터치 영역을 44px 로 넓힌다. */
+.report-pin__button::before {
+    content: '';
+    position: absolute;
+    inset: -6px;
+}
+
+.report-pin__button svg {
+    display: block;
+    width: 100%;
+    height: 100%;
+}
+
+.report-pin__button circle:first-child {
+    fill: var(--report-color);
+    stroke: #fff;
+    stroke-width: 1.5;
+}
+
+.report-pin__button path,
+.report-pin__button circle:last-child {
+    fill: #fff;
+}
+
+.report-pin__bubble {
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    display: none;
+    width: max-content;
+    max-width: 200px;
+    margin-bottom: 8px;
+    padding: 6px 10px;
+    border-radius: 8px;
+    font-size: 13px;
+    line-height: 1.4;
+    color: var(--text);
+    background: #fff;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.3);
+    transform: translateX(-50%);
+    word-break: keep-all;
+    overflow-wrap: anywhere;
+}
+
+.report-pin--open .report-pin__bubble {
+    display: block;
+}
+
 /* 화면 맨 위 장소 검색창 */
 .top-search {
     position: absolute;

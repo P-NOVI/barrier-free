@@ -154,6 +154,9 @@ class Settings(BaseSettings):
     supabase_timeout_s: float = 10.0
     # 제보 좌표가 도로망에서 이보다 멀면 제보를 받지 않는다. 초안 값이다.
     report_snap_radius_m: float = 30.0
+    # 길찾기 결과에 제보를 띄울 때, 제보가 경로 선에서 이 거리 안이어야 한다.
+    # 출발·도착 지점에서 나뉜 길의 지나지 않는 구간에 있는 제보를 빼려는 값이다.
+    report_route_max_distance_m: float = 10.0
     # 만료된 제보를 이 기간이 지나면 사진과 함께 지운다. 서버를 켤 때 정리한다.
     # 사진에 얼굴·번호판이 있을 수 있어 기한 없이 쌓아 두지 않는다.
     report_retention_days: int = 30
