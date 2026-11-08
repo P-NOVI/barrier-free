@@ -10,6 +10,7 @@ from app.deps import get_db_session, get_graph, get_report_finder
 from app.main import app
 from app.models import Report, ReportReview, utc_now
 from app.repositories.report_repository import list_reviewable_reports
+from app.routers.routes import reports_on_route
 from core.graph import Graph
 
 
@@ -68,21 +69,35 @@ def test_route_passes_its_edge_ids_to_the_finder(
     assert edge_ids
 
 
+def route_coordinates(client: TestClient, sample_graph: Graph) -> list[list[float]]:
+    response = client.post("/api/route", json=route_request(sample_graph))
+    assert response.status_code == 200
+    return response.json()["coordinates"]
+
+
+def use_real_finder(db_session: Session) -> None:
+    app.dependency_overrides[get_report_finder] = lambda: (
+        lambda edge_ids: list_reviewable_reports(db_session, edge_ids, utc_now())
+    )
+
+
 def test_route_lists_only_reviewable_reports_on_its_edges(
     client: TestClient, db_session: Session, sample_graph: Graph
 ) -> None:
     on_route = sorted(route_edge_ids(client, sample_graph))[0]
     off_route = max(route_edge_ids(client, sample_graph)) + 10_000
-    shown = add_report(db_session, on_route, kind="damage")
-    add_report(db_session, on_route, status="pending")
-    add_report(db_session, on_route, status="rejected")
-    add_report(db_session, on_route, status="resolved")
-    add_report(db_session, on_route, kind="construction", blocked=True)
-    add_report(db_session, on_route, expires_at=utc_now() - timedelta(days=1))
-    add_report(db_session, off_route)
-    app.dependency_overrides[get_report_finder] = lambda: (
-        lambda edge_ids: list_reviewable_reports(db_session, edge_ids, utc_now())
+    lon, lat = route_coordinates(client, sample_graph)[0]
+    at_route = {"lon": lon, "lat": lat}
+    shown = add_report(db_session, on_route, kind="damage", **at_route)
+    add_report(db_session, on_route, status="pending", **at_route)
+    add_report(db_session, on_route, status="rejected", **at_route)
+    add_report(db_session, on_route, status="resolved", **at_route)
+    add_report(db_session, on_route, kind="construction", blocked=True, **at_route)
+    add_report(
+        db_session, on_route, expires_at=utc_now() - timedelta(days=1), **at_route
     )
+    add_report(db_session, off_route, **at_route)
+    use_real_finder(db_session)
 
     response = client.post("/api/route", json=route_request(sample_graph))
 
@@ -92,9 +107,55 @@ def test_route_lists_only_reviewable_reports_on_its_edges(
             "id": shown.id,
             "kind": "damage",
             "description": "턱이 높아요",
-            "position": [126.9779, 37.5663],
+            "position": [lon, lat],
         }
     ]
+
+
+def test_route_drops_report_on_a_part_of_the_edge_it_does_not_pass(
+    client: TestClient, db_session: Session, sample_graph: Graph
+) -> None:
+    on_route = sorted(route_edge_ids(client, sample_graph))[0]
+    lon, lat = route_coordinates(client, sample_graph)[0]
+    # 같은 길 번호지만 경로에서 100m 넘게 떨어진 곳(경로가 지나지 않는 구간)
+    add_report(db_session, on_route, lon=lon, lat=lat + 0.001)
+    use_real_finder(db_session)
+
+    response = client.post("/api/route", json=route_request(sample_graph))
+
+    assert response.status_code == 200
+    assert response.json()["reports"] == []
+
+
+def line_report(lon: float, lat: float) -> Report:
+    return Report(id=1, kind="curb", description=None, lon=lon, lat=lat)
+
+
+# 동서로 곧게 뻗은 약 85m 경로
+LINE = [(126.9779, 37.5663), (126.9789, 37.5663)]
+
+
+def test_report_near_the_route_is_placed_on_the_route() -> None:
+    shown = reports_on_route([line_report(126.9784, 37.56632)], LINE, 5.0)
+
+    assert [report.position for report in shown] == [(126.9784, 37.5663)]
+
+
+def test_report_beyond_the_route_end_is_dropped() -> None:
+    shown = reports_on_route([line_report(126.9769, 37.5663)], LINE, 5.0)
+
+    assert shown == []
+
+
+def test_report_beside_the_route_farther_than_limit_is_dropped() -> None:
+    # 위도 0.0001 도는 약 11m
+    shown = reports_on_route([line_report(126.9784, 37.5664)], LINE, 5.0)
+
+    assert shown == []
+
+
+def test_route_without_a_line_has_no_reports() -> None:
+    assert reports_on_route([line_report(126.9779, 37.5663)], [LINE[0]], 5.0) == []
 
 
 def test_route_keeps_non_blocking_construction(
